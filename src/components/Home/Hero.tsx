@@ -14,8 +14,10 @@ const Hero = () => {
   const [vaultAddress, setVaultAddress] = useState('');
 
   const handleSubmit = () => {
-    if (vaultAddress) {
+    if (vaultAddress && /^0x[a-fA-F0-9]{40}$/.test(vaultAddress)) {
       router.push(`/usePool/${vaultAddress}`);
+    } else {
+      alert('Please enter a valid Ethereum address (0x followed by 40 hex characters)');
     }
   };
 
@@ -37,9 +39,10 @@ const Hero = () => {
     }
   };
 
+
   return (
     resolvedTheme ? (<div className="relative w-full h-screen overflow-hidden bg-black">
-      {/* Background Content (To Legacies) */}
+      {/* Background Content */}
       <div className="absolute w-full h-full align-center justify-center bg-black dark:bg-white">
         <h1 className={`text-white dark:text-black text-8xl align-center mt-[30%] md:mt-[10%] font-bold text-center pt-20 font-italiannoRegular`}
           onMouseEnter={() => setIsHovered(true)}
@@ -173,7 +176,7 @@ const Hero = () => {
               ${resolvedTheme === "dark"
                 ? "border-white text-white hover:bg-white hover:text-black"
                 : "border-black text-black hover:bg-black hover:text-white"}`}>
-              Explore Pool
+              Explore Pools
             </button>
           </Link>
 

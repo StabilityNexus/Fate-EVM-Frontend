@@ -1,6 +1,6 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss/base";
+@import "tailwindcss/components";
+@import "tailwindcss/utilities";
 
 :root {
   --background: #ffffff;
@@ -35,4 +35,59 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: #6c6c6c;
+}
+
+/* Add these to your global CSS */
+.mode-toggle-button {
+  border-radius: 50px;
+  width: 3rem;
+}
+
+.mode-toggle-button-dark {
+  background-color: #230402;
+  border: 2px solid white;
+}
+
+.mode-toggle-button-light {
+  background-color: white;
+  border: 2px solid black;
+}
+
+.mode-toggle-icon {
+  height: 1.2rem;
+  width: 1.5rem;
+  transition: transform 0.2s;
+  transform: rotate(0) scale(1);
+}
+
+.mode-toggle-icon-dark {
+  color: white;
+}
+
+.hero-button {
+  padding: 0.75rem 1.5rem;
+  border-width: 2px;
+  border-radius: 9999px;
+  font-size: 1.125rem;
+  transition: all 0.3s;
+}
+
+.hero-button-light {
+  border-color: white;
+  color: white;
+}
+
+.hero-button-light:hover {
+  background-color: white;
+  color: black;
+}
+
+.hero-button-dark {
+  border-color: black;
+  color: black;
+}
+
+.hero-button-dark:hover {
+  background-color: black;
+  color: white;
 }

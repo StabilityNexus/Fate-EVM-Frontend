@@ -9,7 +9,7 @@ interface RangeSliderProps {
 }
 
 export function RangeSlider({ value, onChange, min = 0, max = 100, step = 1 }: RangeSliderProps) {
-  const percentage = ((value - min) / (max - min)) * 100;
+  const percentage = max === min ? 0 : ((value - min) / (max - min)) * 100;
   const gradientColor = `linear-gradient(to right, #22c55e ${percentage}%, #ef4444 ${percentage}%)`;
 
   return (

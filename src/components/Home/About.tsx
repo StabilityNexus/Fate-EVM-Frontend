@@ -6,7 +6,7 @@ import {
   CardTitle,
   CardDescription,
 } from "@/components/ui/card";
-import { CircleDollarSign, Infinity, Scale } from "lucide-react";
+import { CircleDollarSign, Infinity as InfinityIcon, Scale } from "lucide-react";
 import { motion } from "framer-motion";
 
 export default function AboutSection() {
@@ -30,7 +30,7 @@ export default function AboutSection() {
           animate={{ rotate: [0, 360] }}
           transition={{ duration: 4 }}
         >
-          <Infinity className="h-12 w-12 text-black dark:text-white" />
+          <InfinityIcon className="h-12 w-12 text-black dark:text-white" />
         </motion.div>
       ),
       title: "Continuous Operation",
