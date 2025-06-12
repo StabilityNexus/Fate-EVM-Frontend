@@ -3,6 +3,7 @@ import { defineChain } from 'viem'
 export const citreaTestnet = defineChain({
   id: 5115,
   name: 'Citrea Testnet',
+  network: 'citreaTestnet',
   nativeCurrency: { name: 'cBTC', symbol: 'cBTC', decimals: 18 },
   rpcUrls: {
     default: { http: ['https://rpc.testnet.citrea.xyz'] },

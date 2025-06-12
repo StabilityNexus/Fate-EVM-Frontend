@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useTheme } from 'next-themes';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { isAddress } from 'viem';
 
 const Hero = () => {
   const router = useRouter();
@@ -24,7 +25,7 @@ const Hero = () => {
   }
 
   const handleSubmit = () => {
-    if (vaultAddress && /^0x[a-fA-F0-9]{40}$/.test(vaultAddress)) {
+    if (vaultAddress && isAddress(vaultAddress)) {
       router.push(`/usePool/${vaultAddress}`);
     } else {
       alert('Please enter a valid Ethereum address (0x followed by 40 hex characters)');

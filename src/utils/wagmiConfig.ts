@@ -16,7 +16,7 @@ import { http } from 'wagmi';
 
 export const config = getDefaultConfig({
     appName: 'Fate Protocol',
-    projectId: 'xyz',
+    projectId: process.env.NEXT_PUBLIC_PROJECT_ID ?? 'DEFAULT_PROJECT_ID',
     chains: [
         scrollSepolia,
         polygon,
