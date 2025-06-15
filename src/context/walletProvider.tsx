@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTheme } from 'next-themes';
 import '@rainbow-me/rainbowkit/styles.css';
 import {
@@ -16,6 +16,16 @@ const queryClient = new QueryClient();
 
 export function WalletProvider({ children }: { children: React.ReactNode }) {
     const { resolvedTheme } = useTheme();
+    const [mounted, setMounted] = useState(false);
+
+    useEffect(() => {
+        setMounted(true);
+    }, []);
+
+    if (!mounted) {
+        // Prevent rendering on server or before mount to avoid hydration mismatch
+        return null;
+    }
 
     const theme = resolvedTheme === 'dark'
         ? darkTheme({

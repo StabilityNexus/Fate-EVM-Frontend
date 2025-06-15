@@ -1,17 +1,13 @@
 import {
-    arbitrum,
-    base,
     mainnet,
-    optimism,
     polygon,
     citreaTestnet,
     scrollSepolia,
     sepolia,
-    Chain,
 } from 'wagmi/chains';
 import { getDefaultConfig } from '@rainbow-me/rainbowkit';
-import { ethereumClassic } from '@/components/chains/EthereumClassic';
-import { milkomeda } from '@/components/chains/Milkomeda';
+import { milkomeda } from "@/utils/chains/Milkomeda";
+import { ethereumClassic } from '@/utils/chains/EthereumClassic';
 import { http } from 'wagmi';
 
 export const config = getDefaultConfig({
