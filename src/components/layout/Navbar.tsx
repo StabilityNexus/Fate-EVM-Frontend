@@ -8,6 +8,7 @@ import logoWhite from "../../../public/logo-white.png";
 import { useTheme } from "next-themes";
 import { ModeToggle } from "../darkModeToggle";
 import { Menu, X } from "lucide-react";
+import WalletButton from "../ui/walletButton";
 
 const Navbar = () => {
   const { resolvedTheme } = useTheme();
@@ -50,10 +51,16 @@ const Navbar = () => {
             {isMenuOpen ? (
               <X className="w-8 h-8" />
             ) : (
-              <Menu className="w-8 h-8 fill-current text-black dark:text-white" style={resolvedTheme == "dark" ? { color: "white" } : { color: "black" }} />
+              <Menu
+                className="w-8 h-8 fill-current text-black dark:text-white"
+                style={resolvedTheme == "dark" ? { color: "white" } : { color: "black" }}
+              />
             )}
           </button>
           <ModeToggle />
+          <WalletButton />
+
+
         </div>
 
         {/* Mobile Navigation Links */}
@@ -97,7 +104,6 @@ const Navbar = () => {
                     Learn More
                   </Link>
                 </li>
-
               </ul>
             </nav>
           </div>
@@ -119,9 +125,11 @@ const Navbar = () => {
           </Link>
         </nav>
 
-        {/*  Theme Toggle - Right Side */}
-        <div className="hidden md:flex items-center space-x-4  ">
+        {/* Theme Toggle & Connect Button - Right Side */}
+        <div className="hidden md:flex items-center space-x-4">
           <ModeToggle />
+          <WalletButton />
+
         </div>
       </div>
     </header>
