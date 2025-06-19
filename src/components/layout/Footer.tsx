@@ -1,5 +1,4 @@
 "use client"
-import { useTheme } from "next-themes";
 import Image from "next/image";
 import Link from "next/link";
 import { SVGProps } from "react";
@@ -107,7 +106,6 @@ const navigation = [
 ];
 
 export default function Footer() {
-  const { resolvedTheme } = useTheme();
   return (
     <footer className="w-full  rounded-lg backdrop-blur-md bg-white/10 dark:bg-black shadow-lg border border-white/10 dark:border-black/10">
       <div className="px-8 py-6 space-y-6">
