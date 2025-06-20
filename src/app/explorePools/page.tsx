@@ -40,7 +40,7 @@ const ExploreFatePools = () => {
   const [pools, setPools] = useState<Pool[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [error] = useState<string | null>(null);
 
   // Dummy data
   const dummyPools: Pool[] = [
@@ -124,7 +124,7 @@ const ExploreFatePools = () => {
       setPools(dummyPools);
       setLoading(false);
     }, 500); // Optional delay to simulate loading
-  }, []);
+  }, [dummyPools]);
 
   const filteredPools = pools.filter((pool) =>
     pool.name.toLowerCase().includes(searchQuery.toLowerCase())
