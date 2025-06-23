@@ -124,7 +124,7 @@ const ExploreFatePools = () => {
       setPools(dummyPools);
       setLoading(false);
     }, 500); // Optional delay to simulate loading
-  }, [dummyPools]);
+  }, []);
 
   const filteredPools = pools.filter((pool) =>
     pool.name.toLowerCase().includes(searchQuery.toLowerCase())
