@@ -61,7 +61,7 @@ const Hero = () => {
   } as React.CSSProperties);
 
   return (
-    <div className="relative w-full h-screen overflow-hidden bg-black flex items-center justify-center">
+    <div className="relative w-full min-h-screen overflow-hidden bg-black flex items-center justify-center">
       {/* Background Content */}
       <div className="absolute inset-0 flex flex-col items-center justify-center bg-black dark:bg-white">
         <h1

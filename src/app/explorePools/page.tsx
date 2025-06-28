@@ -2,8 +2,6 @@
 import { useEffect, useState } from "react";
 import { PredictionCard } from "@/components/FatePoolCard/FatePoolCard";
 import { Search, Plus } from "lucide-react";
-import Navbar from "@/components/layout/Navbar";
-import Footer from "@/components/layout/Footer";
 import { useRouter } from "next/navigation";
 
 // Token & Pool interfaces
@@ -40,7 +38,6 @@ const ExploreFatePools = () => {
   const [pools, setPools] = useState<Pool[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [error] = useState<string | null>(null);
 
   // Dummy data
   const dummyPools: Pool[] = [
@@ -132,7 +129,6 @@ const ExploreFatePools = () => {
 
   return (
     <>
-      <Navbar />
       <div className="min-h-screen bg-gradient-to-r from-gray-100 to-gray-300 dark:from-gray-800 dark:to-gray-900 transition-colors duration-300">
         <div className="max-w-7xl mx-auto px-4 py-12">
           <div className="flex flex-col md:flex-row justify-between items-center mb-12 mt-10">
@@ -140,9 +136,6 @@ const ExploreFatePools = () => {
               <h1 className="text-4xl font-bold text-black dark:text-white mb-2">
                 Explore Fate Pools
               </h1>
-              {error && (
-                <p className="text-red-500 dark:text-red-400 mt-2">{error}</p>
-              )}
             </div>
             <button
               className="mt-4 md:mt-0 flex items-center gap-2 px-6 py-3 bg-black text-white rounded-lg hover:bg-gray-800 transition-all transform hover:scale-105 dark:bg-white dark:text-black shadow-md"
@@ -222,7 +215,6 @@ const ExploreFatePools = () => {
           </div>
         </div>
       </div>
-      <Footer />
     </>
   );
 };
