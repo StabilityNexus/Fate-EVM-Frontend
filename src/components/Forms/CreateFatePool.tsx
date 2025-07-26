@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useState,useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { ethers, type TransactionReceipt } from "ethers";
 import { PredictionPoolFactoryABI } from "@/utils/abi/PredictionPoolFactory";
-import { useAccount, useWalletClient } from "wagmi";
+import { useAccount, useWalletClient, useSwitchChain } from "wagmi";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -38,11 +38,13 @@ type FormData = {
 };
 
 export default function CreateFatePoolForm() {
-  const { address, isConnected } = useAccount();
+  const { address, isConnected, chainId } = useAccount();
   const { data: walletClient } = useWalletClient();
-
+  const { switchChain } = useSwitchChain();
+  
   const [loading, setLoading] = useState(false);
-  const [debugInfo, setDebugInfo] = useState("");
+  const [isWrongChain, setIsWrongChain] = useState(false);
+  const [transactionStatus, setTransactionStatus] = useState("");
 
   const [formData, setFormData] = useState<FormData>({
     poolName: "",
@@ -57,6 +59,10 @@ export default function CreateFatePoolForm() {
     vaultCreatorFee: "",
     treasuryFee: "",
   });
+
+  useEffect(() => {
+    setIsWrongChain(isConnected && chainId !== Number(SEPOLIA_CHAIN_ID));
+  }, [chainId, isConnected]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -79,15 +85,14 @@ export default function CreateFatePoolForm() {
     });
   };
 
-  useEffect(() => {
-    if (!isConnected) {
-      toast.error("Wallet not connected");
-    }
-  }, [isConnected]);
-
   const validateForm = (): boolean => {
     if (!isConnected || !address) {
       toast.error("⚠️ Please connect your wallet");
+      return false;
+    }
+
+    if (isWrongChain) {
+      toast.error("⚠️ Please switch to Sepolia network");
       return false;
     }
 
@@ -138,50 +143,47 @@ export default function CreateFatePoolForm() {
     return true;
   };
 
+  const handleSwitchChain = async () => {
+    try {
+      await switchChain({ chainId: Number(SEPOLIA_CHAIN_ID) });
+    } catch (error) {
+      toast.error("Failed to switch network. Please switch manually in your wallet.");
+    }
+  };
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!validateForm()) return;
-
-    if (!walletClient) throw new Error("Wallet not connected");
-    
-    const provider = new ethers.BrowserProvider(walletClient.transport);
-    const signer = await provider.getSigner();
-    
-    // Verify network
-    const network = await provider.getNetwork();
-    if (network.chainId !== SEPOLIA_CHAIN_ID) {
-      throw new Error("Please connect to Sepolia network");
-    }
-    
-    // Verify contract exists
-    const code = await provider.getCode(FACTORY_ADDRESS);
-    if (code === "0x") throw new Error("Contract not deployed at this address");
-    
-    // Initialize contract
-    const factory = new ethers.Contract(
-      FACTORY_ADDRESS,
-      PredictionPoolFactoryABI,
-      signer
-    );
-    
-    // Verify the createPool function exists
-    try {
-      factory.getFunction("createPool");
-    } catch {
-      throw new Error("Contract ABI doesn't include createPool function");
+    if (!walletClient) {
+      toast.error("Wallet not connected");
+      return;
     }
 
     try {
       setLoading(true);
-      setDebugInfo("🔄 Preparing transaction...");
+      setTransactionStatus("Initializing transaction...");
 
+      const provider = new ethers.BrowserProvider(walletClient.transport);
+      const signer = await provider.getSigner();
       
+      // Verify contract exists
+      const code = await provider.getCode(FACTORY_ADDRESS);
+      if (code === "0x") {
+        throw new Error("Contract not deployed at this address");
+      }
+      
+      const factory = new ethers.Contract(
+        FACTORY_ADDRESS,
+        PredictionPoolFactoryABI,
+        signer
+      );
+
       // Convert fees to contract units
       const vaultFeeUnits = Math.round((parseFloat(formData.vaultFee) / 100) * DENOMINATOR);
       const creatorFeeUnits = Math.round((parseFloat(formData.vaultCreatorFee) / 100) * DENOMINATOR);
       const treasuryFeeUnits = Math.round((parseFloat(formData.treasuryFee) / 100) * DENOMINATOR);
 
-      setDebugInfo("⛽ Estimating gas...");
+      setTransactionStatus("Estimating gas...");
       const gasEstimate = await factory.createPool.estimateGas(
         formData.poolName,
         formData.baseTokenAddress,
@@ -194,7 +196,7 @@ export default function CreateFatePoolForm() {
 
       const gasLimit = (gasEstimate * BigInt(100 + GAS_LIMIT_BUFFER)) / BigInt(100);
 
-      setDebugInfo("🚀 Sending transaction...");
+      setTransactionStatus("Sending transaction...");
       const tx = await factory.createPool(
         formData.poolName,
         formData.baseTokenAddress,
@@ -206,48 +208,36 @@ export default function CreateFatePoolForm() {
         { gasLimit }
       );
 
-      toast.promise(tx.wait(), {
-        loading: "⏳ Waiting for confirmation...",
-        success: (receipt: unknown) => {
-          const r = receipt as TransactionReceipt;
-          return (
-            <div className="space-y-1">
-              <p className="font-semibold text-green-600 dark:text-green-400">
-                ✅ Pool created successfully!
-              </p>
-              <a
-                href={`${EXPLORER_URL}${r.hash}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-600 dark:text-blue-400 hover:underline"
-              >
-                🔗 View on Etherscan
-              </a>
-            </div>
-          );
-        },
-        error: (err: any) => {
-          return (
-            <div className="text-red-600 dark:text-red-400 font-semibold">
-              ❌ {err?.reason || err?.message || "Transaction failed"}
-            </div>
-          );
-        },
+      const toastId = toast.loading("Waiting for transaction confirmation...", {
+        description: "This may take a few moments"
+      });
+
+      const receipt = await tx.wait();
+      
+      toast.success("Pool created successfully!", {
+        id: toastId,
+        action: {
+          label: "View on Explorer",
+          onClick: () => window.open(`${EXPLORER_URL}${receipt.hash}`, '_blank')
+        }
       });
 
       resetForm();
+      setTransactionStatus("Transaction completed successfully!");
     } catch (error: any) {
       console.error("Transaction Error:", error);
-      const errorMessage = error?.reason || error?.message || "Transaction failed";
-      toast.error(`❌ ${errorMessage}`);
+      let errorMessage = error?.reason || error?.message || "Transaction failed";
       
-      if (error.message.includes("rejected")) {
-        setDebugInfo("User rejected transaction");
-      } else if (error.message.includes("gas")) {
-        setDebugInfo("Gas estimation failed. Check parameters.");
-      } else if (error.message.includes("network")) {
-        setDebugInfo("Network connection issue");
+      if (error.message.includes("user rejected transaction")) {
+        errorMessage = "Transaction rejected by user";
+      } else if (error.message.includes("insufficient funds")) {
+        errorMessage = "Insufficient funds for gas";
+      } else if (error.message.includes("network mismatch")) {
+        errorMessage = "Wrong network detected";
       }
+
+      toast.error(`Transaction failed: ${errorMessage}`);
+      setTransactionStatus(`Error: ${errorMessage}`);
     } finally {
       setLoading(false);
     }
@@ -268,6 +258,23 @@ export default function CreateFatePoolForm() {
             Fill in all parameters to deploy a new prediction pool
           </CardDescription>
         </CardHeader>
+        
+        {isWrongChain && (
+          <div className="bg-red-100 dark:bg-red-900 p-4 rounded-lg flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="font-medium">⚠️ Wrong Network</span>
+              <span className="text-sm">Please switch to Sepolia to continue</span>
+            </div>
+            <Button 
+              size="sm" 
+              onClick={handleSwitchChain}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              Switch Network
+            </Button>
+          </div>
+        )}
+
         <CardContent className="space-y-4">
           <InputField
             label="Pool Name"
@@ -368,15 +375,20 @@ export default function CreateFatePoolForm() {
 
           <Button
             type="submit"
-            disabled={loading || !isConnected}
+            disabled={loading || !isConnected || isWrongChain}
             className="w-full border-2 border-black rounded-xl dark:border-white dark:text-white"
           >
-            {loading ? "Creating Pool..." : "Create Prediction Pool"}
+            {loading ? (
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                Creating Pool...
+              </div>
+            ) : "Create Prediction Pool"}
           </Button>
 
-          {debugInfo && (
-            <div className="text-sm text-muted-foreground p-2 rounded bg-gray-100 dark:bg-gray-800">
-              {debugInfo}
+          {transactionStatus && (
+            <div className="text-sm p-2 rounded bg-gray-100 dark:bg-gray-800">
+              {transactionStatus}
             </div>
           )}
         </CardContent>

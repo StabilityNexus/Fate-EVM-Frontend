@@ -38,7 +38,7 @@ const Hero = () => {
 
   const handleSubmit = () => {
     if (vaultAddress && isAddress(vaultAddress)) {
-      router.push(`/usePool/${vaultAddress}`);
+      router.push(`/pool?id=${vaultAddress}`);
     } else {
       alert('Please enter a valid Ethereum address (0x followed by 40 hex characters)');
     }

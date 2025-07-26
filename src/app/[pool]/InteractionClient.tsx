@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Coins } from 'lucide-react';
 import { useAccount, useWalletClient } from 'wagmi';
 import { ethers } from 'ethers';
@@ -7,7 +7,8 @@ import { PredictionPoolABI } from '@/utils/abi/PredictionPool';
 import { CoinABI } from '@/utils/abi/Coin';
 import { ERC20ABI } from '@/utils/abi/ERC20';
 import { toast } from 'sonner';
-import { getCurrentPrice,updatePriceAndDistribute } from '@/lib/prices';
+import { getCurrentPrice, updatePriceAndDistribute } from '@/lib/prices';
+import { useSearchParams } from 'next/navigation';
 
 interface Token {
   id: string;
@@ -28,31 +29,14 @@ interface Token {
   priceSell?: number;
 }
 
-interface Vault {
+interface Pool {
   id: string;
-  baseToken: string;
   bullToken: Token;
   bearToken: Token;
   bullPercentage: number;
   bearPercentage: number;
-  previous_price: number;
-  vault_creator: string;
-  vault_fee: bigint;
-  vault_creator_fee: bigint;
-  treasury_fee: bigint;
-  fees: {
-    entry: number;
-    exit: number;
-    performance: number;
-  };
-}
-
-interface InteractionClientProps {
-  tokens: {
-    bullToken: Token;
-    bearToken: Token;
-  };
-  vault: Vault;
+  previous_price: bigint;
+  baseToken: string;
 }
 
 const formatNum = (value: bigint | null | undefined, decimals = 18): number => {
@@ -65,7 +49,14 @@ const formatNum = (value: bigint | null | undefined, decimals = 18): number => {
   }
 };
 
-export default function InteractionClient({ tokens, vault }: InteractionClientProps) {
+export default function InteractionClient() {
+  const params = useSearchParams();
+  const id = params.get("id");
+  const poolId = Array.isArray(id) ? id[0] : id || '';
+  const [pool, setPool] = useState<Pool | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [userAddress, setUserAddress] = useState<string | null>(null);
   const { address, isConnected } = useAccount();
   const { data: walletClient } = useWalletClient();
   const [bullAmount, setBullAmount] = useState<string>('');
@@ -73,16 +64,180 @@ export default function InteractionClient({ tokens, vault }: InteractionClientPr
   const [updatingPrice, setUpdatingPrice] = useState(false);
   const [currentPrice, setCurrentPrice] = useState<number | null>(null);
   const [previousPrice, setPreviousPrice] = useState<number | null>(null);
-
   const [loadingPrice, setLoadingPrice] = useState(false);
+
+  const fetchPool = useCallback(async () => {
+    if (!poolId) {
+      setError("Missing pool address");
+      setLoading(false);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      const rpc = process.env.NEXT_PUBLIC_RPC_URL;
+      if (!rpc) throw new Error("Missing RPC URL in .env");
+
+      const provider = new ethers.JsonRpcProvider(rpc);
+      const poolContract = new ethers.Contract(poolId, PredictionPoolABI, provider);
+
+      // Fetch all pool data with error handling
+      const [
+        baseToken,
+        bullAddr,
+        bearAddr,
+        prevPrice,
+      ] = await Promise.all([
+        poolContract.baseToken().catch(() => ""),
+        poolContract.bullCoin().catch(() => ""),
+        poolContract.bearCoin().catch(() => ""),
+        poolContract.previousPrice().catch(() => BigInt(0)),
+      ]);
+
+      if (!bullAddr || !bearAddr) {
+        throw new Error("Invalid token addresses returned from contract");
+      }
+
+      const bullTokenContract = new ethers.Contract(bullAddr, CoinABI, provider);
+      const bearTokenContract = new ethers.Contract(bearAddr, CoinABI, provider);
+
+      // Create asset contract to get balances
+      const assetContract = new ethers.Contract(baseToken, [
+        "function balanceOf(address) view returns (uint256)"
+      ], provider);
+
+      const [
+        bullName, bullSymbol, bullAsset, bullVcreator, bullVaultFee, bullVcFee, bullTreFee, bullSupply,
+        bearName, bearSymbol, bearAsset, bearVcreator, bearVaultFee, bearVcFee, bearTreFee, bearSupply,
+        bullAssetBal, bearAssetBal
+      ] = await Promise.all([
+        bullTokenContract.name().catch(() => "Bull Token"),
+        bullTokenContract.symbol().catch(() => "BULL"),
+        bullTokenContract.asset().catch(() => ""),
+        bullTokenContract.vaultCreator().catch(() => ""),
+        bullTokenContract.vaultFee().catch(() => BigInt(0)),
+        bullTokenContract.vaultCreatorFee().catch(() => BigInt(0)),
+        bullTokenContract.treasuryFee().catch(() => BigInt(0)),
+        bullTokenContract.totalSupply().catch(() => BigInt(0)),
+        bearTokenContract.name().catch(() => "Bear Token"),
+        bearTokenContract.symbol().catch(() => "BEAR"),
+        bearTokenContract.asset().catch(() => ""),
+        bearTokenContract.vaultCreator().catch(() => ""),
+        bearTokenContract.vaultFee().catch(() => BigInt(0)),
+        bearTokenContract.vaultCreatorFee().catch(() => BigInt(0)),
+        bearTokenContract.treasuryFee().catch(() => BigInt(0)),
+        bearTokenContract.totalSupply().catch(() => BigInt(0)),
+        assetContract.balanceOf(bullAddr).catch(() => BigInt(0)),
+        assetContract.balanceOf(bearAddr).catch(() => BigInt(0))
+      ]);
+
+      // Get user balances if wallet is connected
+      let bullBalance = BigInt(0);
+      let bearBalance = BigInt(0);
+      
+      if (userAddress) {
+        [bullBalance, bearBalance] = await Promise.all([
+          bullTokenContract.balanceOf(userAddress).catch(() => BigInt(0)),
+          bearTokenContract.balanceOf(userAddress).catch(() => BigInt(0))
+        ]);
+      }
+
+      // Calculate percentages and prices
+      const bullSupplyNum = formatNum(bullSupply);
+      const bearSupplyNum = formatNum(bearSupply);
+      const totalSupply = bullSupplyNum + bearSupplyNum;
+      const bullPercentage = totalSupply > 0 ? (bullSupplyNum / totalSupply) * 100 : 50;
+      const bearPercentage = 100 - bullPercentage;
+
+      const bullPrice = bullSupplyNum > 0 ? formatNum(bullAssetBal) / bullSupplyNum : 1;
+      const bearPrice = bearSupplyNum > 0 ? formatNum(bearAssetBal) / bearSupplyNum : 1;
+
+      const bullToken: Token = {
+        id: bullAddr,
+        name: bullName,
+        symbol: bullSymbol,
+        asset: bullAsset,
+        vault_creator: bullVcreator,
+        vault_fee: bullVaultFee,
+        vault_creator_fee: bullVcFee,
+        treasury_fee: bullTreFee,
+        asset_balance: bullAssetBal,
+        supply: bullSupply,
+        prediction_pool: poolId,
+        other_token: bearAddr,
+        price: bullPrice,
+        balance: bullBalance
+      };
+
+      const bearToken: Token = {
+        id: bearAddr,
+        name: bearName,
+        symbol: bearSymbol,
+        asset: bearAsset,
+        vault_creator: bearVcreator,
+        vault_fee: bearVaultFee,
+        vault_creator_fee: bearVcFee,
+        treasury_fee: bearTreFee,
+        asset_balance: bearAssetBal,
+        supply: bearSupply,
+        prediction_pool: poolId,
+        other_token: bullAddr,
+        price: bearPrice,
+        balance: bearBalance
+      };
+
+      const poolObj: Pool = {
+        id: poolId,
+        bullToken,
+        bearToken,
+        bullPercentage,
+        bearPercentage,
+        previous_price: prevPrice,
+        baseToken
+      };
+
+      setPool(poolObj);
+    } catch (e: any) {
+      console.error("Error loading pool:", e);
+      setError(e.message || "Failed to load pool data");
+      toast.error("Failed to load pool data");
+    } finally {
+      setLoading(false);
+    }
+  }, [poolId, userAddress]);
+
+  useEffect(() => {
+    fetchPool();
+  }, [fetchPool]);
+
+  useEffect(() => {
+    const handleAccountsChanged = (accounts: string[]) => {
+      setUserAddress(accounts[0] || null);
+    };
+
+    if (window.ethereum) {
+      // Get initial account
+      window.ethereum.request({ method: 'eth_accounts' })
+        .then((accounts: string[]) => setUserAddress(accounts[0] || null))
+        .catch(console.error);
+
+      window.ethereum.on('accountsChanged', handleAccountsChanged);
+      
+      return () => {
+        window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
+      };
+    }
+  }, []);
 
   useEffect(() => {
     const fetchCurrentPrice = async () => {
-      if (!walletClient || !vault.id) return;
+      if (!walletClient || !poolId) return;
       
       try {
         setLoadingPrice(true);
-        const price = await getCurrentPrice(walletClient, vault.id);
+        const price = await getCurrentPrice(walletClient, poolId);
         
         // Store the current price as previous before updating
         if (currentPrice !== null) {
@@ -98,8 +253,7 @@ export default function InteractionClient({ tokens, vault }: InteractionClientPr
     };
 
     fetchCurrentPrice();
-  }, [walletClient, vault.id]);
-
+  }, [walletClient, poolId, currentPrice]);
 
   const handleBuy = async (token: Token, amount: string) => {
     if (!walletClient || !isConnected || !address) {
@@ -134,14 +288,14 @@ export default function InteractionClient({ tokens, vault }: InteractionClientPr
       toast.promise(tx.wait(), {
         loading: "Processing transaction...",
         success: () => {
-          setTimeout(() => window.location.reload(), 3000);
+          setTimeout(() => fetchPool(), 3000);
           return "Tokens purchased successfully!";
         },
         error: (err) => err.reason || "Transaction failed",
       });
     } catch (err: unknown) {
       console.error("Buy error:", err);
-      toast.error((err as Error).reason || (err as Error).message || "Failed to buy tokens");
+      toast.error( (err as Error).message || "Failed to buy tokens");
     }
   };
 
@@ -177,14 +331,14 @@ export default function InteractionClient({ tokens, vault }: InteractionClientPr
       toast.promise(tx.wait(), {
         loading: 'Processing transaction...',
         success: () => {
-          setTimeout(() => window.location.reload(), 3000);
+          setTimeout(() => fetchPool(), 3000);
           return 'Tokens sold successfully!';
         },
         error: (err) => err.reason || 'Transaction failed'
       });
     } catch (err: unknown) {
       console.error('Sell error:', err);
-      toast.error((err as Error).reason || (err as Error).message || 'Failed to sell tokens');
+      toast.error( (err as Error).message || 'Failed to sell tokens');
     }
   };
 
@@ -200,7 +354,7 @@ export default function InteractionClient({ tokens, vault }: InteractionClientPr
       // Check if prediction pool is initialized before calling updatePriceAndDistribute
       const provider = new ethers.BrowserProvider(walletClient.transport);
       const signer = await provider.getSigner();
-      const poolContract = new ethers.Contract(vault.id, PredictionPoolABI, signer);
+      const poolContract = new ethers.Contract(poolId, PredictionPoolABI, signer);
       const isInitialized = await poolContract.isInitialized();
       if (!isInitialized) {
         throw new Error("Prediction pool not initialized yet");
@@ -212,10 +366,10 @@ export default function InteractionClient({ tokens, vault }: InteractionClientPr
       }
 
       toast.promise(
-        updatePriceAndDistribute(walletClient, vault.id).then(async (receipt) => {
+        updatePriceAndDistribute(walletClient, poolId).then(async (receipt) => {
           // After tx confirmation, refresh current price
           try {
-            const newPrice = await getCurrentPrice(walletClient, vault.id);
+            const newPrice = await getCurrentPrice(walletClient, poolId);
             setCurrentPrice(newPrice);
             return newPrice;
           } catch (err) {
@@ -262,18 +416,60 @@ export default function InteractionClient({ tokens, vault }: InteractionClientPr
     }
   };
 
-  const { bullToken, bearToken } = tokens;
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-red-500 text-center p-4 max-w-md">
+          <h2 className="text-xl font-bold mb-2">Error Loading Pool</h2>
+          <p>{error}</p>
+          <button 
+            onClick={() => fetchPool()} 
+            className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!pool) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center">
+          <h2 className="text-xl font-bold mb-2">Pool Not Found</h2>
+          <p>The requested pool could not be loaded</p>
+          <button 
+            onClick={() => fetchPool()} 
+            className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const { bullToken, bearToken, bullPercentage, bearPercentage, baseToken } = pool;
   const bullBalance = bullToken.balance || BigInt(0);
   const bearBalance = bearToken.balance || BigInt(0);
-  const bullPrice = bullToken.price || bullToken.priceBuy || 0;
-  const bearPrice = bearToken.price || bearToken.priceSell || 0;
+  const bullPrice = bullToken.price || 0;
+  const bearPrice = bearToken.price || 0;
   
   const bullValue = bullPrice * Number(ethers.formatUnits(bullBalance, 18));
   const bearValue = bearPrice * Number(ethers.formatUnits(bearBalance, 18));
   const totalValue = bullValue + bearValue;
 
   return (
-    <div className="w-full pt-14 bg-white dark:bg-black min-h-screen">
+    <div className="w-full pt-14 bg-white dark:bg-black">
       <div className="w-full md:px-24 lg:px-24">
         <div className="container mx-auto px-8 py-6 flex flex-col md:flex-row justify-between items-center border-b dark:border-gray-700">
           <div className="flex items-center space-x-4 mb-4 md:mb-0">
@@ -315,42 +511,42 @@ export default function InteractionClient({ tokens, vault }: InteractionClientPr
                 <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden mb-2">
                   <div 
                     className="h-full bg-green-500" 
-                    style={{ width: `${vault.bullPercentage}%` }} 
+                    style={{ width: `${bullPercentage}%` }} 
                   />
                 </div>
                 <div className="flex justify-between text-sm dark:text-gray-400">
-                  <span>Bull: {vault.bullPercentage.toFixed(2)}%</span>
-                  <span>Bear: {vault.bearPercentage.toFixed(2)}%</span>
+                  <span>Bull: {bullPercentage.toFixed(2)}%</span>
+                  <span>Bear: {bearPercentage.toFixed(2)}%</span>
                 </div>
               </div>
               
               <div className="p-4 rounded-lg bg-gray-100 dark:bg-gray-800">
-  <h3 className="font-semibold dark:text-white mb-2">Total Value</h3>
-  <p className="text-2xl font-mono dark:text-white">
-    ${totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-  </p>
-  <p className="text-sm dark:text-gray-400 mt-1">
-    {loadingPrice ? (
-      'Loading current price...'
-    ) : currentPrice ? (
-      <>
-        Current Price: ${currentPrice.toFixed(4)}
-        {previousPrice && (
-          <span className="block">
-            Previous Price: ${previousPrice.toFixed(4)}
-            {currentPrice > previousPrice ? (
-              <span className="text-green-500"> ▲</span>
-            ) : currentPrice < previousPrice ? (
-              <span className="text-red-500"> ▼</span>
-            ) : null}
-          </span>
-        )}
-      </>
-    ) : (
-      'Price not available'
-    )}
-  </p>
-</div>
+                <h3 className="font-semibold dark:text-white mb-2">Total Value</h3>
+                <p className="text-2xl font-mono dark:text-white">
+                  ${totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </p>
+                <p className="text-sm dark:text-gray-400 mt-1">
+                  {loadingPrice ? (
+                    'Loading current price...'
+                  ) : currentPrice ? (
+                    <>
+                      Current Price: ${currentPrice.toFixed(4)}
+                      {previousPrice && (
+                        <span className="block">
+                          Previous Price: ${previousPrice.toFixed(4)}
+                          {currentPrice > previousPrice ? (
+                            <span className="text-green-500"> ▲</span>
+                          ) : currentPrice < previousPrice ? (
+                            <span className="text-red-500"> ▼</span>
+                          ) : null}
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    'Price not available'
+                  )}
+                </p>
+              </div>
               
               <div className="p-4 rounded-lg bg-gray-100 dark:bg-gray-800">
                 <h3 className="font-semibold dark:text-white mb-2">Token Prices</h3>
@@ -406,7 +602,7 @@ export default function InteractionClient({ tokens, vault }: InteractionClientPr
                 onClick={async () => {
                   try {
                     setLoadingPrice(true);
-                    const price = await getCurrentPrice(walletClient!, vault.id);
+                    const price = await getCurrentPrice(walletClient!, poolId);
                     setCurrentPrice(price);
                     toast.success(`Current price: $${price.toFixed(4)}`);
                   } catch (err) {
@@ -429,10 +625,9 @@ export default function InteractionClient({ tokens, vault }: InteractionClientPr
             <div className="grid md:grid-cols-3 gap-6">
               <DetailCard title="Fees Structure">
                 <ul className="space-y-1">
-                  <li>Entry Fee: {vault.fees.entry}%</li>
-                  <li>Exit Fee: {vault.fees.exit}%</li>
-                  <li>Performance Fee: {vault.fees.performance}%</li>
-                  <li>Treasury Fee: {formatNum(vault.treasury_fee, 0)}%</li>
+                  <li>Entry Fee: {formatNum(bullToken.vault_fee, 0)}%</li>
+                  <li>Exit Fee: {formatNum(bullToken.vault_fee, 0)}%</li>
+                  <li>Treasury Fee: {formatNum(bullToken.treasury_fee, 0)}%</li>
                 </ul>
               </DetailCard>
               
@@ -451,7 +646,7 @@ export default function InteractionClient({ tokens, vault }: InteractionClientPr
                   <p>
                     <span className="font-semibold">Base Token:</span>
                     <br />
-                    <code className="text-sm break-all">{vault.baseToken}</code>
+                    <code className="text-sm break-all">{baseToken}</code>
                   </p>
                 </div>
               </DetailCard>
@@ -461,7 +656,7 @@ export default function InteractionClient({ tokens, vault }: InteractionClientPr
                   <p>
                     <span className="font-semibold">Creator:</span>
                     <br />
-                    <code className="text-sm break-all">{vault.vault_creator}</code>
+                    <code className="text-sm break-all">{bullToken.vault_creator}</code>
                   </p>
                   <p>
                     <span className="font-semibold">Pool ID:</span>
@@ -501,7 +696,7 @@ function TokenActionPanel({
   };
 
   const tokenBalance = token.balance || BigInt(0);
-  const tokenPrice = token.price || token.priceBuy || token.priceSell || 0;
+  const tokenPrice = token.price || 0;
 
   return (
     <div className={`border rounded-xl p-5 bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900`}>
