@@ -1,14 +1,14 @@
 "use client";
 import React, { useEffect, useState } from "react";
-import { ethers } from "ethers";
-import { PredictionPoolFactoryABI } from "../../utils/abi/PredictionPoolFactory";
-import { PredictionPoolABI } from "../../utils/abi/PredictionPool";
-import { CoinABI } from "../../utils/abi/Coin";
+import { useAccount, usePublicClient, useWalletClient } from "wagmi";
 import { PredictionCard } from "@/components/FatePoolCard/FatePoolCard";
-import { Search, Plus } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { useAccount, useWalletClient } from "wagmi";
+import { PredictionPoolFactoryABI } from "@/utils/abi/PredictionPoolFactory";
+import { PredictionPoolABI } from "@/utils/abi/PredictionPool";
+import { CoinABI } from "@/utils/abi/Coin";
 import { toast } from "sonner";
+import { useRouter } from "next/navigation";
+import { Plus } from "lucide-react";
+import { formatUnits } from "viem";
 
 interface Token {
   id: string;
@@ -37,119 +37,127 @@ interface Pool {
   bearToken: Token;
 }
 
-const SEPOLIA_CHAIN_ID = 11155111;
 const FACTORY_ADDRESS = process.env.NEXT_PUBLIC_FACTORY_ADDRESS!;
-const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL!;
 
 export default function ExploreFatePools() {
   const router = useRouter();
-  const { address, isConnected } = useAccount();
+  const { isConnected } = useAccount();
   const { data: walletClient } = useWalletClient();
+
+
   const [pools, setPools] = useState<Pool[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [isCreatingPool, setIsCreatingPool] = useState(false);
-
-  const fetchPools = async () => {
-    setLoading(true);
-    try {
-      const provider = new ethers.JsonRpcProvider(RPC_URL, SEPOLIA_CHAIN_ID);
-      const factory = new ethers.Contract(FACTORY_ADDRESS, PredictionPoolFactoryABI, provider);
-      const poolAddresses: string[] = await factory.getAllPools();
-
-      const fetchedPools = await Promise.all(poolAddresses.map(async (addr, idx) => {
-        try {
-          const pool = new ethers.Contract(addr, PredictionPoolABI, provider);
-          const name = (await pool.name()).toString() || `Pool ${idx + 1}`;
-          const [oracle, feedIdBytes] = await Promise.all([
-            pool.oracle(),
-            pool.priceFeedId()
-          ]);
-          const feedId = feedIdBytes.toString();
-
-          const [bullAddr, bearAddr] = await Promise.all([pool.bullCoin(), pool.bearCoin()]);
-          const bull = new ethers.Contract(bullAddr, CoinABI, provider);
-          const bear = new ethers.Contract(bearAddr, CoinABI, provider);
-
-          const [
-            bName, bSym, bCreator, bVaultFee, bSupplyBN, bPriceBuyBN, bPriceSellBN, bTreasuryFee, bVaultCrFee, bAsset,
-            brName, brSym, brCreator, brVaultFee, brSupplyBN, brPriceBuyBN, brPriceSellBN, brTreasuryFee, brVaultCrFee, brAsset,
-          ] = await Promise.all([
-            bull.name(), bull.symbol(), bull.vaultCreator(), bull.vaultFee(), bull.totalSupply(), bull.priceBuy(), bull.priceSell(), bull.treasuryFee(), bull.vaultCreatorFee(), bull.asset(),
-            bear.name(), bear.symbol(), bear.vaultCreator(), bear.vaultFee(), bear.totalSupply(), bear.priceBuy(), bear.priceSell(), bear.treasuryFee(), bear.vaultCreatorFee(), bear.asset(),
-          ]);
-
-          const bullSupply = Number(ethers.formatUnits(bSupplyBN, 18));
-          const bearSupply = Number(ethers.formatUnits(brSupplyBN, 18));
-          const bullPrice = Number(ethers.formatUnits(bPriceBuyBN, 5));
-          const bearPrice = Number(ethers.formatUnits(brPriceBuyBN, 5));
-
-          const totalValue = bullPrice * bullSupply + bearPrice * bearSupply;
-          const bullPct = totalValue ? (bullPrice * bullSupply) / totalValue * 100 : 50;
-          const bearPct = 100 - bullPct;
-
-          const makeToken = (id: string, name: string, sym: string, creator: string, vaultFee: ethers.BigNumberish, vaultCrFee: ethers.BigNumberish, treasuryFee: ethers.BigNumberish, asset: string, supply: number, priceBuy: number, priceSellBN: ethers.BigNumberish, other: string): Token => ({
-            id,
-            asset,
-            name,
-            symbol: sym,
-            vault_creator: creator,
-            vault_fee: Number(vaultFee),
-            vault_creator_fee: Number(vaultCrFee),
-            treasury_fee: Number(treasuryFee),
-            supply,
-            priceBuy,
-            priceSell: Number(ethers.formatUnits(priceSellBN, 5)),
-            prediction_pool: addr,
-            other_token: other,
-          });
-
-          return {
-            id: addr,
-            name,
-            oracle,
-            feedId,
-            bullPercentage: bullPct,
-            bearPercentage: bearPct,
-            bullToken: makeToken(bullAddr, bName, bSym, bCreator, bVaultFee, bVaultCrFee, bTreasuryFee, bAsset, bullSupply, bullPrice, bPriceSellBN, bearAddr),
-            bearToken: makeToken(bearAddr, brName, brSym, brCreator, brVaultFee, brVaultCrFee, brTreasuryFee, brAsset, bearSupply, bearPrice, brPriceSellBN, bullAddr),
-          } as Pool;
-        } catch (err) {
-          console.error("Pool error", addr, err);
-          throw err;
-        }
-      }));
-      setPools(fetchedPools);
-    } catch (err) {
-      console.error("Fetch pools failed:", err);
-      toast.error("Failed to fetch pools");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleCreatePool = async () => {
-    if (!isConnected || !walletClient) {
-      toast.error("Please connect your wallet");
-      return;
-    }
-
-    try {
-      setIsCreatingPool(true);
-      router.push('/createPool');
-    } catch (err) {
-      console.error("Error navigating to create pool:", err);
-      toast.error("Failed to navigate to pool creation");
-    } finally {
-      setIsCreatingPool(false);
-    }
-  };
+  const publicClient = usePublicClient();
 
   useEffect(() => {
-    fetchPools();
-  }, []);
+    const fetchPools = async () => {
+      if (!publicClient) {
+        setLoading(false);
+        return;
+      }
 
-  const filtered = pools.filter(p =>
+      setLoading(true);
+      try {
+        // Option 1: Type assertion
+        const poolAddresses = await publicClient.readContract({
+          address: FACTORY_ADDRESS as `0x${string}`,
+          abi: PredictionPoolFactoryABI,
+          functionName: "getAllPools",
+        }) as `0x${string}`[];
+
+        const result = await Promise.all(
+          poolAddresses.map(async (addr) => {
+            try {
+              const [name, oracle, feedId, bullAddr, bearAddr] = await Promise.all([
+                publicClient.readContract({ address: addr, abi: PredictionPoolABI, functionName: "name" }),
+                publicClient.readContract({ address: addr, abi: PredictionPoolABI, functionName: "oracle" }),
+                publicClient.readContract({ address: addr, abi: PredictionPoolABI, functionName: "priceFeedId" }),
+                publicClient.readContract({ address: addr, abi: PredictionPoolABI, functionName: "bullCoin" }),
+                publicClient.readContract({ address: addr, abi: PredictionPoolABI, functionName: "bearCoin" }),
+              ]);
+
+              const fetchCoin = async (coinAddr: string, other: string): Promise<Token> => {
+                const [
+                  cname, csymbol, ccreator, cvaultFee, csupply, cpriceBuy, cpriceSell,
+                  ctreasuryFee, ccreatorFee, casset
+                ] = await Promise.all([
+                  publicClient.readContract({ address: coinAddr as `0x${string}`, abi: CoinABI, functionName: "name" }),
+                  publicClient.readContract({ address: coinAddr as `0x${string}`, abi: CoinABI, functionName: "symbol" }),
+                  publicClient.readContract({ address: coinAddr as `0x${string}`, abi: CoinABI, functionName: "vaultCreator" }),
+                  publicClient.readContract({ address: coinAddr as `0x${string}`, abi: CoinABI, functionName: "vaultFee" }),
+                  publicClient.readContract({ address: coinAddr as `0x${string}`, abi: CoinABI, functionName: "totalSupply" }),
+                  publicClient.readContract({ address: coinAddr as `0x${string}`, abi: CoinABI, functionName: "priceBuy" }),
+                  publicClient.readContract({ address: coinAddr as `0x${string}`, abi: CoinABI, functionName: "priceSell" }),
+                  publicClient.readContract({ address: coinAddr as `0x${string}`, abi: CoinABI, functionName: "treasuryFee" }),
+                  publicClient.readContract({ address: coinAddr as `0x${string}`, abi: CoinABI, functionName: "vaultCreatorFee" }),
+                  publicClient.readContract({ address: coinAddr as `0x${string}`, abi: CoinABI, functionName: "asset" }),
+                ]);
+
+                return {
+                  id: coinAddr,
+                  prediction_pool: addr,
+                  other_token: other,
+                  asset: casset as string,
+                  name: cname as string,
+                  symbol: csymbol as string,
+                  vault_creator: ccreator as string,
+                  vault_fee: Number(cvaultFee),
+                  vault_creator_fee: Number(ccreatorFee),
+                  treasury_fee: Number(ctreasuryFee),
+                  supply: Number(formatUnits(csupply as bigint, 18)),
+                  priceBuy: Number(formatUnits(cpriceBuy as bigint, 5)),
+                  priceSell: Number(formatUnits(cpriceSell as bigint, 5)),
+                };
+              };
+
+              const bull = await fetchCoin(bullAddr as string, bearAddr as string);
+              const bear = await fetchCoin(bearAddr as string, bullAddr as string);
+
+              const totalVal = bull.priceBuy * bull.supply + bear.priceBuy * bear.supply;
+              const bullPct = totalVal ? (bull.priceBuy * bull.supply) / totalVal * 100 : 50;
+              const bearPct = 100 - bullPct;
+
+              return {
+                id: addr,
+                name: name as string,
+                oracle: oracle as string,
+                feedId: feedId as string,
+                bullPercentage: bullPct,
+                bearPercentage: bearPct,
+                bullToken: bull,
+                bearToken: bear,
+              } as Pool;
+            } catch (e) {
+              console.error("Error loading pool", addr, e);
+              return null;
+            }
+          })
+        );
+
+        setPools(result.filter(Boolean) as Pool[]);
+      } catch (e) {
+        toast.error("Failed to fetch pools");
+        console.error(e);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchPools();
+  }, [publicClient]);
+
+  const handleCreate = () => {
+    if (!isConnected || !walletClient) {
+      toast.error("Connect your wallet first.");
+      return;
+    }
+    setIsCreatingPool(true);
+    router.push("/createPool");
+  };
+
+  const filteredPools = pools.filter(p =>
     p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     p.bullToken.symbol.toLowerCase().includes(searchQuery.toLowerCase()) ||
     p.bearToken.symbol.toLowerCase().includes(searchQuery.toLowerCase())
@@ -158,28 +166,15 @@ export default function ExploreFatePools() {
   return (
     <div className="min-h-screen bg-gradient-to-r from-gray-100 to-gray-300 dark:from-gray-800 dark:to-gray-900 transition-colors duration-300">
       <div className="max-w-7xl mx-auto px-4 py-12">
-        <div className="flex flex-col md:flex-row justify-between items-center mb-12 mt-10">
-          <div>
-            <h1 className="text-4xl font-bold text-black dark:text-white mb-2">
-              Explore Fate Pools
-            </h1>
-          </div>
+        <div className="flex flex-col md:flex-row justify-between items-center mb-8">
+          <h1 className="text-4xl font-bold text-black dark:text-white">Explore Fate Pools</h1>
           <button
-            className="mt-4 md:mt-0 flex items-center gap-2 px-6 py-3 bg-black text-white rounded-lg hover:bg-gray-800 transition-all transform hover:scale-105 dark:bg-white dark:text-black shadow-md disabled:opacity-50"
-            onClick={handleCreatePool}
+            onClick={handleCreate}
             disabled={isCreatingPool}
+            className="flex items-center gap-2 px-6 py-3 bg-black text-white rounded-lg hover:bg-gray-800 transition transform hover:scale-105 dark:bg-white dark:text-black shadow-md disabled:opacity-50"
           >
-            {isCreatingPool ? (
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                Processing...
-              </div>
-            ) : (
-              <>
-                <Plus size={20} />
-                Create New Pool
-              </>
-            )}
+            <Plus size={20} />
+            Create New Pool
           </button>
         </div>
 
@@ -193,26 +188,26 @@ export default function ExploreFatePools() {
 
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {loading ? (
-            Array.from({ length: 3 }, (_, i) => (
+            Array.from({ length: 3 }).map((_, i) => (
               <div key={i} className="h-64 bg-gray-200 dark:bg-gray-700 animate-pulse rounded" />
             ))
-          ) : filtered.length ? (
-            filtered.map(pool => (
+          ) : filteredPools.length > 0 ? (
+            filteredPools.map(pool => (
               <PredictionCard
                 key={pool.id}
                 name={pool.name}
-                bullPercentage={pool.bullPercentage}
-                bearPercentage={pool.bearPercentage}
                 bullCoinName={pool.bullToken.name}
                 bullCoinSymbol={pool.bullToken.symbol}
                 bearCoinName={pool.bearToken.name}
                 bearCoinSymbol={pool.bearToken.symbol}
+                bullPercentage={pool.bullPercentage}
+                bearPercentage={pool.bearPercentage}
                 onUse={() => router.push(`/pool?id=${pool.id}`)}
               />
             ))
           ) : (
-            <div className="col-span-full text-center dark:text-white">
-              No pools found matching your search.
+            <div className="col-span-full text-center text-gray-700 dark:text-gray-300">
+              No pools found.
             </div>
           )}
         </div>

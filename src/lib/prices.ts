@@ -5,9 +5,36 @@ import { PredictionPoolABI } from '@/utils/abi/PredictionPool';
 const BTC_USD_PRICE_ID = '0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace';
 const PYTH_HERMES_ENDPOINT = 'https://hermes.pyth.network';
 
+// Type definitions
+interface WalletClient {
+  transport: {
+    request: (params: { method: string; params?: unknown[] }) => Promise<unknown>;
+  };
+}
+
+interface ContractError extends Error {
+  reason?: string;
+  code?: string;
+  data?: unknown;
+}
+
+interface PythError extends Error {
+  response?: {
+    data?: unknown;
+  };
+  stack?: string;
+}
+
+interface TransactionReceipt {
+  hash: string;
+  blockNumber: number;
+  gasUsed: bigint;
+  status: number;
+  [key: string]: unknown;
+}
+
 export async function fetchPythPriceUpdateData(): Promise<string[]> {
   try {
-    console.log(`📡 Fetching price updates for ID: ${BTC_USD_PRICE_ID}`);
     const connection = new EvmPriceServiceConnection(PYTH_HERMES_ENDPOINT);
     const priceFeeds = await connection.getPriceFeedsUpdateData([BTC_USD_PRICE_ID]);
 
@@ -21,35 +48,31 @@ export async function fetchPythPriceUpdateData(): Promise<string[]> {
     }
 
     return priceFeeds;
-  } catch (err: any) {
+  } catch (err) {
+    const pythError = err as PythError;
     console.error('❌ Pyth fetch error:', {
-      message: err.message,
-      stack: err.stack,
-      response: err.response?.data
+      message: pythError.message,
+      stack: pythError.stack,
+      response: pythError.response?.data
     });
-    throw new Error('Failed to fetch price update data from Pyth: ' + err.message);
+    throw new Error('Failed to fetch price update data from Pyth: ' + pythError.message);
   }
 }
 
-export async function getCurrentPrice(walletClient: any, vaultId: string): Promise<number> {
+export async function getCurrentPrice(walletClient: WalletClient, vaultId: string): Promise<number> {
   try {
-    console.log('🔌 Connecting to provider...');
     const provider = new ethers.BrowserProvider(walletClient.transport);
     const signer = await provider.getSigner();
-    console.log('🔑 Signer address:', await signer.getAddress());
 
     const poolContract = new ethers.Contract(vaultId, PredictionPoolABI, signer);
 
     // 1. Try getting current price (no args now)
     try {
-      console.log('🔍 Trying to fetch current price directly...');
       const rawPrice: bigint = await poolContract.getCurrentPrice();
-      console.log('✅ Fetched price directly:', rawPrice.toString());
       // rawPrice is uint256 with 18 decimals from contract
       return Number(ethers.formatUnits(rawPrice, 18));
     } catch (initialPriceError) {
-      console.warn('⚠️ Initial fetch failed. Likely no price pushed yet.');
-      console.warn('Attempting fallback flow with updatePriceAndDistributeOutcome...');
+      console.warn('⚠️ Initial fetch failed. Likely no price pushed yet.', initialPriceError);
     }
 
     // 2. Fetch price update data
@@ -66,12 +89,9 @@ export async function getCurrentPrice(walletClient: any, vaultId: string): Promi
       signer
     );
 
-    console.log('💰 Querying update fee...');
     const updateFee: bigint = await pythOracleContract.getUpdateFee(priceUpdateData);
-    console.log('💸 Required fee:', updateFee.toString());
 
-    const feeWithBuffer = updateFee + (updateFee / BigInt(10)); // 10% buffer
-    console.log('🧮 Fee with buffer:', feeWithBuffer.toString());
+    const feeWithBuffer = updateFee + (updateFee / BigInt(10));
 
     // 4. Estimate gas
     try {
@@ -80,12 +100,9 @@ export async function getCurrentPrice(walletClient: any, vaultId: string): Promi
         priceUpdateData,
         { value: feeWithBuffer }
       );
-      const gasWithBuffer = gasEstimate + (gasEstimate / BigInt(5)); // 20% gas buffer
-      console.log('📐 Gas estimate:', gasEstimate.toString());
-      console.log('📈 Gas with buffer:', gasWithBuffer.toString());
+      const gasWithBuffer = gasEstimate + (gasEstimate / BigInt(5));
 
       // 5. Send transaction
-      console.log('🚀 Sending transaction...');
       const tx = await poolContract.updatePriceAndDistributeOutcome(
         priceUpdateData,
         {
@@ -93,40 +110,38 @@ export async function getCurrentPrice(walletClient: any, vaultId: string): Promi
           gasLimit: gasWithBuffer
         }
       );
-
-      console.log('📦 Transaction sent. Hash:', tx.hash);
       await tx.wait();
       console.log('✅ Transaction confirmed.');
-    } catch (txError: any) {
+    } catch (txError) {
+      const contractError = txError as ContractError;
       console.error('❌ Transaction error during updatePriceAndDistributeOutcome:', {
-        message: txError.message,
-        reason: txError.reason,
-        code: txError.code,
-        data: txError.data
+        message: contractError.message,
+        reason: contractError.reason,
+        code: contractError.code,
+        data: contractError.data
       });
-      throw new Error(`Failed to update price: ${txError.reason || txError.message}`);
+      throw new Error(`Failed to update price: ${contractError.reason || contractError.message}`);
     }
 
     // 6. Try fetching again (no args)
-    console.log('🔁 Re-fetching current price after update...');
     const updatedPrice: bigint = await poolContract.getCurrentPrice();
-    console.log('🎯 Updated price:', updatedPrice.toString());
 
     return Number(ethers.formatUnits(updatedPrice, 18));
 
-  } catch (err: any) {
+  } catch (err) {
+    const contractError = err as ContractError;
     console.error('❌ Final error in getCurrentPrice:', {
-      message: err.message,
-      reason: err.reason,
-      code: err.code,
-      data: err.data
+      message: contractError.message,
+      reason: contractError.reason,
+      code: contractError.code,
+      data: contractError.data
     });
 
-    if (err.code === 'CALL_EXCEPTION') {
+    if (contractError.code === 'CALL_EXCEPTION') {
       throw new Error('Contract call failed - check oracle configuration');
     }
 
-    throw new Error(err.reason || err.message || 'Failed to fetch current price');
+    throw new Error(contractError.reason || contractError.message || 'Failed to fetch current price');
   }
 }
 
@@ -135,7 +150,7 @@ export async function getCurrentPrice(walletClient: any, vaultId: string): Promi
  * handling fetching price data, fees, gas estimation, and sending tx.
  * Returns the transaction receipt.
  */
-export async function updatePriceAndDistribute(walletClient: any, vaultId: string) {
+export async function updatePriceAndDistribute(walletClient: WalletClient, vaultId: string): Promise<TransactionReceipt> {
   const provider = new ethers.BrowserProvider(walletClient.transport);
   const signer = await provider.getSigner();
 
@@ -154,14 +169,11 @@ export async function updatePriceAndDistribute(walletClient: any, vaultId: strin
     signer
   );
 
-  console.log('💰 Querying update fee...');
   const updateFee: bigint = await pythOracleContract.getUpdateFee(priceUpdateData);
-  console.log('💸 Required fee:', updateFee.toString());
 
   const feeWithBuffer = updateFee + updateFee / BigInt(10); // 10% buffer
 
   // Estimate gas
-  console.log('⛽ Estimating gas for updatePriceAndDistributeOutcome...');
   const gasEstimate: bigint = await poolContract.updatePriceAndDistributeOutcome.estimateGas(
     priceUpdateData,
     { value: feeWithBuffer }
@@ -169,15 +181,12 @@ export async function updatePriceAndDistribute(walletClient: any, vaultId: strin
   const gasWithBuffer = gasEstimate + gasEstimate / BigInt(5); // 20% buffer
 
   // Send transaction
-  console.log('🚀 Sending transaction...');
   const tx = await poolContract.updatePriceAndDistributeOutcome(priceUpdateData, {
     value: feeWithBuffer,
     gasLimit: gasWithBuffer,
   });
 
-  console.log('📦 Transaction sent. Hash:', tx.hash);
   const receipt = await tx.wait();
-  console.log('✅ Transaction confirmed.');
 
-  return receipt;
+  return receipt as TransactionReceipt;
 }

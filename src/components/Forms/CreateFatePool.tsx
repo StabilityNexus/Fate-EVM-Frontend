@@ -1,27 +1,26 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { ethers, type TransactionReceipt } from "ethers";
+import { useState, useEffect } from "react";
+import {
+  useAccount,
+  useChainId,
+  useWriteContract,
+  useWaitForTransactionReceipt,
+} from "wagmi";
+import { ethers } from "ethers";
 import { PredictionPoolFactoryABI } from "@/utils/abi/PredictionPoolFactory";
-import { useAccount, useWalletClient, useSwitchChain } from "wagmi";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
+import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { useRouter } from "next/navigation";
+import { Info, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 const FACTORY_ADDRESS = process.env.NEXT_PUBLIC_FACTORY_ADDRESS!;
 const EXPLORER_URL = process.env.NEXT_PUBLIC_EXPLORER_URL!;
 const DENOMINATOR = 100_000;
-const GAS_LIMIT_BUFFER = 50; // 50% buffer
-const SEPOLIA_CHAIN_ID = BigInt(11155111);
+const SEPOLIA_CHAIN_ID = 11155111;
 
 type FormData = {
   poolName: string;
@@ -37,15 +36,138 @@ type FormData = {
   treasuryFee: string;
 };
 
-export default function CreateFatePoolForm() {
-  const { address, isConnected, chainId } = useAccount();
-  const { data: walletClient } = useWalletClient();
-  const { switchChain } = useSwitchChain();
-  
-  const [loading, setLoading] = useState(false);
-  const [isWrongChain, setIsWrongChain] = useState(false);
-  const [transactionStatus, setTransactionStatus] = useState("");
+interface FieldValidation {
+  [key: string]: {
+    isValid: boolean;
+    errorMessage: string;
+  };
+}
 
+const fields = [
+  {
+    id: "poolName",
+    label: "Pool Name",
+    type: "text",
+    placeholder: "BTC Prediction",
+    description: "The name of your prediction pool",
+    validate: (value: string) => ({
+      isValid: value.length >= 3,
+      errorMessage: "Pool name must be more than 3 characters",
+    }),
+  },
+  {
+    id: "baseTokenAddress",
+    label: "Base Token Address",
+    type: "text",
+    placeholder: "0x...",
+    description: "The address of the token being predicted",
+    validate: (value: string) => ({
+      isValid: ethers.isAddress(value),
+      errorMessage: "Invalid Ethereum address",
+    }),
+  },
+  {
+    id: "bullCoinName",
+    label: "Bull Coin Name",
+    type: "text",
+    placeholder: "BTC Bull",
+    description: "Name for the bull position token",
+    validate: (value: string) => ({
+      isValid: value.length >= 2 || value.length === 0,
+      errorMessage: "Name must be at least 2 characters",
+    }),
+  },
+  {
+    id: "bullCoinSymbol",
+    label: "Bull Coin Symbol",
+    type: "text",
+    placeholder: "BULL",
+    description: "Symbol for the bull position token",
+    validate: (value: string) => ({
+      isValid: /^[A-Z]{0,4}$/.test(value),
+      errorMessage: "Symbol must be uppercase letters (max 4 chars)",
+    }),
+  },
+  {
+    id: "bearCoinName",
+    label: "Bear Coin Name",
+    type: "text",
+    placeholder: "BTC Bear",
+    description: "Name for the bear position token",
+    validate: (value: string) => ({
+      isValid: value.length >= 2 || value.length === 0,
+      errorMessage: "Name must be at least 2 characters",
+    }),
+  },
+  {
+    id: "bearCoinSymbol",
+    label: "Bear Coin Symbol",
+    type: "text",
+    placeholder: "BEAR",
+    description: "Symbol for the bear position token",
+    validate: (value: string) => ({
+      isValid: /^[A-Z]{0,4}$/.test(value),
+      errorMessage: "Symbol must be uppercase letters (max 4 chars)",
+    }),
+  },
+  {
+    id: "oracleAddress",
+    label: "Oracle Address",
+    type: "text",
+    placeholder: "0x...",
+    description: "The address of the oracle contract",
+    validate: (value: string) => ({
+      isValid: ethers.isAddress(value),
+      errorMessage: "Invalid Ethereum address",
+    }),
+  },
+  {
+    id: "priceFeedId",
+    label: "Price Feed ID",
+    type: "text",
+    placeholder: "0xa6... (32-byte hex)",
+    description: "The 32-byte hex identifier for the price feed",
+    validate: (value: string) => ({
+      isValid: /^0x[a-fA-F0-9]{64}$/.test(value),
+      errorMessage: "Must be a 32-byte hex string (66 characters including 0x)",
+    }),
+  },
+  {
+    id: "vaultFee",
+    label: "Vault Fee (%)",
+    type: "number",
+    placeholder: "3.0",
+    description: "Percentage fee for the vault (0-100)",
+    validate: (value: string) => ({
+      isValid: /^\d*\.?\d*$/.test(value) && parseFloat(value) >= 0 && parseFloat(value) <= 100,
+      errorMessage: "Must be between 0 and 100",
+    }),
+  },
+  {
+    id: "vaultCreatorFee",
+    label: "Creator Fee (%)",
+    type: "number",
+    placeholder: "3.0",
+    description: "Percentage fee for the creator (0-100)",
+    validate: (value: string) => ({
+      isValid: /^\d*\.?\d*$/.test(value) && parseFloat(value) >= 0 && parseFloat(value) <= 100,
+      errorMessage: "Must be between 0 and 100",
+    }),
+  },
+  {
+    id: "treasuryFee",
+    label: "Treasury Fee (%)",
+    type: "number",
+    placeholder: "0.3",
+    description: "Percentage fee for the treasury (0-100)",
+    validate: (value: string) => ({
+      isValid: /^\d*\.?\d*$/.test(value) && parseFloat(value) >= 0 && parseFloat(value) <= 100,
+      errorMessage: "Must be between 0 and 100",
+    }),
+  },
+];
+
+export default function CreateFatePoolForm() {
   const [formData, setFormData] = useState<FormData>({
     poolName: "",
     baseTokenAddress: "",
@@ -59,381 +181,201 @@ export default function CreateFatePoolForm() {
     vaultCreatorFee: "",
     treasuryFee: "",
   });
+  const [validation, setValidation] = useState<FieldValidation>({});
+  const [showInfo, setShowInfo] = useState<{ [key: string]: boolean }>({});
 
-  useEffect(() => {
-    setIsWrongChain(isConnected && chainId !== Number(SEPOLIA_CHAIN_ID));
-  }, [chainId, isConnected]);
+  const { address } = useAccount();
+  const currentChainId = useChainId();
+  const router = useRouter();
+
+  const { writeContract: deployPool, data: deployData, isPending: isSigning } = useWriteContract();
+  const { isLoading: isDeployingTx } = useWaitForTransactionReceipt({ hash: deployData });
+
+  const isDeploying = isSigning || isDeployingTx;
+  const isWrongChain = currentChainId !== SEPOLIA_CHAIN_ID;
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
+
+    const field = fields.find((f) => f.id === name);
+    if (field?.validate) {
+      const validationResult = field.validate(value);
+      setValidation((prev) => ({ ...prev, [name]: validationResult }));
+    }
   };
 
-  const resetForm = () => {
-    setFormData({
-      poolName: "",
-      baseTokenAddress: "",
-      bullCoinName: "",
-      bullCoinSymbol: "",
-      bearCoinName: "",
-      bearCoinSymbol: "",
-      oracleAddress: "",
-      priceFeedId: "",
-      vaultFee: "",
-      vaultCreatorFee: "",
-      treasuryFee: "",
-    });
+  const toggleInfo = (fieldId: string) => {
+    setShowInfo((prev) => ({ ...prev, [fieldId]: !prev[fieldId] }));
   };
 
-  const validateForm = (): boolean => {
-    if (!isConnected || !address) {
-      toast.error("⚠️ Please connect your wallet");
-      return false;
-    }
-
-    if (isWrongChain) {
-      toast.error("⚠️ Please switch to Sepolia network");
-      return false;
-    }
-
-    const requiredFields = [
-      { name: "Pool Name", key: "poolName" },
-      { name: "Base Token Address", key: "baseTokenAddress" },
-      { name: "Oracle Address", key: "oracleAddress" },
-      { name: "Price Feed ID", key: "priceFeedId" },
-    ];
-
-    for (const field of requiredFields) {
-      if (!formData[field.key as keyof FormData]?.trim()) {
-        toast.error(`❌ ${field.name} is required`);
-        return false;
-      }
-    }
-
-    if (!ethers.isAddress(formData.baseTokenAddress)) {
-      toast.error("❌ Invalid Base Token Address");
-      return false;
-    }
-
-    if (!ethers.isAddress(formData.oracleAddress)) {
-      toast.error("❌ Invalid Oracle Address");
-      return false;
-    }
-
-    if (!/^0x[a-fA-F0-9]{64}$/.test(formData.priceFeedId)) {
-      toast.error("❌ Price Feed ID must be a 32-byte hex string (66 characters including 0x)");
-      return false;
-    }
-
-    const vaultFeeNum = parseFloat(formData.vaultFee) || 0;
-    const vaultCreatorFeeNum = parseFloat(formData.vaultCreatorFee) || 0;
-    const treasuryFeeNum = parseFloat(formData.treasuryFee) || 0;
-
-    if ([vaultFeeNum, vaultCreatorFeeNum, treasuryFeeNum].some(f => f < 0 || f > 100)) {
-      toast.error("❌ All fees must be between 0% and 100%");
-      return false;
-    }
-
-    const totalFee = vaultFeeNum + vaultCreatorFeeNum + treasuryFeeNum;
-    if (totalFee > 100) {
-      toast.error(`❌ Total fees cannot exceed 100% (current: ${totalFee}%)`);
-      return false;
-    }
-
-    return true;
-  };
-
-  const handleSwitchChain = async () => {
+  const deployContract = async () => {
     try {
-      await switchChain({ chainId: Number(SEPOLIA_CHAIN_ID) });
-    } catch (error) {
-      toast.error("Failed to switch network. Please switch manually in your wallet.");
-    }
-  };
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!validateForm()) return;
-    if (!walletClient) {
-      toast.error("Wallet not connected");
-      return;
-    }
-
-    try {
-      setLoading(true);
-      setTransactionStatus("Initializing transaction...");
-
-      const provider = new ethers.BrowserProvider(walletClient.transport);
-      const signer = await provider.getSigner();
-      
-      // Verify contract exists
-      const code = await provider.getCode(FACTORY_ADDRESS);
-      if (code === "0x") {
-        throw new Error("Contract not deployed at this address");
-      }
-      
-      const factory = new ethers.Contract(
-        FACTORY_ADDRESS,
-        PredictionPoolFactoryABI,
-        signer
-      );
-
-      // Convert fees to contract units
       const vaultFeeUnits = Math.round((parseFloat(formData.vaultFee) / 100) * DENOMINATOR);
       const creatorFeeUnits = Math.round((parseFloat(formData.vaultCreatorFee) / 100) * DENOMINATOR);
       const treasuryFeeUnits = Math.round((parseFloat(formData.treasuryFee) / 100) * DENOMINATOR);
 
-      setTransactionStatus("Estimating gas...");
-      const gasEstimate = await factory.createPool.estimateGas(
-        formData.poolName,
-        formData.baseTokenAddress,
-        vaultFeeUnits,
-        creatorFeeUnits,
-        treasuryFeeUnits,
-        formData.oracleAddress,
-        formData.priceFeedId as `${string}`
-      );
-
-      const gasLimit = (gasEstimate * BigInt(100 + GAS_LIMIT_BUFFER)) / BigInt(100);
-
-      setTransactionStatus("Sending transaction...");
-      const tx = await factory.createPool(
-        formData.poolName,
-        formData.baseTokenAddress,
-        vaultFeeUnits,
-        creatorFeeUnits,
-        treasuryFeeUnits,
-        formData.oracleAddress,
-        formData.priceFeedId as `${string}`,
-        { gasLimit }
-      );
-
-      const toastId = toast.loading("Waiting for transaction confirmation...", {
-        description: "This may take a few moments"
+      await deployPool({
+        address: FACTORY_ADDRESS as `0x${string}`,
+        abi: PredictionPoolFactoryABI,
+        functionName: "createPool",
+        args: [
+          formData.poolName,
+          formData.baseTokenAddress,
+          vaultFeeUnits,
+          creatorFeeUnits,
+          treasuryFeeUnits,
+          formData.oracleAddress,
+          formData.priceFeedId as `0x${string}`,
+        ],
       });
+    } catch (error) {
+      console.error("Error deploying pool:", error);
+      toast.error("Failed to deploy prediction pool");
+    }
+  };
 
-      const receipt = await tx.wait();
-      
-      toast.success("Pool created successfully!", {
+  useEffect(() => {
+    if (deployData) {
+      const toastId = toast.loading("Transaction submitted...");
+      toast.success("Prediction pool created!", {
         id: toastId,
         action: {
           label: "View on Explorer",
-          onClick: () => window.open(`${EXPLORER_URL}${receipt.hash}`, '_blank')
-        }
+          onClick: () => window.open(`${EXPLORER_URL}${deployData}`, "_blank"),
+        },
       });
-
-      resetForm();
-      setTransactionStatus("Transaction completed successfully!");
-    } catch (error: any) {
-      console.error("Transaction Error:", error);
-      let errorMessage = error?.reason || error?.message || "Transaction failed";
-      
-      if (error.message.includes("user rejected transaction")) {
-        errorMessage = "Transaction rejected by user";
-      } else if (error.message.includes("insufficient funds")) {
-        errorMessage = "Insufficient funds for gas";
-      } else if (error.message.includes("network mismatch")) {
-        errorMessage = "Wrong network detected";
-      }
-
-      toast.error(`Transaction failed: ${errorMessage}`);
-      setTransactionStatus(`Error: ${errorMessage}`);
-    } finally {
-      setLoading(false);
+      setTimeout(() => {
+        router.push("/my-pools");
+      }, 2000);
     }
-  }
+  }, [deployData, router]);
 
-  const feeFields = [
-    { id: "vaultFee", label: "Vault Fee (%)", name: "vaultFee", placeholder: "3.0" },
-    { id: "vaultCreatorFee", label: "Creator Fee (%)", name: "vaultCreatorFee", placeholder: "3.0" },
-    { id: "treasuryFee", label: "Treasury Fee (%)", name: "treasuryFee", placeholder: "0.3" },
-  ];
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+
+    const newValidation: FieldValidation = {};
+    let isValid = true;
+
+    fields.forEach((field) => {
+      if (field.validate) {
+        const result = field.validate(formData[field.id as keyof FormData]);
+        newValidation[field.id] = result;
+        if (!result.isValid) isValid = false;
+      }
+    });
+
+    const totalFees =
+      parseFloat(formData.vaultFee || "0") +
+      parseFloat(formData.vaultCreatorFee || "0") +
+      parseFloat(formData.treasuryFee || "0");
+
+    if (totalFees > 100) {
+      newValidation["feeValidation"] = {
+        isValid: false,
+        errorMessage: `Total fees cannot exceed 100% (current: ${totalFees}%)`,
+      };
+      isValid = false;
+    }
+
+    setValidation(newValidation);
+
+    if (isValid) {
+      await deployContract();
+    }
+  };
 
   return (
-    <form onSubmit={handleSubmit} className="max-w-4xl mx-auto p-4">
-      <Card className="shadow-lg p-6 space-y-6 bg-white dark:bg-gray-900 text-foreground dark:text-white">
-        <CardHeader>
-          <CardTitle>Create Prediction Pool</CardTitle>
-          <CardDescription>
-            Fill in all parameters to deploy a new prediction pool
-          </CardDescription>
-        </CardHeader>
-        
-        {isWrongChain && (
-          <div className="bg-red-100 dark:bg-red-900 p-4 rounded-lg flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="font-medium">⚠️ Wrong Network</span>
-              <span className="text-sm">Please switch to Sepolia to continue</span>
-            </div>
-            <Button 
-              size="sm" 
-              onClick={handleSwitchChain}
-              className="bg-red-600 hover:bg-red-700 text-white"
-            >
-              Switch Network
-            </Button>
+    <div className="min-h-screen flex items-center justify-center bg-white dark:bg-black text-black dark:text-white font-normal">
+      <div className="w-full max-w-3xl mx-auto px-4 py-12">
+        {isDeploying ? (
+          <div className="flex flex-col items-center justify-center space-y-4">
+            <Loader2 className="h-12 w-12 animate-spin text-black dark:text-white" />
+            <h2 className="text-2xl">Creating Your Prediction Pool</h2>
+            <p className="text-gray-600 dark:text-gray-300">Deploying contract...</p>
           </div>
-        )}
-
-        <CardContent className="space-y-4">
-          <InputField
-            label="Pool Name"
-            name="poolName"
-            value={formData.poolName}
-            onChange={handleChange}
-            placeholder="BTC Prediction"
-          />
-
-          <InputField
-            label="Vault Creator"
-            name="vaultcreator"
-            value={address || ""}  
-            onChange={handleChange}
-            disabled={true}
-          />
-          
-          <InputField
-            label="Base Token Address"
-            name="baseTokenAddress"
-            value={formData.baseTokenAddress}
-            onChange={handleChange}
-            placeholder="0x..."
-          />
-
-          <div className="grid md:grid-cols-2 gap-4">
-            <InputField
-              label="Bull Coin Name"
-              name="bullCoinName"
-              value={formData.bullCoinName}
-              onChange={handleChange}
-              placeholder="BTC Bull"
-            />
-            <InputField
-              label="Bull Coin Symbol"
-              name="bullCoinSymbol"
-              value={formData.bullCoinSymbol}
-              onChange={handleChange}
-              placeholder="BULL"
-            />
-            <InputField
-              label="Bear Coin Name"
-              name="bearCoinName"
-              value={formData.bearCoinName}
-              onChange={handleChange}
-              placeholder="BTC Bear"
-            />
-            <InputField
-              label="Bear Coin Symbol"
-              name="bearCoinSymbol"
-              value={formData.bearCoinSymbol}
-              onChange={handleChange}
-              placeholder="BEAR"
-            />
-          </div>
-
-          <Separator />
-
-          <div className="grid md:grid-cols-2 gap-4">
-            <InputField
-              label="Oracle Address"
-              name="oracleAddress"
-              value={formData.oracleAddress}
-              onChange={handleChange}
-              placeholder="0x..."
-            />
-            <InputField
-              label="Price Feed ID"
-              name="priceFeedId"
-              value={formData.priceFeedId}
-              onChange={handleChange}
-              placeholder="0xa6... (32-byte hex)"
-            />
-          </div>
-
-          <Separator />
-
-          <div className="grid md:grid-cols-3 gap-4">
-            {feeFields.map((field) => (
-              <InputField
-                key={field.id}
-                label={field.label}
-                name={field.name}
-                value={formData[field.name as keyof FormData]}
-                onChange={handleChange}
-                type="number"
-                placeholder={field.placeholder}
-              />
-            ))}
-          </div>
-
-          <div className="text-sm text-muted-foreground p-2 rounded bg-gray-100 dark:bg-gray-800">
-            <p>ℹ️ Total fees must be ≤ 100%</p>
-            <p>• 1% = 1000 basis points</p>
-          </div>
-
-          <Separator />
-
-          <Button
-            type="submit"
-            disabled={loading || !isConnected || isWrongChain}
-            className="w-full border-2 border-black rounded-xl dark:border-white dark:text-white"
+        ) : (
+          <form
+            onSubmit={handleSubmit}
+            className="rounded-xl border border-gray-300 dark:border-gray-700 p-8 bg-white dark:bg-black space-y-6"
           >
-            {loading ? (
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                Creating Pool...
+            <h1 className="text-4xl text-center mb-4">Create Prediction Pool</h1>
+
+            {!address ? (
+              <div className="text-center space-y-4">
+                <p>Connect your wallet to proceed</p>
+                <ConnectButton />
               </div>
-            ) : "Create Prediction Pool"}
-          </Button>
-
-          {transactionStatus && (
-            <div className="text-sm p-2 rounded bg-gray-100 dark:bg-gray-800">
-              {transactionStatus}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    </form>
-  );
-}
-
-interface InputFieldProps {
-  label: string;
-  name: string;
-  value: string;
-  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  placeholder?: string;
-  type?: string;
-  disabled?: boolean;
-}
-
-const InputField: React.FC<InputFieldProps> = ({
-  label,
-  name,
-  value,
-  onChange,
-  placeholder = "",
-  type = "text",
-  disabled = false,
-}) => {
-  const id = name.toLowerCase();
-  return (
-    <div className="space-y-1">
-      <Label htmlFor={id} className="text-foreground dark:text-white">
-        {label}
-      </Label>
-      <Input
-        id={id}
-        name={name}
-        type={type}
-        value={value}
-        onChange={onChange}
-        placeholder={placeholder}
-        disabled={disabled}
-        className="bg-white dark:bg-gray-800 text-foreground dark:text-white rounded-xl placeholder:text-gray-400 dark:placeholder:text-gray-500"
-        pattern={type === "number" ? "[0-9]*[.,]?[0-9]*" : undefined}
-        inputMode={type === "number" ? "decimal" : "text"}
-      />
+            ) : isWrongChain ? (
+              <div className="text-center space-y-4">
+                <p>Please switch to the Sepolia network</p>
+                <Button
+                  onClick={() =>
+                    window.ethereum?.request({
+                      method: "wallet_switchEthereumChain",
+                      params: [{ chainId: `0x${SEPOLIA_CHAIN_ID.toString(16)}` }],
+                    })
+                  }
+                >
+                  Switch to Sepolia
+                </Button>
+              </div>
+            ) : (
+              <>
+                {fields.map((field) => (
+                  <div key={field.id}>
+                    <Label htmlFor={field.id} className="block mb-1">
+                      {field.label}
+                    </Label>
+                    <div className="relative">
+                      <Input
+                        id={field.id}
+                        name={field.id}
+                        type={field.type}
+                        placeholder={field.placeholder}
+                        value={formData[field.id as keyof FormData]}
+                        onChange={handleChange}
+                        className={`w-full bg-white dark:bg-black border ${
+                          validation[field.id]?.isValid === false ? "border-red-500" : "border-gray-300"
+                        } px-4 py-2 rounded`}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => toggleInfo(field.id)}
+                        className="absolute right-3 top-1/2 transform -translate-y-1/2"
+                      >
+                        <Info className="w-4 h-4" />
+                      </button>
+                    </div>
+                    {(showInfo[field.id] || validation[field.id]?.isValid === false) && (
+                      <p className={`text-sm mt-1 ${validation[field.id]?.isValid === false ? "text-red-500" : "text-gray-600"}`}>
+                        {validation[field.id]?.isValid === false
+                          ? validation[field.id]?.errorMessage
+                          : field.description}
+                      </p>
+                    )}
+                  </div>
+                ))}
+                {validation["feeValidation"]?.isValid === false && (
+                  <p className="text-sm text-red-500">{validation["feeValidation"].errorMessage}</p>
+                )}
+                <div className="flex justify-end gap-4">
+                  <Button
+                    type="button"
+                    onClick={() => router.push("/explorePools")}
+                    className="border border-gray-400 text-black dark:text-white"
+                  >
+                    Cancel
+                  </Button>
+                  <Button type="submit" className="bg-black text-white dark:bg-white dark:text-black">
+                    {isDeploying ? "Deploying..." : "Create Pool"}
+                  </Button>
+                </div>
+              </>
+            )}
+          </form>
+        )}
+      </div>
     </div>
   );
-};
+}
