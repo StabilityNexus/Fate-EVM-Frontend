@@ -1,8 +1,8 @@
 import { ethers } from 'ethers';
 import { EvmPriceServiceConnection } from '@pythnetwork/pyth-evm-js';
 import { PredictionPoolABI } from '@/utils/abi/PredictionPool';
+import { Address } from 'viem';
 
-const BTC_USD_PRICE_ID = '0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace';
 const PYTH_HERMES_ENDPOINT = 'https://hermes.pyth.network';
 
 // Type definitions
@@ -33,10 +33,10 @@ interface TransactionReceipt {
   [key: string]: unknown;
 }
 
-export async function fetchPythPriceUpdateData(): Promise<string[]> {
+export async function fetchPythPriceUpdateData(priceFeedId:string): Promise<string[]> {
   try {
     const connection = new EvmPriceServiceConnection(PYTH_HERMES_ENDPOINT);
-    const priceFeeds = await connection.getPriceFeedsUpdateData([BTC_USD_PRICE_ID]);
+    const priceFeeds = await connection.getPriceFeedsUpdateData([priceFeedId]);
 
     console.log('✅ Received price update data:', {
       length: priceFeeds.length,
@@ -59,7 +59,12 @@ export async function fetchPythPriceUpdateData(): Promise<string[]> {
   }
 }
 
-export async function getCurrentPrice(walletClient: WalletClient, vaultId: string): Promise<number> {
+export async function getCurrentPrice(
+  walletClient: WalletClient,
+  vaultId: Address,
+  priceFeedId: string,
+  oracleAddress: Address
+): Promise<number>  {
   try {
     const provider = new ethers.BrowserProvider(walletClient.transport);
     const signer = await provider.getSigner();
@@ -76,10 +81,10 @@ export async function getCurrentPrice(walletClient: WalletClient, vaultId: strin
     }
 
     // 2. Fetch price update data
-    const priceUpdateData = await fetchPythPriceUpdateData();
+    const priceUpdateData = await fetchPythPriceUpdateData(priceFeedId);
 
     // 3. Query update fee
-    const PYTH_ORACLE_ADDRESS = "0xDd24F84d36BF92C65F92307595335bdFab5Bbd21";
+    const PYTH_ORACLE_ADDRESS = oracleAddress;
     const pythOracleABI = [
       "function getUpdateFee(bytes[] calldata updateData) external view returns (uint256 feeAmount)"
     ];
@@ -150,16 +155,21 @@ export async function getCurrentPrice(walletClient: WalletClient, vaultId: strin
  * handling fetching price data, fees, gas estimation, and sending tx.
  * Returns the transaction receipt.
  */
-export async function updatePriceAndDistribute(walletClient: WalletClient, vaultId: string): Promise<TransactionReceipt> {
+export async function updatePriceAndDistribute(
+  walletClient: WalletClient,
+  vaultId: Address,
+  priceFeedId: string,
+  oracleAddress: Address
+): Promise<TransactionReceipt> {
   const provider = new ethers.BrowserProvider(walletClient.transport);
   const signer = await provider.getSigner();
 
   const poolContract = new ethers.Contract(vaultId, PredictionPoolABI, signer);
 
-  const priceUpdateData = await fetchPythPriceUpdateData();
+  const priceUpdateData = await fetchPythPriceUpdateData(priceFeedId);
 
   // Get update fee from PYTH oracle contract (not pool contract)
-  const PYTH_ORACLE_ADDRESS = "0xDd24F84d36BF92C65F92307595335bdFab5Bbd21";
+  const PYTH_ORACLE_ADDRESS =oracleAddress;
   const pythOracleABI = [
     "function getUpdateFee(bytes[] calldata updateData) external view returns (uint256 feeAmount)"
   ];

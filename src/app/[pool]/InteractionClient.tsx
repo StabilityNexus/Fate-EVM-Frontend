@@ -44,6 +44,8 @@ interface Pool {
   bearPercentage: number;
   previous_price: bigint;
   baseToken: Address;
+  priceFeedId:string;
+  oracle:Address;
 }
 
 interface ProcessingError extends Error {
@@ -131,6 +133,16 @@ export default function InteractionClient() {
         abi: PredictionPoolABI,
         functionName: 'previousPrice',
       },
+      {
+        address: poolId || defaultPoolId,
+        abi: PredictionPoolABI,
+        functionName: 'priceFeedId',
+      },
+      {
+        address: poolId || defaultPoolId,
+        abi: PredictionPoolABI,
+        functionName: 'oracle',
+      },
     ],
     query: {
       enabled: !!(poolId || defaultPoolId) && isChainSupported,
@@ -142,6 +154,8 @@ export default function InteractionClient() {
   const bullAddr = poolData?.[1]?.result as Address;
   const bearAddr = poolData?.[2]?.result as Address;
   const prevPrice = poolData?.[3]?.result as bigint;
+  const priceFeedId = poolData?.[4]?.result as string;
+  const oracle = poolData?.[5]?.result as Address;
 
   // Read token data for both bull and bear tokens
   const { data: tokenData } = useReadContracts({
@@ -328,8 +342,11 @@ export default function InteractionClient() {
         bullPercentage,
         bearPercentage,
         previous_price: prevPrice || BigInt(0),
-        baseToken: baseToken!
+        baseToken: baseToken!,
+        priceFeedId: priceFeedId || '',
+        oracle: oracle || '0x' // Fallback empty address
       };
+
 
       setPool(poolObj);
     } catch (e) {
@@ -340,7 +357,7 @@ export default function InteractionClient() {
     } finally {
       setLoading(false);
     }
-  }, [poolData, tokenData, assetBalances, userBalances, poolId, defaultPoolId, bullAddr, bearAddr, baseToken, prevPrice]);
+  }, [poolData, tokenData, assetBalances, userBalances, poolId, defaultPoolId, bullAddr, bearAddr, baseToken, prevPrice, priceFeedId, oracle]);
 
   // Handle transaction confirmations
   useEffect(() => {
@@ -359,11 +376,16 @@ export default function InteractionClient() {
   // Fetch current price
   useEffect(() => {
     const fetchCurrentPrice = async () => {
-      if (!walletClient || !(poolId || defaultPoolId)) return;
+      if (!walletClient || !(poolId || defaultPoolId) || !priceFeedId || !oracle) return;
       
       try {
         setLoadingPrice(true);
-        const price = await getCurrentPrice(walletClient, poolId || defaultPoolId!);
+        const price = await getCurrentPrice(
+        walletClient, 
+        poolId || defaultPoolId!, 
+        priceFeedId,
+        oracle
+      );
         
         if (currentPrice !== null) {
           setPreviousPrice(currentPrice);
@@ -378,7 +400,7 @@ export default function InteractionClient() {
     };
 
     fetchCurrentPrice();
-  }, [walletClient, poolId, defaultPoolId, currentPrice]);
+  }, [walletClient, poolId, defaultPoolId, currentPrice, priceFeedId, oracle]);
 
   const handleBuy = async (token: Token, amount: string) => {
     if (!address || !isConnected) {
@@ -484,11 +506,11 @@ export default function InteractionClient() {
         setPreviousPrice(currentPrice);
       }
 
-      await updatePriceAndDistribute(walletClient, poolId || defaultPoolId!);
+      await updatePriceAndDistribute(walletClient, poolId || defaultPoolId!,priceFeedId,oracle);
       
       // After tx confirmation, refresh current price
       try {
-        const newPrice = await getCurrentPrice(walletClient, poolId || defaultPoolId!);
+        const newPrice = await getCurrentPrice(walletClient, poolId || defaultPoolId!,priceFeedId,oracle);
         setCurrentPrice(newPrice);
         toast.success(`Price updated to $${newPrice.toFixed(4)}`);
       } catch (priceRefreshError) {
@@ -726,7 +748,7 @@ export default function InteractionClient() {
                 onClick={async () => {
                   try {
                     setLoadingPrice(true);
-                    const price = await getCurrentPrice(walletClient!, poolId || defaultPoolId!);
+                    const price = await getCurrentPrice(walletClient!, poolId || defaultPoolId!,priceFeedId,oracle);
                     setCurrentPrice(price);
                     toast.success(`Current price: $${price.toFixed(4)}`);
                   } catch (priceError) {
