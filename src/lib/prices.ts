@@ -79,7 +79,7 @@ export async function getCurrentPrice(walletClient: WalletClient, vaultId: strin
     const priceUpdateData = await fetchPythPriceUpdateData();
 
     // 3. Query update fee
-    const PYTH_ORACLE_ADDRESS = process.env.NEXT_PUBLIC_PYTH_ORACLE_ADDRESS!;
+    const PYTH_ORACLE_ADDRESS = "0xDd24F84d36BF92C65F92307595335bdFab5Bbd21";
     const pythOracleABI = [
       "function getUpdateFee(bytes[] calldata updateData) external view returns (uint256 feeAmount)"
     ];
@@ -159,7 +159,7 @@ export async function updatePriceAndDistribute(walletClient: WalletClient, vault
   const priceUpdateData = await fetchPythPriceUpdateData();
 
   // Get update fee from PYTH oracle contract (not pool contract)
-  const PYTH_ORACLE_ADDRESS = process.env.NEXT_PUBLIC_PYTH_ORACLE_ADDRESS!;
+  const PYTH_ORACLE_ADDRESS = "0xDd24F84d36BF92C65F92307595335bdFab5Bbd21";
   const pythOracleABI = [
     "function getUpdateFee(bytes[] calldata updateData) external view returns (uint256 feeAmount)"
   ];
