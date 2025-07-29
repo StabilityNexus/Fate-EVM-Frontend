@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { Coins } from 'lucide-react';
+import { Coins, AlertCircle } from 'lucide-react';
 import { 
   useAccount, 
   useWalletClient, 
@@ -15,6 +15,7 @@ import { ERC20ABI } from '@/utils/abi/ERC20';
 import { toast } from 'sonner';
 import { getCurrentPrice, updatePriceAndDistribute } from '@/lib/prices';
 import { useSearchParams } from 'next/navigation';
+import { FatePoolFactories } from '@/utils/addresses';
 
 interface Token {
   id: Address;
@@ -59,10 +60,25 @@ const formatNum = (value: bigint | null | undefined, decimals = 18): number => {
   }
 };
 
+const getSupportedChains = (): string => {
+  const chainNames: { [key: number]: string } = {
+    1: "Ethereum Mainnet",
+    11155111: "Sepolia Testnet",
+  };
+  
+  return Object.keys(FatePoolFactories)
+    .map(chainId => chainNames[Number(chainId)] || `Chain ${chainId}`)
+    .join(", ");
+};
+
 export default function InteractionClient() {
   const params = useSearchParams();
   const id = params.get("id");
+  const { chain } = useAccount();
   const poolId = (Array.isArray(id) ? id[0] : id || '') as Address;
+  const defaultPoolId = chain?.id ? FatePoolFactories[chain.id] : undefined;
+  const isChainSupported = chain?.id ? Boolean(FatePoolFactories[chain.id]) : false;
+
   const [pool, setPool] = useState<Pool | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -83,32 +99,41 @@ export default function InteractionClient() {
     hash,
   });
 
+  // Check chain support
+  useEffect(() => {
+    if (chain?.id && !isChainSupported) {
+      toast.error(
+        `Chain "${chain.name}" is not supported. Please switch to one of: ${getSupportedChains()}`
+      );
+    }
+  }, [chain, isChainSupported]);
+
   // Read pool basic data
   const { data: poolData, refetch: refetchPool } = useReadContracts({
     contracts: [
       {
-        address: poolId,
+        address: poolId || defaultPoolId,
         abi: PredictionPoolABI,
         functionName: 'baseToken',
       },
       {
-        address: poolId,
+        address: poolId || defaultPoolId,
         abi: PredictionPoolABI,
         functionName: 'bullCoin',
       },
       {
-        address: poolId,
+        address: poolId || defaultPoolId,
         abi: PredictionPoolABI,
         functionName: 'bearCoin',
       },
       {
-        address: poolId,
+        address: poolId || defaultPoolId,
         abi: PredictionPoolABI,
         functionName: 'previousPrice',
       },
     ],
     query: {
-      enabled: !!poolId,
+      enabled: !!(poolId || defaultPoolId) && isChainSupported,
     }
   });
 
@@ -231,7 +256,7 @@ export default function InteractionClient() {
 
   // Process data when all reads are complete
   useEffect(() => {
-    if (!poolData || !tokenData || !assetBalances || !poolId) {
+    if (!poolData || !tokenData || !assetBalances || !(poolId || defaultPoolId)) {
       setLoading(true);
       return;
     }
@@ -273,7 +298,7 @@ export default function InteractionClient() {
         treasury_fee: bullTreFee as bigint,
         asset_balance: bullAssetBal,
         supply: bullSupply as bigint,
-        prediction_pool: poolId,
+        prediction_pool: poolId || defaultPoolId!,
         other_token: bearAddr,
         price: bullPrice,
         balance: bullBalance
@@ -290,14 +315,14 @@ export default function InteractionClient() {
         treasury_fee: bearTreFee as bigint,
         asset_balance: bearAssetBal,
         supply: bearSupply as bigint,
-        prediction_pool: poolId,
+        prediction_pool: poolId || defaultPoolId!,
         other_token: bullAddr,
         price: bearPrice,
         balance: bearBalance
       };
 
       const poolObj: Pool = {
-        id: poolId,
+        id: poolId || defaultPoolId!,
         bullToken,
         bearToken,
         bullPercentage,
@@ -315,7 +340,7 @@ export default function InteractionClient() {
     } finally {
       setLoading(false);
     }
-  }, [poolData, tokenData, assetBalances, userBalances, poolId, bullAddr, bearAddr, baseToken, prevPrice]);
+  }, [poolData, tokenData, assetBalances, userBalances, poolId, defaultPoolId, bullAddr, bearAddr, baseToken, prevPrice]);
 
   // Handle transaction confirmations
   useEffect(() => {
@@ -334,11 +359,11 @@ export default function InteractionClient() {
   // Fetch current price
   useEffect(() => {
     const fetchCurrentPrice = async () => {
-      if (!walletClient || !poolId) return;
+      if (!walletClient || !(poolId || defaultPoolId)) return;
       
       try {
         setLoadingPrice(true);
-        const price = await getCurrentPrice(walletClient, poolId);
+        const price = await getCurrentPrice(walletClient, poolId || defaultPoolId!);
         
         if (currentPrice !== null) {
           setPreviousPrice(currentPrice);
@@ -353,7 +378,7 @@ export default function InteractionClient() {
     };
 
     fetchCurrentPrice();
-  }, [walletClient, poolId, currentPrice]);
+  }, [walletClient, poolId, defaultPoolId, currentPrice]);
 
   const handleBuy = async (token: Token, amount: string) => {
     if (!address || !isConnected) {
@@ -446,7 +471,7 @@ export default function InteractionClient() {
   };
 
   const handleUpdatePrice = async () => {
-    if (!walletClient || !isConnected || !address) {
+    if (!walletClient || !isConnected || !address || !(poolId || defaultPoolId)) {
       toast.error('Please connect your wallet');
       return;
     }
@@ -459,11 +484,11 @@ export default function InteractionClient() {
         setPreviousPrice(currentPrice);
       }
 
-      await updatePriceAndDistribute(walletClient, poolId);
+      await updatePriceAndDistribute(walletClient, poolId || defaultPoolId!);
       
       // After tx confirmation, refresh current price
       try {
-        const newPrice = await getCurrentPrice(walletClient, poolId);
+        const newPrice = await getCurrentPrice(walletClient, poolId || defaultPoolId!);
         setCurrentPrice(newPrice);
         toast.success(`Price updated to $${newPrice.toFixed(4)}`);
       } catch (priceRefreshError) {
@@ -484,6 +509,29 @@ export default function InteractionClient() {
       setUpdatingPrice(false);
     }
   };
+
+  // Render unsupported chain message
+  if (chain && !isChainSupported) {
+    return (
+      <div className="min-h-screen bg-gradient-to-r from-gray-100 to-gray-300 dark:from-gray-800 dark:to-gray-900 transition-colors duration-300">
+        <div className="max-w-7xl mx-auto px-4 py-12">
+          <div className="flex flex-col items-center justify-center min-h-[50vh] text-center">
+            <AlertCircle className="h-16 w-16 text-yellow-500 mb-4" />
+            <h2 className="text-2xl font-bold text-black dark:text-white mb-2">
+              Unsupported Chain
+            </h2>
+            <p className="text-gray-600 dark:text-gray-400 mb-4 max-w-md">
+              You&apos;re currently connected to <strong>{chain.name}</strong> which is not supported. 
+              Please switch to one of the following supported chains:
+            </p>
+            <p className="text-sm font-medium text-gray-800 dark:text-gray-200">
+              {getSupportedChains()}
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
@@ -678,7 +726,7 @@ export default function InteractionClient() {
                 onClick={async () => {
                   try {
                     setLoadingPrice(true);
-                    const price = await getCurrentPrice(walletClient!, poolId);
+                    const price = await getCurrentPrice(walletClient!, poolId || defaultPoolId!);
                     setCurrentPrice(price);
                     toast.success(`Current price: $${price.toFixed(4)}`);
                   } catch (priceError) {
