@@ -11,10 +11,7 @@ import { ethereumClassic } from "@/utils/chains/EthereumClassic";
 import { http } from "wagmi";
 
 // Ensure your environment variable is set properly
-const PROJECT_ID = process.env.NEXT_PUBLIC_PROJECT_ID;
-if (!PROJECT_ID) {
-  throw new Error("NEXT_PUBLIC_PROJECT_ID environment variable is required");
-}
+const PROJECT_ID = process.env.NEXT_PUBLIC_PROJECT_ID ?? "DEFAULT_PROJECT_ID";
 
 export const config = getDefaultConfig({
   appName: "Fate Protocol",
