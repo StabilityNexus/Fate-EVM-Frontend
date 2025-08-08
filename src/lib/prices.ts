@@ -76,8 +76,12 @@ export async function getCurrentPrice(
       const rawPrice: bigint = await poolContract.getCurrentPrice();
       // rawPrice is uint256 with 18 decimals from contract
       return Number(ethers.formatUnits(rawPrice, 18));
-    } catch (initialPriceError) {
-      console.warn('⚠️ Initial fetch failed. Likely no price pushed yet.', initialPriceError);
+    } catch (initialPriceError: any) {
+        // Only proceed with update if it's a specific error indicating no price
+        if (!initialPriceError.message?.includes("expected error message for no price")) {
+          throw initialPriceError;
+        }
+      console.warn('⚠️ No price set yet. Updating from oracle...', initialPriceError);
     }
 
     // 2. Fetch price update data

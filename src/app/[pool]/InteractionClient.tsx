@@ -92,6 +92,11 @@ export default function InteractionClient() {
   const [currentPrice, setCurrentPrice] = useState<number | null>(null);
   const [previousPrice, setPreviousPrice] = useState<number | null>(null);
   const [loadingPrice, setLoadingPrice] = useState(false);
+  const [pendingApproval, setPendingApproval] = useState<{
+    token: Token;
+    amount: string;
+    type: 'buy' | 'sell';
+  } | null>(null);
 
   // Write contract hook
   const { writeContract, data: hash, isPending } = useWriteContract();
@@ -109,6 +114,23 @@ export default function InteractionClient() {
       );
     }
   }, [chain, isChainSupported]);
+
+  // Handle automatic progression after approval
+  useEffect(() => {
+    if (isConfirmed && pendingApproval && !isPending) {
+      const { token, amount, type } = pendingApproval;
+      
+      // Clear pending approval
+      setPendingApproval(null);
+      
+      // Automatically proceed with the transaction
+      if (type === 'buy') {
+        handleBuyTransaction(token, amount);
+      } else {
+        handleSellTransaction(token, amount);
+      }
+    }
+  }, [isConfirmed, pendingApproval, isPending]);
 
   // Read pool basic data
   const { data: poolData, refetch: refetchPool } = useReadContracts({
@@ -223,6 +245,21 @@ export default function InteractionClient() {
     ] : [],
     query: {
       enabled: !!(address && bullAddr && bearAddr),
+    }
+  });
+
+  // Read user base token balance
+  const { data: baseTokenBalance, refetch: refetchBaseTokenBalance } = useReadContracts({
+    contracts: address && baseToken ? [
+      {
+        address: baseToken,
+        abi: ERC20ABI,
+        functionName: 'balanceOf',
+        args: [address],
+      },
+    ] : [],
+    query: {
+      enabled: !!(address && baseToken),
     }
   });
 
@@ -359,19 +396,26 @@ export default function InteractionClient() {
     }
   }, [poolData, tokenData, assetBalances, userBalances, poolId, defaultPoolId, bullAddr, bearAddr, baseToken, prevPrice, priceFeedId, oracle]);
 
-  // Handle transaction confirmations
+  // Handle transaction success
   useEffect(() => {
-    if (isConfirmed) {
-      toast.success("Transaction confirmed!");
+    if (isConfirmed && !isPending) {
+      // Only show success message if not in pending approval state
+      if (!pendingApproval) {
+        toast.success("Transaction completed successfully!");
+        // Clear input fields after successful transaction
+        setBullAmount('');
+        setBearAmount('');
+      }
       // Refetch data after transaction
       setTimeout(() => {
         refetchPool();
         refetchUserBalances();
+        refetchBaseTokenBalance();
         refetchAllowances();
         refetchTokenAllowances();
       }, 2000);
     }
-  }, [isConfirmed, refetchPool, refetchUserBalances, refetchAllowances, refetchTokenAllowances]);
+  }, [isConfirmed, isPending, pendingApproval, refetchPool, refetchUserBalances, refetchBaseTokenBalance, refetchAllowances, refetchTokenAllowances]);
 
   // Fetch current price
   useEffect(() => {
@@ -400,7 +444,43 @@ export default function InteractionClient() {
     };
 
     fetchCurrentPrice();
-  }, [walletClient, poolId, defaultPoolId, currentPrice, priceFeedId, oracle]);
+  }, [walletClient, poolId, defaultPoolId, priceFeedId, oracle]);
+
+  const handleBuyTransaction = async (token: Token, amount: string) => {
+    try {
+      const amountWei = parseUnits(amount, 18);
+      
+      const loadingToast = toast.loading("Processing buy transaction...");
+      await writeContract({
+        address: token.id,
+        abi: CoinABI,
+        functionName: 'buy',
+        args: [address, amountWei],
+      });
+      toast.dismiss(loadingToast);
+    } catch (err: unknown) {
+      console.error("Buy transaction error:", err);
+      toast.error((err as Error).message || "Failed to buy tokens");
+    }
+  };
+
+  const handleSellTransaction = async (token: Token, amount: string) => {
+    try {
+      const amountWei = parseUnits(amount, 18);
+      
+      const loadingToast = toast.loading("Processing sell transaction...");
+      await writeContract({
+        address: token.id,
+        abi: CoinABI,
+        functionName: 'sell',
+        args: [amountWei],
+      });
+      toast.dismiss(loadingToast);
+    } catch (err: unknown) {
+      console.error("Sell transaction error:", err);
+      toast.error((err as Error).message || "Failed to sell tokens");
+    }
+  };
 
   const handleBuy = async (token: Token, amount: string) => {
     if (!address || !isConnected) {
@@ -415,32 +495,33 @@ export default function InteractionClient() {
 
     try {
       const amountWei = parseUnits(amount, 18);
+      
+      // Check if user has sufficient base token balance
+      const userBaseTokenBalance = baseTokenBalance?.[0]?.result as bigint || BigInt(0);
+      if (userBaseTokenBalance < amountWei) {
+        toast.error(`Insufficient balance. You have ${formatUnits(userBaseTokenBalance, 18)} base tokens available.`);
+        return;
+      }
+
       const tokenIndex = token.id === bullAddr ? 0 : 1;
       const currentAllowance = allowances?.[tokenIndex]?.result as bigint || BigInt(0);
 
       // Check if approval is needed
       if (currentAllowance < amountWei) {
-        toast.loading("Approving tokens...");
+        const approvalToast = toast.loading("Approving tokens...");
+        setPendingApproval({ token, amount, type: 'buy' });
         await writeContract({
           address: baseToken!,
           abi: ERC20ABI,
           functionName: 'approve',
           args: [token.id, amountWei],
         });
-        
-        // Wait for approval confirmation before proceeding
+        toast.dismiss(approvalToast);
         return;
       }
 
-      // Proceed with buy
-      await writeContract({
-        address: token.id,
-        abi: CoinABI,
-        functionName: 'buy',
-        args: [address, amountWei],
-      });
-
-      toast.loading("Processing buy transaction...");
+      // Proceed with buy directly if approval is not needed
+      await handleBuyTransaction(token, amount);
     } catch (err: unknown) {
       console.error("Buy error:", err);
       toast.error((err as Error).message || "Failed to buy tokens");
@@ -460,32 +541,33 @@ export default function InteractionClient() {
 
     try {
       const amountWei = parseUnits(amount, 18);
+      
+      // Check if user has sufficient token balance to sell
       const tokenIndex = token.id === bullAddr ? 0 : 1;
+      const userTokenBalance = userBalances?.[tokenIndex]?.result as bigint || BigInt(0);
+      if (userTokenBalance < amountWei) {
+        toast.error(`Insufficient ${token.symbol} balance. You have ${formatUnits(userTokenBalance, 18)} ${token.symbol} available.`);
+        return;
+      }
+
       const currentAllowance = tokenAllowances?.[tokenIndex]?.result as bigint || BigInt(0);
 
       // Check if approval is needed
       if (currentAllowance < amountWei) {
-        toast.loading("Approving tokens...");
+        const approvalToast = toast.loading("Approving tokens...");
+        setPendingApproval({ token, amount, type: 'sell' });
         await writeContract({
           address: token.id,
           abi: CoinABI,
           functionName: 'approve',
           args: [token.id, amountWei],
         });
-        
-        // Wait for approval confirmation before proceeding
+        toast.dismiss(approvalToast);
         return;
       }
 
-      // Proceed with sell
-      await writeContract({
-        address: token.id,
-        abi: CoinABI,
-        functionName: 'sell',
-        args: [amountWei],
-      });
-
-      toast.loading("Processing sell transaction...");
+      // Proceed with sell directly if approval is not needed
+      await handleSellTransaction(token, amount);
     } catch (err: unknown) {
       console.error('Sell error:', err);
       toast.error((err as Error).message || 'Failed to sell tokens');
