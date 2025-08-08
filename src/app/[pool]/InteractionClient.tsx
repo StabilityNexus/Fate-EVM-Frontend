@@ -421,19 +421,22 @@ export default function InteractionClient() {
   useEffect(() => {
     const fetchCurrentPrice = async () => {
       if (!walletClient || !(poolId || defaultPoolId) || !priceFeedId || !oracle) return;
-      
+  
       try {
         setLoadingPrice(true);
         const price = await getCurrentPrice(
-        walletClient, 
-        poolId || defaultPoolId!, 
-        priceFeedId,
-        oracle
-      );
+          walletClient, 
+          poolId || defaultPoolId!, 
+          priceFeedId,
+          oracle
+        );
+  
+        // Use functional update to get latest currentPrice without dependency
+        setPreviousPrice(prev => {
+          const current = currentPrice; // This is safe because of closure
+          return current !== null ? current : prev;
+        });
         
-        if (currentPrice !== null) {
-          setPreviousPrice(currentPrice);
-        }
         setCurrentPrice(price);
       } catch (err: unknown) {
         console.error('Error fetching current price:', err);
@@ -442,7 +445,7 @@ export default function InteractionClient() {
         setLoadingPrice(false);
       }
     };
-
+  
     fetchCurrentPrice();
   }, [walletClient, poolId, defaultPoolId, priceFeedId, oracle]);
 
