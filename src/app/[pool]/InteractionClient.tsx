@@ -95,7 +95,7 @@ export default function InteractionClient() {
   const [pendingApproval, setPendingApproval] = useState<{
     token: Token;
     amount: string;
-    type: 'buy' | 'sell';
+    type: 'buy';
   } | null>(null);
 
   // Write contract hook
@@ -118,17 +118,13 @@ export default function InteractionClient() {
   // Handle automatic progression after approval
   useEffect(() => {
     if (isConfirmed && pendingApproval && !isPending) {
-      const { token, amount, type } = pendingApproval;
+      const { token, amount } = pendingApproval;
       
       // Clear pending approval
       setPendingApproval(null);
       
-      // Automatically proceed with the transaction
-      if (type === 'buy') {
-        handleBuyTransaction(token, amount);
-      } else {
-        handleSellTransaction(token, amount);
-      }
+      // Automatically proceed with the buy transaction
+      handleBuyTransaction(token, amount);
     }
   }, [isConfirmed, pendingApproval, isPending]);
 
@@ -284,27 +280,6 @@ export default function InteractionClient() {
     }
   });
 
-  // Read token allowances for selling
-  const { data: tokenAllowances, refetch: refetchTokenAllowances } = useReadContracts({
-    contracts: address && bullAddr && bearAddr ? [
-      {
-        address: bullAddr,
-        abi: CoinABI,
-        functionName: 'allowance',
-        args: [address, bullAddr],
-      },
-      {
-        address: bearAddr,
-        abi: CoinABI,
-        functionName: 'allowance',
-        args: [address, bearAddr],
-      },
-    ] : [],
-    query: {
-      enabled: !!(address && bullAddr && bearAddr),
-    }
-  });
-
   // Process data when all reads are complete
   useEffect(() => {
     if (!poolData || !tokenData || !assetBalances || !(poolId || defaultPoolId)) {
@@ -384,7 +359,6 @@ export default function InteractionClient() {
         oracle: oracle || '0x' // Fallback empty address
       };
 
-
       setPool(poolObj);
     } catch (e) {
       const processingError = e as ProcessingError;
@@ -412,10 +386,9 @@ export default function InteractionClient() {
         refetchUserBalances();
         refetchBaseTokenBalance();
         refetchAllowances();
-        refetchTokenAllowances();
       }, 2000);
     }
-  }, [isConfirmed, isPending, pendingApproval, refetchPool, refetchUserBalances, refetchBaseTokenBalance, refetchAllowances, refetchTokenAllowances]);
+  }, [isConfirmed, isPending, pendingApproval, refetchPool, refetchUserBalances, refetchBaseTokenBalance, refetchAllowances]);
 
   // Fetch current price
   useEffect(() => {
@@ -553,23 +526,7 @@ export default function InteractionClient() {
         return;
       }
 
-      const currentAllowance = tokenAllowances?.[tokenIndex]?.result as bigint || BigInt(0);
-
-      // Check if approval is needed
-      if (currentAllowance < amountWei) {
-        const approvalToast = toast.loading("Approving tokens...");
-        setPendingApproval({ token, amount, type: 'sell' });
-        await writeContract({
-          address: token.id,
-          abi: CoinABI,
-          functionName: 'approve',
-          args: [token.id, amountWei],
-        });
-        toast.dismiss(approvalToast);
-        return;
-      }
-
-      // Proceed with sell directly if approval is not needed
+      // Directly proceed with sell (no approval needed)
       await handleSellTransaction(token, amount);
     } catch (err: unknown) {
       console.error('Sell error:', err);
