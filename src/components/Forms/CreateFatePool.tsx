@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useAccount, useChainId, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useRouter } from "next/navigation";
-import { Loader2, AlertCircle } from "lucide-react";
+import {  AlertCircle } from "lucide-react";
 import StepIndicator from "./Steps/StepIndicator";
 import PoolConfigurationStep from "./Steps/PoolConfigurationStep";
 import TokenConfigurationStep from "./Steps/TokenConfigurationStep";
@@ -56,8 +56,6 @@ export default function CreateFatePool() {
   } = useWaitForTransactionReceipt({ 
     hash: deployData 
   });
-
-  const isDeploying = isSigning || isDeployingTx;
 
   const [formData, setFormData] = useState<FormData>({
     poolName: "",
@@ -223,7 +221,7 @@ export default function CreateFatePool() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="pt-28 min-h-screen bg-gray-50 dark:bg-gray-900 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-3xl mx-auto">
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden">
           <div className="p-6 sm:p-8">
@@ -273,7 +271,7 @@ export default function CreateFatePool() {
                 <ReviewStep
                   formData={formData}
                   onSubmit={handleSubmit}
-                  isSubmitting={isSubmitting}
+                  isSubmitting={isSubmitting || isSigning || isDeployingTx}
                 />
               )}
             </div>

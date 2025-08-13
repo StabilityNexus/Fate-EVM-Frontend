@@ -3,7 +3,7 @@
 import React from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type {FormData} from "@/types/FormData";
+import type { FormData } from "../FormData";
 import { Coins } from "lucide-react";
 
 type FormErrors = Partial<Record<keyof FormData, string>>;

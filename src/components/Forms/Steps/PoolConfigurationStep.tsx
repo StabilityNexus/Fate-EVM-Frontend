@@ -11,7 +11,6 @@ import {
 } from "@/components/ui/tooltip";
 import { InfoIcon, Coins } from "lucide-react";
 import type { FormData } from "../FormData";
-import { isAddress } from "viem";
 
 interface PoolConfigurationStepProps {
   formData: FormData;

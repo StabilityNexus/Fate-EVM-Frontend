@@ -9,7 +9,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { InfoIcon, Wallet } from "lucide-react";
+import {  Wallet } from "lucide-react";
 import type { FormData } from "../FormData";
 import { useAccount } from "wagmi";
 
@@ -19,7 +19,6 @@ type AddressConfigurationStepProps = {
 };
 
 const AddressConfigurationStep = ({
-  formData,
   updateFormData,
 }: AddressConfigurationStepProps) => {
   const { address } = useAccount();

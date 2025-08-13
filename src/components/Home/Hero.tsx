@@ -11,7 +11,6 @@ const Hero = () => {
   const router = useRouter();
   const { resolvedTheme } = useTheme();
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
-  const [lightOn, setLightOn] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [vaultAddress, setVaultAddress] = useState('');
@@ -110,7 +109,7 @@ const Hero = () => {
 
       {/* Flashlight Effect */}
       <div
-        className={`absolute rounded-full z-30 bg-black dark:bg-white pointer-events-none transition-opacity duration-300 ${lightOn ? 'opacity-100' : 'opacity-0'}`}
+        className="absolute rounded-full z-30 bg-black dark:bg-white pointer-events-none opacity-0"
         style={getFlashlightStyle()}
       />
 

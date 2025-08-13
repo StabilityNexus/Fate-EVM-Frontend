@@ -1,6 +1,6 @@
 "use client";
 import React, { useEffect, useState, useCallback } from "react";
-import { useAccount, usePublicClient, useWalletClient } from "wagmi";
+import { useAccount, useWalletClient } from "wagmi";
 import { PredictionCard } from "@/components/FatePoolCard/FatePoolCard";
 import { PredictionPoolFactoryABI } from "@/utils/abi/PredictionPoolFactory";
 import { PredictionPoolABI } from "@/utils/abi/PredictionPool";
@@ -10,8 +10,8 @@ import { useRouter } from "next/navigation";
 import { Plus, AlertCircle, Wallet } from "lucide-react";
 import { formatUnits } from "viem";
 import { FatePoolFactories } from "@/utils/addresses";
-import { createPublicClient, http } from "viem";
-import { mainnet, sepolia } from "viem/chains";
+import { createPublicClient, http, PublicClient } from "viem";
+import { sepolia } from "viem/chains";
 
 interface Token {
   id: string;
@@ -67,7 +67,6 @@ export default function ExploreFatePools() {
   const router = useRouter();
   const { isConnected, chain } = useAccount();
   const { data: walletClient } = useWalletClient();
-  const connectedPublicClient = usePublicClient();
 
   const [pools, setPools] = useState<Pool[]>([]);
   const [loading, setLoading] = useState(true);
@@ -81,7 +80,7 @@ export default function ExploreFatePools() {
     coinAddr: string, 
     other: string, 
     poolAddr: string,
-    publicClient: any
+    publicClient: PublicClient
   ): Promise<Token | null> => {
     if (!publicClient) return null;
 
