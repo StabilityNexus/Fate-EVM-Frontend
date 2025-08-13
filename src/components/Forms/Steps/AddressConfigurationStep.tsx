@@ -7,14 +7,12 @@ import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
-  TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {  Wallet } from "lucide-react";
+import { Wallet } from "lucide-react";
 import type { FormData } from "../FormData";
 import { useAccount } from "wagmi";
 
 type AddressConfigurationStepProps = {
-  formData: FormData;
   updateFormData: (data: Partial<FormData>) => void;
 };
 
@@ -27,6 +25,8 @@ const AddressConfigurationStep = ({
   React.useEffect(() => {
     if (address) {
       updateFormData({ creatorAddress: address });
+    } else {
+      updateFormData({ creatorAddress: "" });
     }
   }, [address, updateFormData]);
 
@@ -50,9 +50,6 @@ const AddressConfigurationStep = ({
             </Label>
             <TooltipProvider>
               <Tooltip>
-                <TooltipTrigger asChild>
-                  
-                </TooltipTrigger>
                 <TooltipContent className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400">
                   <p className="w-64 text-sm">
                     This is your currently connected wallet address that will receive fees.

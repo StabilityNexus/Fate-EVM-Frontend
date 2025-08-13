@@ -34,10 +34,14 @@ const FeeConfigurationStep: React.FC<FeeConfigurationStepProps> = ({
   }, []);
 
   const handleFeeChange = (e: React.ChangeEvent<HTMLInputElement>, field: keyof FormData) => {
-    const value = e.target.value;
-    // Ensure value is a valid number between 0-100
-    if (value === "" || (Number(value) >= 0 && Number(value) <= 100)) {
-      updateFormData({ [field]: value });
+    const value = e.target.value.trim();
+    if (value === "") {
+      updateFormData({ [field]: value } as Partial<FormData>);
+      return;
+    }
+    const n = Number(value);
+    if (Number.isFinite(n) && n >= 0 && n <= 100) {
+      updateFormData({ [field]: value } as Partial<FormData>);
     }
   };
 

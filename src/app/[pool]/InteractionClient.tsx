@@ -790,6 +790,11 @@ export default function InteractionClient() {
                 onClick={async () => {
                   try {
                     setLoadingPrice(true);
+                    if (!walletClient) {
+                          toast.error('Wallet not connected');
+                          setLoadingPrice(false);
+                          return;
+                      }
                     const price = await getCurrentPrice(walletClient!, poolId || defaultPoolId!,priceFeedId,oracle);
                     setCurrentPrice(price);
                     toast.success(`Current price: $${price.toFixed(4)}`);

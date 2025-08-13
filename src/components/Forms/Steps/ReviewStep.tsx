@@ -3,9 +3,10 @@
 import React from "react";
 import { Button } from "@/components/ui/button";
 import type { FormData } from "../FormData";
+
 interface ReviewStepProps {
   formData: FormData;
-  onSubmit: (e: React.FormEvent) => void | Promise<void>;
+  onSubmit: (e: React.FormEvent<HTMLFormElement>) => void | Promise<void>;
   isSubmitting: boolean;
 }
 
@@ -15,7 +16,7 @@ const ReviewStep: React.FC<ReviewStepProps> = ({
   isSubmitting,
 }) => {
   return (
-    <div className="space-y-6">
+    <form onSubmit={onSubmit} className="space-y-6">
       <div className="text-center mb-6">
         <h2 className="text-2xl font-bold text-black dark:text-white mb-2">
           Review & Submit
@@ -173,14 +174,14 @@ const ReviewStep: React.FC<ReviewStepProps> = ({
         </div>
 
         <Button
-          onClick={onSubmit}
+          type="submit"
           disabled={isSubmitting}
           className="w-full mt-6 text-lg h-12 bg-black text-white hover:bg-gray-900 dark:bg-white dark:text-black dark:hover:bg-gray-200 disabled:opacity-50"
         >
           {isSubmitting ? "Creating Pool..." : "Create Fate Pool"}
         </Button>
       </div>
-    </div>
+    </form>
   );
 };
 

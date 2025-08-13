@@ -90,7 +90,11 @@ export default function CreateFatePool() {
 
     if (currentStep === 1) {
       if (!formData.poolName.trim()) newErrors.poolName = "Pool name is required";
-      if (!formData.baseTokenAddress.trim()) newErrors.baseTokenAddress = "Base token address is required";
+      if (!formData.baseTokenAddress.trim()) {
+            newErrors.baseTokenAddress = "Base token address is required";
+          } else if (!/^0x[a-fA-F0-9]{40}$/.test(formData.baseTokenAddress)) {
+            newErrors.baseTokenAddress = "Invalid Ethereum address format";
+          }
       if (!formData.assetId) newErrors.assetId = "Please select an asset";
     } else if (currentStep === 2) {
       if (!formData.bullCoinName.trim()) newErrors.bullCoinName = "Bull coin name is required";
@@ -105,6 +109,11 @@ export default function CreateFatePool() {
       if (isNaN(vaultFee)) newErrors.vaultFee = "Invalid fee value";
       if (isNaN(vaultCreatorFee)) newErrors.vaultCreatorFee = "Invalid fee value";
       if (isNaN(treasuryFee)) newErrors.treasuryFee = "Invalid fee value";
+
+      const totalFee = vaultFee + vaultCreatorFee + treasuryFee;
+      if (totalFee > 100) {
+        newErrors.vaultFee = "Total fees cannot exceed 100%";
+      }
     }
 
     setErrors(newErrors);
@@ -135,9 +144,9 @@ export default function CreateFatePool() {
     }
 
     try {
-      const vaultFeeUnits = Math.round((parseFloat(formData.vaultFee) / 100) * DENOMINATOR);
-      const creatorFeeUnits = Math.round((parseFloat(formData.vaultCreatorFee) / 100) * DENOMINATOR);
-      const treasuryFeeUnits = Math.round((parseFloat(formData.treasuryFee) / 100) * DENOMINATOR);
+      const vaultFeeUnits = Math.floor((parseFloat(formData.vaultFee) / 100) * DENOMINATOR);
+      const creatorFeeUnits = Math.floor((parseFloat(formData.vaultCreatorFee) / 100) * DENOMINATOR);
+      const treasuryFeeUnits = Math.floor((parseFloat(formData.treasuryFee) / 100) * DENOMINATOR);
 
       await deployPool({
         address: FACTORY_ADDRESS,
@@ -150,7 +159,6 @@ export default function CreateFatePool() {
           creatorFeeUnits,
           treasuryFeeUnits,
           formData.oracleAddress,
-          formData.assetId,
         ],
       });
     } catch (error) {
@@ -163,7 +171,9 @@ export default function CreateFatePool() {
   useEffect(() => {
     if (currentChainId && CHAIN_ORACLES[currentChainId]) {
       updateFormData({ oracleAddress: CHAIN_ORACLES[currentChainId] });
-    }
+    }else if (currentChainId && !CHAIN_ORACLES[currentChainId]) {
+      console.warn(`No oracle configured for chain ${currentChainId}`);
+     }
   }, [currentChainId]);
 
   useEffect(() => {
@@ -256,7 +266,6 @@ export default function CreateFatePool() {
               )}
               {currentStep === 3 && (
                 <AddressConfigurationStep
-                  formData={formData}
                   updateFormData={updateFormData}
                 />
               )}

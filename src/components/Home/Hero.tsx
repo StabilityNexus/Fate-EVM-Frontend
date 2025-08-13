@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useTheme } from 'next-themes';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -16,17 +16,46 @@ const Hero = () => {
   const [vaultAddress, setVaultAddress] = useState('');
   const [mounted, setMounted] = useState(false);
   const [navbarHeight, setNavbarHeight] = useState(0);
+  const resizeObserverRef = useRef<ResizeObserver | null>(null);
 
-  // Calculate navbar height on mount
+  // Track navbar height changes with ResizeObserver
   useEffect(() => {
     setMounted(true);
-    const navbar = document.querySelector('header');
-    if (navbar) {
-      setNavbarHeight(navbar.offsetHeight);
+    
+    const updateNavbarHeight = () => {
+      const navbar = document.querySelector('header');
+      if (navbar) {
+        setNavbarHeight(navbar.offsetHeight);
+      }
+    };
+
+    // Initial measurement
+    updateNavbarHeight();
+
+    // Setup ResizeObserver if supported
+    if (typeof ResizeObserver !== 'undefined') {
+      const navbar = document.querySelector('header');
+      if (navbar) {
+        resizeObserverRef.current = new ResizeObserver(() => {
+          updateNavbarHeight();
+        });
+        resizeObserverRef.current.observe(navbar);
+      }
+    } else {
+      // Fallback to window resize
+      window.addEventListener('resize', updateNavbarHeight);
     }
+
+    // Cleanup
+    return () => {
+      if (resizeObserverRef.current) {
+        resizeObserverRef.current.disconnect();
+      }
+      window.removeEventListener('resize', updateNavbarHeight);
+    };
   }, []);
 
-  // Handle mouse movement with navbar offset
+  // Handle mouse movement with navbar offset (debounced)
   const handleMouseMove = useCallback((e: MouseEvent) => {
     setMousePosition({ 
       x: e.clientX, 
