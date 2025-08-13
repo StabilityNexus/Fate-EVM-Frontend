@@ -16,17 +16,31 @@ const Hero = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [vaultAddress, setVaultAddress] = useState('');
   const [mounted, setMounted] = useState(false);
+  const [navbarHeight, setNavbarHeight] = useState(0);
 
-  // Handle mouse movement with throttling
-  const handleMouseMove = useCallback((e: MouseEvent) => {
-    setMousePosition({ x: e.clientX, y: e.clientY });
-  }, []);
-
+  // Calculate navbar height on mount
   useEffect(() => {
     setMounted(true);
-    window.addEventListener('mousemove', handleMouseMove);
-    return () => window.removeEventListener('mousemove', handleMouseMove);
-  }, [handleMouseMove]);
+    const navbar = document.querySelector('header');
+    if (navbar) {
+      setNavbarHeight(navbar.offsetHeight);
+    }
+  }, []);
+
+  // Handle mouse movement with navbar offset
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    setMousePosition({ 
+      x: e.clientX, 
+      y: e.clientY - navbarHeight // Subtract navbar height
+    });
+  }, [navbarHeight]);
+
+  useEffect(() => {
+    if (mounted) {
+      window.addEventListener('mousemove', handleMouseMove);
+      return () => window.removeEventListener('mousemove', handleMouseMove);
+    }
+  }, [handleMouseMove, mounted]);
 
   if (!mounted || !resolvedTheme) {
     return (
@@ -56,8 +70,12 @@ const Hero = () => {
 
   // Calculate flashlight position
   const getFlashlightStyle = () => ({
-    '--flashlight-x': `${mousePosition.x - 100}px`,
-    '--flashlight-y': `${mousePosition.y - 100}px`,
+    position: 'absolute' as const,
+    left: `${mousePosition.x}px`,
+    top: `${mousePosition.y}px`,
+    transform: 'translate(-50%, -50%)',
+    width: '200px',
+    height: '200px',
   } as React.CSSProperties);
 
   return (
@@ -92,14 +110,13 @@ const Hero = () => {
 
       {/* Flashlight Effect */}
       <div
-        className={`absolute rounded-full z-30 bg-black dark:bg-white pointer-events-none transition-opacity duration-300 w-[200px] h-[200px] ${lightOn ? 'opacity-100' : 'opacity-0'
-          }`}
+        className={`absolute rounded-full z-30 bg-black dark:bg-white pointer-events-none transition-opacity duration-300 ${lightOn ? 'opacity-100' : 'opacity-0'}`}
         style={getFlashlightStyle()}
       />
 
       {/* Foreground Content */}
       <div
-        className="absolute inset-0 flex flex-col items-center justify-center "
+        className="absolute inset-0 flex flex-col items-center justify-center"
         style={{
           backgroundColor: resolvedTheme === 'dark' ? 'black' : 'white',
           ...getMaskStyle(),
@@ -132,14 +149,6 @@ const Hero = () => {
         />
       </div>
 
-      {/* Toggle Flashlight Button */}
-      <button
-        className="hidden fixed bottom-10 left-1/2 transform -translate-x-1/2 bg-white text-black px-4 py-2 rounded-lg z-40"
-        onClick={() => setLightOn((prev) => !prev)}
-      >
-        {lightOn ? 'Turn Off Flashlight' : 'Turn On Flashlight'}
-      </button>
-
       {/* Global CSS for mask effects */}
       <style jsx global>{`
         [style*="--mouse-x"] {
@@ -154,16 +163,12 @@ const Hero = () => {
             black var(--mask-size)
           );
         }
-        [style*="--flashlight-x"] {
-          top: var(--flashlight-y);
-          left: var(--flashlight-x);
-        }
       `}</style>
     </div>
   );
 };
 
-// Extracted button group component to avoid duplication
+// ButtonGroup component remains the same as in your original code
 const ButtonGroup = ({
   resolvedTheme,
   setIsModalOpen,

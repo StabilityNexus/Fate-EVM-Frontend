@@ -653,7 +653,7 @@ export default function InteractionClient() {
   const totalValue = bullValue + bearValue;
 
   return (
-    <div className="w-full pt-14 bg-white dark:bg-black">
+    <div className="w-full pt-28 bg-white dark:bg-black">
       <div className="w-full md:px-24 lg:px-24">
         <div className="container mx-auto px-8 py-6 flex flex-col md:flex-row justify-between items-center border-b dark:border-gray-700">
           <div className="flex items-center space-x-4 mb-4 md:mb-0">
@@ -814,11 +814,12 @@ export default function InteractionClient() {
             <div className="grid md:grid-cols-3 gap-6">
               <DetailCard title="Fees Structure">
                 <ul className="space-y-1">
-                  <li>Entry Fee: {formatNum(bullToken.vault_fee, 0)}%</li>
-                  <li>Exit Fee: {formatNum(bullToken.vault_fee, 0)}%</li>
-                  <li>Treasury Fee: {formatNum(bullToken.treasury_fee, 0)}%</li>
+                  <li>Vault Fee: {formatNum(bullToken.vault_fee / BigInt(1000), 0)}%</li>
+                  <li>Creator Fee: {formatNum(bullToken.vault_creator_fee / BigInt(1000), 0)}%</li>
+                  <li>Treasury Fee: {formatNum(bullToken.treasury_fee / BigInt(1000), 0)}%</li>
                 </ul>
               </DetailCard>
+
               
               <DetailCard title="Contract Addresses">
                 <div className="space-y-1">

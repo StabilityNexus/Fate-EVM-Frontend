@@ -10,7 +10,11 @@ import { ModeToggle } from "../darkModeToggle";
 import { Menu, X } from "lucide-react";
 import WalletButton from "../ui/walletButton";
 
-const Navbar = () => {
+interface NavbarProps {
+  className?: string;
+}
+
+const Navbar: React.FC<NavbarProps> = ({ className = "" }) => {
   const { resolvedTheme } = useTheme();
   const [isThemeReady, setIsThemeReady] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -24,8 +28,8 @@ const Navbar = () => {
   if (!isThemeReady) return null;
 
   return (
-    <header className="justify-between">
-      <div className="mx-auto flex items-center justify-between relative dark:bg-black px-5">
+    <header className={`justify-between z-50 ${className}`}>
+      <div className="mx-auto flex items-center justify-between relative dark:bg-black px-5 py-2">
         {/* Logo - Left Side */}
         <div className="flex-shrink-0">
           <Link href="/">
@@ -45,11 +49,11 @@ const Navbar = () => {
         {/* Mobile Menu Toggle */}
         <div className="flex items-center space-x-4 md:hidden">
           <button
-            className="z-20"
+            className="z-20 relative"
             onClick={() => setIsMenuOpen(!isMenuOpen)}
           >
             {isMenuOpen ? (
-              <X className="w-8 h-8" />
+              <X className="w-8 h-8 text-black dark:text-white" />
             ) : (
               <Menu
                 className="w-8 h-8 fill-current text-black dark:text-white"
@@ -59,13 +63,11 @@ const Navbar = () => {
           </button>
           <ModeToggle />
           <WalletButton />
-
-
         </div>
 
         {/* Mobile Navigation Links */}
         {isMenuOpen && (
-          <div className="fixed inset-0 bg-black bg-opacity-70 z-10 flex items-center justify-center">
+          <div className="fixed inset-0 bg-black bg-opacity-70 z-40 flex items-center justify-center">
             <nav className="bg-white dark:bg-gray-800 p-8 rounded-lg w-4/5 max-w-md shadow-lg relative">
               <button
                 onClick={() => setIsMenuOpen(false)}
@@ -111,16 +113,16 @@ const Navbar = () => {
 
         {/* Desktop Navigation Links - Centered */}
         <nav
-          className="hidden md:flex absolute left-1/2 transform -translate-x-1/2 space-x-8 text-md text-center px-8 py-2 rounded-full bg-opacity-[10%] bg-black dark:bg-white dark:bg-opacity-[20%] dark:text-white"
+          className="hidden md:flex absolute left-1/2 transform -translate-x-1/2 space-x-8 text-md text-center px-8 py-2 rounded-full bg-opacity-[10%] bg-black dark:bg-white dark:bg-opacity-[20%] dark:text-white backdrop-blur-sm"
           style={{ fontFamily: "var(--font-bebas-nueue)" }}
         >
-          <Link href="/explorePools" className="hover:text-blue-600">
+          <Link href="/explorePools" className="hover:text-blue-600 transition-colors">
             Explore
           </Link>
-          <Link href="/#Contact" className="hover:text-blue-600">
+          <Link href="/#Contact" className="hover:text-blue-600 transition-colors">
             About
           </Link>
-          <Link href="/#Contact" className="hover:text-blue-600">
+          <Link href="/#Contact" className="hover:text-blue-600 transition-colors">
             Learn More
           </Link>
         </nav>
@@ -129,7 +131,6 @@ const Navbar = () => {
         <div className="hidden md:flex items-center space-x-4">
           <ModeToggle />
           <WalletButton />
-
         </div>
       </div>
     </header>

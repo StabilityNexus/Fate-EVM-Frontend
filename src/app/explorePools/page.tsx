@@ -7,9 +7,11 @@ import { PredictionPoolABI } from "@/utils/abi/PredictionPool";
 import { CoinABI } from "@/utils/abi/Coin";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
-import { Plus, AlertCircle } from "lucide-react";
+import { Plus, AlertCircle, Wallet } from "lucide-react";
 import { formatUnits } from "viem";
 import { FatePoolFactories } from "@/utils/addresses";
+import { createPublicClient, http } from "viem";
+import { mainnet, sepolia } from "viem/chains";
 
 interface Token {
   id: string;
@@ -36,12 +38,13 @@ interface Pool {
   bearPercentage: number;
   bullToken: Token;
   bearToken: Token;
+  chainId: number;
+  chainName: string;
 }
 
 // Helper function to get supported chain names
 const getSupportedChains = (): string => {
   const chainNames: { [key: number]: string } = {
-    1: "Ethereum Mainnet",
     11155111: "Sepolia Testnet",
   };
   
@@ -50,25 +53,35 @@ const getSupportedChains = (): string => {
     .join(", ");
 };
 
+// Create public clients for supported chains
+const getChainConfig = (chainId: number) => {
+  switch (chainId) {
+    case 11155111:
+      return { chain: sepolia, name: "Sepolia Testnet" };
+    default:
+      return null;
+  }
+};
+
 export default function ExploreFatePools() {
   const router = useRouter();
   const { isConnected, chain } = useAccount();
   const { data: walletClient } = useWalletClient();
-  const publicClient = usePublicClient();
+  const connectedPublicClient = usePublicClient();
 
   const [pools, setPools] = useState<Pool[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [isCreatingPool, setIsCreatingPool] = useState(false);
 
-  // Get factory address based on current chain
-  const FACTORY_ADDRESS = chain?.id ? FatePoolFactories[chain.id] : undefined;
-  const isChainSupported = chain?.id ? Boolean(FatePoolFactories[chain.id]) : false;
+  // Check if connected chain is supported
+  const isConnectedChainSupported = chain?.id ? Boolean(FatePoolFactories[chain.id]) : false;
 
   const fetchCoin = useCallback(async (
     coinAddr: string, 
     other: string, 
-    poolAddr: string
+    poolAddr: string,
+    publicClient: any
   ): Promise<Token | null> => {
     if (!publicClient) return null;
 
@@ -148,26 +161,28 @@ export default function ExploreFatePools() {
       console.error(`Error fetching coin data for ${coinAddr}:`, error);
       return null;
     }
-  }, [publicClient]);
+  }, []);
 
-  const fetchPools = useCallback(async () => {
-    if (!publicClient || !FACTORY_ADDRESS || !isChainSupported) {
-      setLoading(false);
-      return;
-    }
+  const fetchPoolsFromChain = useCallback(async (chainId: number, factoryAddress: string) => {
+    const chainConfig = getChainConfig(chainId);
+    if (!chainConfig) return [];
 
-    setLoading(true);
     try {
+      // Create public client for this specific chain
+      const publicClient = createPublicClient({
+        chain: chainConfig.chain,
+        transport: http()
+      });
+
       // Fetch all pool addresses from factory
       const poolAddresses = (await publicClient.readContract({
-        address: FACTORY_ADDRESS,
+        address: factoryAddress as `0x${string}`,
         abi: PredictionPoolFactoryABI,
         functionName: "getAllPools",
       })) as `0x${string}`[];
 
       if (poolAddresses.length === 0) {
-        setPools([]);
-        return;
+        return [];
       }
 
       // Fetch pool details for each address
@@ -203,12 +218,12 @@ export default function ExploreFatePools() {
 
           // Fetch token details
           const [bull, bear] = await Promise.all([
-            fetchCoin(bullAddr as string, bearAddr as string, addr),
-            fetchCoin(bearAddr as string, bullAddr as string, addr),
+            fetchCoin(bullAddr as string, bearAddr as string, addr, publicClient),
+            fetchCoin(bearAddr as string, bullAddr as string, addr, publicClient),
           ]);
 
           if (!bull || !bear) {
-            console.warn(`Failed to fetch token data for pool ${addr}`);
+            console.warn(`Failed to fetch token data for pool ${addr} on chain ${chainId}`);
             return null;
           }
 
@@ -226,43 +241,46 @@ export default function ExploreFatePools() {
             bearPercentage,
             bullToken: bull,
             bearToken: bear,
+            chainId,
+            chainName: chainConfig.name,
           } as Pool;
         } catch (error) {
-          console.error(`Error loading pool ${addr}:`, error);
+          console.error(`Error loading pool ${addr} on chain ${chainId}:`, error);
           return null;
         }
       });
 
       const results = await Promise.all(poolPromises);
-      const validPools = results.filter((pool): pool is Pool => pool !== null);
+      return results.filter((pool): pool is Pool => pool !== null);
+    } catch (error) {
+      console.error(`Failed to fetch pools from chain ${chainId}:`, error);
+      return [];
+    }
+  }, [fetchCoin]);
+
+  const fetchAllPools = useCallback(async () => {
+    setLoading(true);
+    try {
+      // Fetch pools from all supported chains
+      const chainPromises = Object.entries(FatePoolFactories).map(([chainId, factoryAddress]) => 
+        fetchPoolsFromChain(Number(chainId), factoryAddress)
+      );
+
+      const results = await Promise.all(chainPromises);
+      const allPools = results.flat();
       
-      setPools(validPools);
+      setPools(allPools);
     } catch (error) {
       console.error("Failed to fetch pools:", error);
       toast.error("Failed to fetch pools. Please try again.");
     } finally {
       setLoading(false);
     }
-  }, [publicClient, FACTORY_ADDRESS, isChainSupported, fetchCoin]);
+  }, [fetchPoolsFromChain]);
 
   useEffect(() => {
-    if (!isConnected) {
-      setLoading(false);
-      setPools([]);
-      return;
-    }
-
-    if (chain?.id && !isChainSupported) {
-      toast.error(
-        `Chain "${chain.name}" is not supported. Please switch to one of: ${getSupportedChains()}`
-      );
-      setLoading(false);
-      setPools([]);
-      return;
-    }
-
-    fetchPools();
-  }, [fetchPools, isConnected, chain, isChainSupported]);
+    fetchAllPools();
+  }, [fetchAllPools]);
 
   const handleCreate = useCallback(() => {
     if (!isConnected || !walletClient) {
@@ -270,7 +288,7 @@ export default function ExploreFatePools() {
       return;
     }
 
-    if (!isChainSupported) {
+    if (!isConnectedChainSupported) {
       toast.error(
         `Please switch to a supported chain: ${getSupportedChains()}`
       );
@@ -279,57 +297,25 @@ export default function ExploreFatePools() {
 
     setIsCreatingPool(true);
     router.push("/createPool");
-  }, [isConnected, router, walletClient, isChainSupported]);
+  }, [isConnected, router, walletClient, isConnectedChainSupported]);
+
+  const handleUsePool = useCallback((poolId: string) => {
+    if (!isConnected) {
+      toast.error("Please connect your wallet to use this pool.");
+      return;
+    }
+    router.push(`/pool?id=${poolId}`);
+  }, [isConnected, router]);
 
   const filteredPools = pools.filter(pool =>
     pool.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     pool.bullToken.symbol.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    pool.bearToken.symbol.toLowerCase().includes(searchQuery.toLowerCase())
+    pool.bearToken.symbol.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    pool.chainName.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // Render unsupported chain message
-  if (isConnected && chain && !isChainSupported) {
-    return (
-      <div className="min-h-screen bg-gradient-to-r from-gray-100 to-gray-300 dark:from-gray-800 dark:to-gray-900 transition-colors duration-300">
-        <div className="max-w-7xl mx-auto px-4 py-12">
-          <div className="flex flex-col items-center justify-center min-h-[50vh] text-center">
-            <AlertCircle className="h-16 w-16 text-yellow-500 mb-4" />
-            <h2 className="text-2xl font-bold text-black dark:text-white mb-2">
-              Unsupported Chain
-            </h2>
-            <p className="text-gray-600 dark:text-gray-400 mb-4 max-w-md">
-              You&apos;re currently connected to &quot;{chain.name}&quot; which is not supported. 
-              Please switch to one of the following supported chains:
-            </p>
-            <p className="text-sm font-medium text-gray-800 dark:text-gray-200">
-              {getSupportedChains()}
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Render connect wallet message
-  if (!isConnected) {
-    return (
-      <div className="min-h-screen bg-gradient-to-r from-gray-100 to-gray-300 dark:from-gray-800 dark:to-gray-900 transition-colors duration-300">
-        <div className="max-w-7xl mx-auto px-4 py-12">
-          <div className="flex flex-col items-center justify-center min-h-[50vh] text-center">
-            <h2 className="text-2xl font-bold text-black dark:text-white mb-4">
-              Connect Your Wallet
-            </h2>
-            <p className="text-gray-600 dark:text-gray-400">
-              Please connect your wallet to explore Fate Pools
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen bg-gradient-to-r from-gray-100 to-gray-300 dark:from-gray-800 dark:to-gray-900 transition-colors duration-300">
+    <div className="pt-28 min-h-screen bg-gradient-to-r from-gray-100 to-gray-300 dark:from-gray-800 dark:to-gray-900 transition-colors duration-300">
       <div className="max-w-7xl mx-auto px-4 py-12">
         {/* Header */}
         <div className="flex flex-col md:flex-row justify-between items-center mb-8">
@@ -337,26 +323,60 @@ export default function ExploreFatePools() {
             <h1 className="text-4xl font-bold text-black dark:text-white mb-2">
               Explore Fate Pools
             </h1>
-            {chain && (
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                Connected to {chain.name}
-              </p>
-            )}
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              {isConnected && chain ? (
+                `Connected to ${chain.name}`
+              ) : (
+                `Browse pools across ${getSupportedChains()}`
+              )}
+            </p>
           </div>
-          <button
-            onClick={handleCreate}
-            disabled={isCreatingPool || !isChainSupported}
-            className="flex items-center gap-2 px-6 py-3 bg-black text-white rounded-lg hover:bg-gray-800 transition transform hover:scale-105 dark:bg-white dark:text-black shadow-md disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
-          >
-            <Plus size={20} />
-            {isCreatingPool ? "Creating..." : "Create New Pool"}
-          </button>
+          <div className="flex items-center gap-3">
+            {!isConnected && (
+              <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+                <Wallet size={16} />
+                <span>Connect wallet to interact</span>
+              </div>
+            )}
+            <button
+              onClick={handleCreate}
+              disabled={isCreatingPool || !isConnected || !isConnectedChainSupported}
+              className="flex items-center gap-2 px-6 py-3 bg-black text-white rounded-lg hover:bg-gray-800 transition transform hover:scale-105 dark:bg-white dark:text-black shadow-md disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+            >
+              <Plus size={20} />
+              {isCreatingPool ? "Creating..." : "Create New Pool"}
+            </button>
+          </div>
         </div>
+
+        {/* Connection Status Warning for Creation */}
+        {!isConnected && (
+          <div className="mb-6 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+            <div className="flex items-center gap-2 text-yellow-800 dark:text-yellow-200">
+              <AlertCircle size={16} />
+              <span className="text-sm">
+                Connect your wallet to create pools or interact with existing ones. You can still browse all available pools.
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* Unsupported Chain Warning */}
+        {isConnected && chain && !isConnectedChainSupported && (
+          <div className="mb-6 p-4 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg">
+            <div className="flex items-center gap-2 text-orange-800 dark:text-orange-200">
+              <AlertCircle size={16} />
+              <span className="text-sm">
+                You&apos;re connected to &quot;{chain.name}&quot; which is not supported. Switch to {getSupportedChains()} to create pools or interact with them.
+              </span>
+            </div>
+          </div>
+        )}
 
         {/* Search */}
         <input
           type="text"
-          placeholder="Search pools by name or token symbol..."
+          placeholder="Search pools by name, token symbol, or chain..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           className="w-full p-3 mb-6 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-800 dark:text-white dark:border-gray-600 transition-colors"
@@ -376,17 +396,18 @@ export default function ExploreFatePools() {
           /* Pools Grid */
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {filteredPools.map((pool) => (
-              <PredictionCard
-                key={pool.id}
-                name={pool.name}
-                bullCoinName={pool.bullToken.name}
-                bullCoinSymbol={pool.bullToken.symbol}
-                bearCoinName={pool.bearToken.name}
-                bearCoinSymbol={pool.bearToken.symbol}
-                bullPercentage={pool.bullPercentage}
-                bearPercentage={pool.bearPercentage}
-                onUse={() => router.push(`/pool?id=${pool.id}`)}
-              />
+              <div key={pool.id} className="relative">
+                <PredictionCard
+                  name={pool.name}
+                  bullCoinName={pool.bullToken.name}
+                  bullCoinSymbol={pool.bullToken.symbol}
+                  bearCoinName={pool.bearToken.name}
+                  bearCoinSymbol={pool.bearToken.symbol}
+                  bullPercentage={pool.bullPercentage}
+                  bearPercentage={pool.bearPercentage}
+                  onUse={() => handleUsePool(pool.id)}
+                />
+              </div>
             ))}
           </div>
         ) : (
@@ -413,7 +434,7 @@ export default function ExploreFatePools() {
             <p className="text-gray-500 dark:text-gray-400 mb-4">
               {searchQuery 
                 ? "Try adjusting your search terms or clear the search to see all pools."
-                : "Be the first to create a prediction pool on this network!"
+                : "No prediction pools have been created yet across the supported networks."
               }
             </p>
             {searchQuery && (
