@@ -1,6 +1,7 @@
 'use client';
 import { ThemeProvider } from "@/components/themeProvider";
 import { WalletProvider } from "@/context/walletProvider";
+import { Toaster } from "sonner";
 
 export function ClientProviders({ children }: { children: React.ReactNode }) {
   return (
@@ -13,6 +14,7 @@ export function ClientProviders({ children }: { children: React.ReactNode }) {
     >
       <WalletProvider>
         {children}
+        <Toaster position="top-right" richColors />
       </WalletProvider>
     </ThemeProvider>
   );

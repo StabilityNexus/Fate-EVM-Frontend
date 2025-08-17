@@ -1,572 +1,312 @@
 "use client";
 
-import React, { useState } from "react";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { InfoIcon, Coins, Wallet, Percent } from "lucide-react";
-import { Separator } from "@/components/ui/separator";
+import { useState, useEffect } from "react";
+import { useAccount, useChainId, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { useRouter } from "next/navigation";
+import {  AlertCircle } from "lucide-react";
+import StepIndicator from "./Steps/StepIndicator";
+import PoolConfigurationStep from "./Steps/PoolConfigurationStep";
+import TokenConfigurationStep from "./Steps/TokenConfigurationStep";
+import AddressConfigurationStep from "./Steps/AddressConfigurationStep";
+import FeeConfigurationStep from "./Steps/FeeConfigurationStep";
+import ReviewStep from "./Steps/ReviewStep";
+import { FormData } from "./FormData";
+import { toast } from "sonner";
+import { PredictionPoolFactoryABI } from "@/utils/abi/PredictionPoolFactory";
+import { FatePoolFactories } from "@/utils/addresses";
 
-export default function CreateFatePoolForm() {
-  const [poolName, setPoolName] = useState("");
-  const [bullCoinName, setBullCoinName] = useState("");
-  const [bullCoinSymbol, setBullCoinSymbol] = useState("");
-  const [bearCoinName, setBearCoinName] = useState("");
-  const [bearCoinSymbol, setBearCoinSymbol] = useState("");
-  //const [erc20Address, setErc20Address] = useState("");
-  const [creatorAddress, setCreatorAddress] = useState("");
-  const [creatorStakeFee, setCreatorStakeFee] = useState("");
-  const [creatorUnstakeFee, setCreatorUnstakeFee] = useState("");
-  const [stakeFee, setStakeFee] = useState("");
-  const [unstakeFee, setUnstakeFee] = useState("");
-  //const [reallocationFactor, setReallocationFactor] = useState("");
+const DENOMINATOR = 100_000;
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+const CHAIN_ORACLES: Record<number, string> = {
+  1: "0x4305FB66699C3B2702D4d05CF36551390A4c69C6", // Ethereum
+  137: "0xff1a0f4744e8582DF1aE09D5611b887B6a12925C", // Polygon
+  534352: "0xA2aa501b19aff244D90cc15a4Cf739D2725B5729", // Scroll
+  11155111: "0xDd24F84d36BF92C65F92307595335bdFab5Bbd21", // Sepolia
+};
 
-    // Basic Validation
-    if (
-      !poolName ||
-      !bullCoinName ||
-      !bullCoinSymbol ||
-      !bearCoinName ||
-      !bearCoinSymbol ||
-      !creatorAddress
-    ) {
-      alert("Please fill in all required fields.");
-      return;
-    }
+const PRICE_FEEDS = [
+  { id: "0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43", name: "Crypto.BTC/USD" },
+  { id: "0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace", name: "Crypto.ETH/USD" },
+  { id: "0x2a01deaec9e51a579277b34b122399984d0bbf57e2458a7e42fecd2829867a0d", name: "Crypto.ADA/USD" },
+  { id: "0x2f95862b045670cd22bee3114c39763a4a08beeb663b145d283c31d7d1101c4f", name: "Crypto.BNB/USD" },
+  { id: "0x7f5cc8d963fc5b3d2ae41fe5685ada89fd4f14b435f8050f28c7fd409f40c2d8", name: "Crypto.ETC/USD" },
+];
 
-    // Address validation (basic Ethereum address check)
-    const isValidAddress = /^0x[a-fA-F0-9]{40}$/.test(creatorAddress);
-    if (!isValidAddress) {
-      alert("Please enter a valid Ethereum address for the creator.");
-      return;
-    }
+const SUPPORTED_CHAINS = [1, 137, 534352, 11155111]; // Ethereum, Polygon, Scroll, Sepolia
 
-    // Fee validation (should be numbers between 0 and 100)
-    const allFees = [
-      { label: "Creator Stake Fee", value: creatorStakeFee },
-      { label: "Creator Unstake Fee", value: creatorUnstakeFee },
-      { label: "Stake Fee", value: stakeFee },
-      { label: "Unstake Fee", value: unstakeFee },
-    ];
+export default function CreateFatePool() {
+  const router = useRouter();
+  const { isConnected } = useAccount();
+  const currentChainId = useChainId();
+  const [currentStep, setCurrentStep] = useState(1);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
-    for (const fee of allFees) {
-      const num = parseFloat(fee.value);
-      if (isNaN(num) || num < 0 || num > 100) {
-        alert(`${fee.label} must be a number between 0 and 100.`);
-        return;
+  const { 
+    writeContract: deployPool, 
+    data: deployData, 
+    isPending: isSigning,
+    error: writeError
+  } = useWriteContract();
+
+  const { 
+    isLoading: isDeployingTx,
+    isSuccess: isTransactionSuccess 
+  } = useWaitForTransactionReceipt({ 
+    hash: deployData 
+  });
+
+  const [formData, setFormData] = useState<FormData>({
+    poolName: "",
+    poolDescription: "",
+    baseTokenAddress: "",
+    assetId: "",
+    bullCoinName: "",
+    bullCoinSymbol: "",
+    bearCoinName: "",
+    bearCoinSymbol: "",
+    oracleAddress: "",
+    creatorAddress: "",
+    vaultFee: "0",
+    vaultCreatorFee: "0",
+    treasuryFee: "0"
+  });
+
+  const stepTitles = [
+    "Pool Config",
+    "Token Config",
+    "Address",
+    "Fees",
+    "Review",
+  ];
+
+  const updateFormData = (updates: Partial<FormData>) => {
+    setFormData((prev) => ({ ...prev, ...updates }));
+  };
+
+  const validateCurrentStep = () => {
+    const newErrors: Record<string, string> = {};
+
+    if (currentStep === 1) {
+      if (!formData.poolName.trim()) newErrors.poolName = "Pool name is required";
+      if (!formData.baseTokenAddress.trim()) {
+            newErrors.baseTokenAddress = "Base token address is required";
+          } else if (!/^0x[a-fA-F0-9]{40}$/.test(formData.baseTokenAddress)) {
+            newErrors.baseTokenAddress = "Invalid Ethereum address format";
+          }
+      if (!formData.assetId) newErrors.assetId = "Please select an asset";
+    } else if (currentStep === 2) {
+      if (!formData.bullCoinName.trim()) newErrors.bullCoinName = "Bull coin name is required";
+      if (!formData.bullCoinSymbol.trim()) newErrors.bullCoinSymbol = "Bull coin symbol is required";
+      if (!formData.bearCoinName.trim()) newErrors.bearCoinName = "Bear coin name is required";
+      if (!formData.bearCoinSymbol.trim()) newErrors.bearCoinSymbol = "Bear coin symbol is required";
+    } else if (currentStep === 4) {
+      const vaultFee = parseFloat(formData.vaultFee);
+      const vaultCreatorFee = parseFloat(formData.vaultCreatorFee);
+      const treasuryFee = parseFloat(formData.treasuryFee);
+
+      if (isNaN(vaultFee)) newErrors.vaultFee = "Invalid fee value";
+      if (isNaN(vaultCreatorFee)) newErrors.vaultCreatorFee = "Invalid fee value";
+      if (isNaN(treasuryFee)) newErrors.treasuryFee = "Invalid fee value";
+
+      const totalFee = vaultFee + vaultCreatorFee + treasuryFee;
+      if (totalFee > 100) {
+        newErrors.vaultFee = "Total fees cannot exceed 100%";
       }
     }
 
-    // Form data is valid
-    const formData = {
-      poolName,
-      bullCoinName,
-      bullCoinSymbol,
-      bearCoinName,
-      bearCoinSymbol,
-      creatorAddress,
-      creatorStakeFee,
-      creatorUnstakeFee,
-      stakeFee,
-      unstakeFee,
-    };
-
-    console.log("Form submitted:", formData);
-
-    // Proceed with form processing (e.g., sending to backend)
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   };
 
+  const nextStep = () => {
+    if (validateCurrentStep()) {
+      setCurrentStep((prev) => Math.min(prev + 1, stepTitles.length));
+    }
+  };
 
+  const prevStep = () => {
+    setCurrentStep((prev) => Math.max(prev - 1, 1));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!validateCurrentStep()) return;
+
+    setIsSubmitting(true);
+    const FACTORY_ADDRESS = currentChainId ? FatePoolFactories[currentChainId] : undefined;
+
+    if (!FACTORY_ADDRESS) {
+      toast.error("Factory address not found for this chain");
+      setIsSubmitting(false);
+      return;
+    }
+
+    try {
+      const vaultFeeUnits = Math.floor((parseFloat(formData.vaultFee) / 100) * DENOMINATOR);
+      const creatorFeeUnits = Math.floor((parseFloat(formData.vaultCreatorFee) / 100) * DENOMINATOR);
+      const treasuryFeeUnits = Math.floor((parseFloat(formData.treasuryFee) / 100) * DENOMINATOR);
+
+      await deployPool({
+        address: FACTORY_ADDRESS,
+        abi: PredictionPoolFactoryABI,
+        functionName: "createPool",
+        args: [
+          formData.poolName,
+          formData.baseTokenAddress,
+          vaultFeeUnits,
+          creatorFeeUnits,
+          treasuryFeeUnits,
+          formData.oracleAddress,
+        ],
+      });
+    } catch (error) {
+      console.error("Error deploying pool:", error);
+      toast.error("Failed to deploy prediction pool");
+      setIsSubmitting(false);
+    }
+  };
+
+  useEffect(() => {
+    if (currentChainId && CHAIN_ORACLES[currentChainId]) {
+      updateFormData({ oracleAddress: CHAIN_ORACLES[currentChainId] });
+    }else if (currentChainId && !CHAIN_ORACLES[currentChainId]) {
+      console.warn(`No oracle configured for chain ${currentChainId}`);
+     }
+  }, [currentChainId]);
+
+  useEffect(() => {
+    if (isTransactionSuccess && deployData) {
+      toast.success("Prediction pool created successfully!");
+      setTimeout(() => router.push("/explorePools"), 2000);
+    }
+  }, [isTransactionSuccess, deployData, router]);
+
+  useEffect(() => {
+    if (writeError) {
+      console.error("Transaction error:", writeError);
+      toast.error("Transaction failed. Please try again.");
+      setIsSubmitting(false);
+    }
+  }, [writeError]);
+
+  const isChainSupported = currentChainId ? SUPPORTED_CHAINS.includes(currentChainId) : false;
+
+  if (!isConnected) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+        <div className="max-w-md w-full bg-white dark:bg-gray-800 rounded-lg shadow-lg p-8 text-center">
+          <div className="flex flex-col items-center space-y-4">
+            <AlertCircle className="w-12 h-12 text-blue-500" />
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+              Connect Your Wallet
+            </h2>
+            <p className="text-gray-600 dark:text-gray-300">
+              Please connect your wallet to create a prediction pool
+            </p>
+            <ConnectButton />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isChainSupported) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+        <div className="max-w-md w-full bg-white dark:bg-gray-800 rounded-lg shadow-lg p-8 text-center">
+          <div className="flex flex-col items-center space-y-4">
+            <AlertCircle className="w-12 h-12 text-yellow-500" />
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+              Unsupported Network
+            </h2>
+            <p className="text-gray-600 dark:text-gray-300">
+              Please switch to a supported network to create a prediction pool
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <form onSubmit={handleSubmit} className="max-w-4xl mx-auto p-4">
-      <div className="bg-white dark:bg-black p-6 rounded-xl my-10">
-        <Card className="shadow-lg bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700">
-          <CardHeader className="border-b border-gray-200 dark:border-gray-700">
-            <CardTitle className="text-2xl font-bold text-black dark:text-white">
+    <div className="pt-28 min-h-screen bg-gray-50 dark:bg-gray-900 py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-3xl mx-auto">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden">
+          <div className="p-6 sm:p-8">
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white text-center mb-2">
               Create Fate Pool
-            </CardTitle>
-            <CardDescription className="text-gray-600 dark:text-gray-400">
-              Configure your new Fate Pool with bull and bear tokens
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6 pt-6">
-            {/* Pool Configuration */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold text-black dark:text-white">
-                Pool Configuration
-              </h3>
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <Coins className="h-4 w-4 text-gray-600 dark:text-gray-400" />
-                  <Label
-                    htmlFor="poolName"
-                    className="text-sm font-medium text-gray-600 dark:text-gray-400"
-                  >
-                    Name of the Fate Pool
-                  </Label>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <InfoIcon className="h-4 w-4 text-gray-600/70 dark:text-gray-400/70 cursor-help" />
-                      </TooltipTrigger>
-                      <TooltipContent className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400">
-                        <p className="w-64 text-sm">
-                          Enter a unique and descriptive name for your Fate Pool
-                        </p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </div>
-                <Input
-                  type="text"
-                  id="poolName"
-                  name="poolName"
-                  placeholder="e.g. FateBTC"
-                  value={poolName}
-                  onChange={(e) => setPoolName(e.target.value)}
-                  className="transition-all focus:ring-2 focus:ring-black dark:focus:ring-white border-gray-200 dark:border-gray-700 text-black dark:text-white"
+            </h1>
+            <p className="text-gray-600 dark:text-gray-300 text-center mb-8">
+              Set up your prediction pool in a few simple steps
+            </p>
+
+            <StepIndicator
+              currentStep={currentStep}
+              totalSteps={stepTitles.length}
+              stepTitles={stepTitles}
+            />
+
+            <div className="mt-8">
+              {currentStep === 1 && (
+                <PoolConfigurationStep
+                  formData={formData}
+                  updateFormData={updateFormData}
+                  errors={errors}
+                  priceFeeds={PRICE_FEEDS}
                 />
-              </div>
-            </div>
-
-            <Separator className="bg-gray-200 dark:bg-gray-700" />
-
-            {/* Token Configuration */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold text-black dark:text-white">
-                Token Configuration
-              </h3>
-              <div className="grid md:grid-cols-2 gap-4">
-                <div className="space-y-4">
-                  {/* Bull Coin Name */}
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <Coins className="h-4 w-4 text-gray-600 dark:text-gray-400" />
-                      <Label
-                        htmlFor="bullCoinName"
-                        className="text-sm font-medium text-gray-600 dark:text-gray-400"
-                      >
-                        Bull Coin Name
-                      </Label>
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <InfoIcon className="h-4 w-4 text-gray-600/70 dark:text-gray-400/70 cursor-help" />
-                          </TooltipTrigger>
-                          <TooltipContent className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400">
-                            <p className="w-64 text-sm">
-                              Name for the bullish token
-                            </p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    </div>
-                    <Input
-                      type="text"
-                      id="bullCoinName"
-                      name="bullCoinName"
-                      placeholder="e.g. BullToken"
-                      value={bullCoinName}
-                      onChange={(e) => setBullCoinName(e.target.value)}
-                      className="transition-all focus:ring-2 focus:ring-black dark:focus:ring-white border-gray-200 dark:border-gray-700 text-black dark:text-white"
-                    />
-                  </div>
-                  {/* Bull Coin Symbol */}
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <Coins className="h-4 w-4 text-gray-600 dark:text-gray-400" />
-                      <Label
-                        htmlFor="bullCoinSymbol"
-                        className="text-sm font-medium text-gray-600 dark:text-gray-400"
-                      >
-                        Bull Coin Symbol
-                      </Label>
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <InfoIcon className="h-4 w-4 text-gray-600/70 dark:text-gray-400/70 cursor-help" />
-                          </TooltipTrigger>
-                          <TooltipContent className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400">
-                            <p className="w-64 text-sm">
-                              Trading symbol for the bullish token
-                            </p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    </div>
-                    <Input
-                      type="text"
-                      id="bullCoinSymbol"
-                      name="bullCoinSymbol"
-                      placeholder="e.g. BTCBULL"
-                      value={bullCoinSymbol}
-                      onChange={(e) => setBullCoinSymbol(e.target.value)}
-                      className="transition-all focus:ring-2 focus:ring-black dark:focus:ring-white border-gray-200 dark:border-gray-700 text-black dark:text-white"
-                    />
-                  </div>
-                </div>
-                <div className="space-y-4">
-                  {/* Bear Coin Name */}
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <Coins className="h-4 w-4 text-gray-600 dark:text-gray-400" />
-                      <Label
-                        htmlFor="bearCoinName"
-                        className="text-sm font-medium text-gray-600 dark:text-gray-400"
-                      >
-                        Bear Coin Name
-                      </Label>
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <InfoIcon className="h-4 w-4 text-gray-600/70 dark:text-gray-400/70 cursor-help" />
-                          </TooltipTrigger>
-                          <TooltipContent className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400">
-                            <p className="w-64 text-sm">
-                              Name for the bearish token
-                            </p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    </div>
-                    <Input
-                      type="text"
-                      id="bearCoinName"
-                      name="bearCoinName"
-                      placeholder="e.g. BearToken"
-                      value={bearCoinName}
-                      onChange={(e) => setBearCoinName(e.target.value)}
-                      className="transition-all focus:ring-2 focus:ring-black dark:focus:ring-white border-gray-200 dark:border-gray-700 text-black dark:text-white"
-                    />
-                  </div>
-                  {/* Bear Coin Symbol */}
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <Coins className="h-4 w-4 text-gray-600 dark:text-gray-400" />
-                      <Label
-                        htmlFor="bearCoinSymbol"
-                        className="text-sm font-medium text-gray-600 dark:text-gray-400"
-                      >
-                        Bear Coin Symbol
-                      </Label>
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <InfoIcon className="h-4 w-4 text-gray-600/70 dark:text-gray-400/70 cursor-help" />
-                          </TooltipTrigger>
-                          <TooltipContent className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400">
-                            <p className="w-64 text-sm">
-                              Trading symbol for the bearish token
-                            </p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    </div>
-                    <Input
-                      type="text"
-                      id="bearCoinSymbol"
-                      name="bearCoinSymbol"
-                      placeholder="e.g. BTCBEAR"
-                      value={bearCoinSymbol}
-                      onChange={(e) => setBearCoinSymbol(e.target.value)}
-                      className="transition-all focus:ring-2 focus:ring-black dark:focus:ring-white border-gray-200 dark:border-gray-700 text-black dark:text-white"
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <Separator className="bg-gray-200 dark:bg-gray-700" />
-
-            {/* Address Configuration */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold text-black dark:text-white">
-                Address Configuration
-              </h3>
-              {/* ERC20 Reserve Asset Address 
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <Wallet className="h-4 w-4 text-gray-600 dark:text-gray-400" />
-                  <Label
-                    htmlFor="erc20Address"
-                    className="text-sm font-medium text-gray-600 dark:text-gray-400"
-                  >
-                    ERC20 Reserve Asset Address
-                  </Label>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <InfoIcon className="h-4 w-4 text-gray-600/70 dark:text-gray-400/70 cursor-help" />
-                      </TooltipTrigger>
-                      <TooltipContent className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400">
-                        <p className="w-64 text-sm">
-                          The address of the ERC20 token that will be used as the reserve asset
-                        </p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </div>
-                <Input
-                  type="text"
-                  id="erc20Address"
-                  name="erc20Address"
-                  placeholder="0x..."
-                  value={erc20Address}
-                  onChange={(e) => setErc20Address(e.target.value)}
-                  className="transition-all focus:ring-2 focus:ring-black dark:focus:ring-white border-gray-200 dark:border-gray-700 text-black dark:text-white"
+              )}
+              {currentStep === 2 && (
+                <TokenConfigurationStep
+                  formData={formData}
+                  updateFormData={updateFormData}
+                  errors={errors}
                 />
-              </div>
-              */}
-              {/* Fee Recipient Address */}
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <Wallet className="h-4 w-4 text-gray-600 dark:text-gray-400" />
-                  <Label
-                    htmlFor="creatorAddress"
-                    className="text-sm font-medium text-gray-600 dark:text-gray-400"
-                  >
-                    Fee Recipient Address
-                  </Label>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <InfoIcon className="h-4 w-4 text-gray-600/70 dark:text-gray-400/70 cursor-help" />
-                      </TooltipTrigger>
-                      <TooltipContent className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400">
-                        <p className="w-64 text-sm">
-                          The address that will receive the creator&apos;s portion of vault fees
-                        </p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </div>
-                <Input
-                  type="text"
-                  id="creatorAddress"
-                  name="creatorAddress"
-                  placeholder="0x..."
-                  value={creatorAddress}
-                  onChange={(e) => setCreatorAddress(e.target.value)}
-                  className="transition-all focus:ring-2 focus:ring-black dark:focus:ring-white border-gray-200 dark:border-gray-700 text-black dark:text-white"
+              )}
+              {currentStep === 3 && (
+                <AddressConfigurationStep
+                  updateFormData={updateFormData}
                 />
-              </div>
-            </div>
-
-            <Separator className="bg-gray-200 dark:bg-gray-700" />
-
-            {/* Fee Configuration */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold text-black dark:text-white">
-                Fee Configuration
-              </h3>
-              <div className="grid md:grid-cols-2 gap-4">
-                {/* Creator Stake Fee */}
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Percent className="h-4 w-4 text-gray-600 dark:text-gray-400" />
-                    <Label
-                      htmlFor="creatorStakeFee"
-                      className="text-sm font-medium text-gray-600 dark:text-gray-400"
-                    >
-                      Creator Stake Fee
-                    </Label>
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <InfoIcon className="h-4 w-4 text-gray-600/70 dark:text-gray-400/70 cursor-help" />
-                        </TooltipTrigger>
-                        <TooltipContent className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400">
-                          <p className="w-64 text-sm">
-                            Percentage of stake fees allocated to the creator
-                          </p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  </div>
-                  <Input
-                    type="number"
-                    id="creatorStakeFee"
-                    name="creatorStakeFee"
-                    placeholder="%"
-                    step="0.01"
-                    value={creatorStakeFee}
-                    onChange={(e) => setCreatorStakeFee(e.target.value)}
-                    className="transition-all focus:ring-2 focus:ring-black dark:focus:ring-white border-gray-200 dark:border-gray-700 text-black dark:text-white"
-                  />
-                </div>
-                {/* Creator Unstake Fee */}
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Percent className="h-4 w-4 text-gray-600 dark:text-gray-400" />
-                    <Label
-                      htmlFor="creatorUnstakeFee"
-                      className="text-sm font-medium text-gray-600 dark:text-gray-400"
-                    >
-                      Creator Unstake Fee
-                    </Label>
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <InfoIcon className="h-4 w-4 text-gray-600/70 dark:text-gray-400/70 cursor-help" />
-                        </TooltipTrigger>
-                        <TooltipContent className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400">
-                          <p className="w-64 text-sm">
-                            Percentage of unstake fees allocated to the creator
-                          </p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  </div>
-                  <Input
-                    type="number"
-                    id="creatorUnstakeFee"
-                    name="creatorUnstakeFee"
-                    placeholder="%"
-                    step="0.01"
-                    value={creatorUnstakeFee}
-                    onChange={(e) => setCreatorUnstakeFee(e.target.value)}
-                    className="transition-all focus:ring-2 focus:ring-black dark:focus:ring-white border-gray-200 dark:border-gray-700 text-black dark:text-white"
-                  />
-                </div>
-                {/* Stake Fee */}
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Percent className="h-4 w-4 text-gray-600 dark:text-gray-400" />
-                    <Label
-                      htmlFor="stakeFee"
-                      className="text-sm font-medium text-gray-600 dark:text-gray-400"
-                    >
-                      Stake Fee
-                    </Label>
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <InfoIcon className="h-4 w-4 text-gray-600/70 dark:text-gray-400/70 cursor-help" />
-                        </TooltipTrigger>
-                        <TooltipContent className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400">
-                          <p className="w-64 text-sm">
-                            Total percentage fee charged on staking
-                          </p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  </div>
-                  <Input
-                    type="number"
-                    id="stakeFee"
-                    name="stakeFee"
-                    placeholder="%"
-                    step="0.01"
-                    value={stakeFee}
-                    onChange={(e) => setStakeFee(e.target.value)}
-                    className="transition-all focus:ring-2 focus:ring-black dark:focus:ring-white border-gray-200 dark:border-gray-700 text-black dark:text-white"
-                  />
-                </div>
-                {/* Unstake Fee */}
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Percent className="h-4 w-4 text-gray-600 dark:text-gray-400" />
-                    <Label
-                      htmlFor="unstakeFee"
-                      className="text-sm font-medium text-gray-600 dark:text-gray-400"
-                    >
-                      Unstake Fee
-                    </Label>
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <InfoIcon className="h-4 w-4 text-gray-600/70 dark:text-gray-400/70 cursor-help" />
-                        </TooltipTrigger>
-                        <TooltipContent className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400">
-                          <p className="w-64 text-sm">
-                            Total percentage fee charged on unstaking
-                          </p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  </div>
-                  <Input
-                    type="number"
-                    id="unstakeFee"
-                    name="unstakeFee"
-                    placeholder="%"
-                    step="0.01"
-                    value={unstakeFee}
-                    onChange={(e) => setUnstakeFee(e.target.value)}
-                    className="transition-all focus:ring-2 focus:ring-black dark:focus:ring-white border-gray-200 dark:border-gray-700 text-black dark:text-white"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <Separator className="bg-gray-200 dark:bg-gray-700" />
-
-            {/* Reallocation Configuration 
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold text-black dark:text-white">
-                Reallocation Configuration
-              </h3>
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <Percent className="h-4 w-4 text-gray-600 dark:text-gray-400" />
-                  <Label
-                    htmlFor="reallocationFactor"
-                    className="text-sm font-medium text-gray-600 dark:text-gray-400"
-                  >
-                    Reallocation Factor
-                  </Label>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <InfoIcon className="h-4 w-4 text-gray-600/70 dark:text-gray-400/70 cursor-help" />
-                      </TooltipTrigger>
-                      <TooltipContent className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400">
-                        <p className="w-64 text-sm">
-                          The factor that determines how assets are reallocated between bull and bear tokens
-                        </p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </div>
-                <Input
-                  type="number"
-                  id="reallocationFactor"
-                  name="reallocationFactor"
-                  placeholder="%"
-                  step="0.01"
-                  value={reallocationFactor}
-                  onChange={(e) => setReallocationFactor(e.target.value)}
-                  className="transition-all focus:ring-2 focus:ring-black dark:focus:ring-white border-gray-200 dark:border-gray-700 text-black dark:text-white"
+              )}
+              {currentStep === 4 && (
+                <FeeConfigurationStep
+                  formData={formData}
+                  updateFormData={updateFormData}
+                  errors={errors}
                 />
-              </div>
+              )}
+              {currentStep === 5 && (
+                <ReviewStep
+                  formData={formData}
+                  onSubmit={handleSubmit}
+                  isSubmitting={isSubmitting || isSigning || isDeployingTx}
+                />
+              )}
             </div>
-            */}
-            <Button
-              type="submit"
-              className="w-full mt-6 text-lg h-12 bg-black text-white hover:bg-gray-900 dark:bg-white dark:text-black dark:hover:bg-gray-200"
-            >
-              Create Fate Pool
-            </Button>
-          </CardContent>
-        </Card>
+
+            {currentStep < 5 && (
+              <div className="mt-8 flex justify-between">
+                <button
+                  type="button"
+                  onClick={prevStep}
+                  disabled={currentStep === 1}
+                  className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-md disabled:opacity-50"
+                >
+                  Back
+                </button>
+                <button
+                  type="button"
+                  onClick={nextStep}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                >
+                  Next
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
-    </form>
+    </div>
   );
 }

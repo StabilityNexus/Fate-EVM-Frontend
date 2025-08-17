@@ -30,8 +30,13 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         <ClientProviders>
-          <Navbar />
-          {children}
+          {/* Absolute positioned navbar to avoid affecting hero positioning */}
+          <Navbar className="fixed top-0 left-0 right-0 z-50 bg-white/80 dark:bg-black/80 backdrop-blur-md" />
+          
+          <main>
+            {children}
+          </main>
+          
           <Footer />
         </ClientProviders>
       </body>

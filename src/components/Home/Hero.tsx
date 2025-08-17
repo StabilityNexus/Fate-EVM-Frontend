@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useTheme } from 'next-themes';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -11,22 +11,64 @@ const Hero = () => {
   const router = useRouter();
   const { resolvedTheme } = useTheme();
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
-  const [lightOn, setLightOn] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [vaultAddress, setVaultAddress] = useState('');
   const [mounted, setMounted] = useState(false);
+  const [navbarHeight, setNavbarHeight] = useState(0);
+  const resizeObserverRef = useRef<ResizeObserver | null>(null);
 
-  // Handle mouse movement with throttling
-  const handleMouseMove = useCallback((e: MouseEvent) => {
-    setMousePosition({ x: e.clientX, y: e.clientY });
-  }, []);
-
+  // Track navbar height changes with ResizeObserver
   useEffect(() => {
     setMounted(true);
-    window.addEventListener('mousemove', handleMouseMove);
-    return () => window.removeEventListener('mousemove', handleMouseMove);
-  }, [handleMouseMove]);
+    
+    const updateNavbarHeight = () => {
+      const navbar = document.querySelector('header');
+      if (navbar) {
+        setNavbarHeight(navbar.offsetHeight);
+      }
+    };
+
+    // Initial measurement
+    updateNavbarHeight();
+
+    // Setup ResizeObserver if supported
+    if (typeof ResizeObserver !== 'undefined') {
+      const navbar = document.querySelector('header');
+      if (navbar) {
+        resizeObserverRef.current = new ResizeObserver(() => {
+          updateNavbarHeight();
+        });
+        resizeObserverRef.current.observe(navbar);
+      }
+    } else {
+      // Fallback to window resize
+      window.addEventListener('resize', updateNavbarHeight);
+    }
+
+    // Cleanup
+    return () => {
+      if (resizeObserverRef.current) {
+        resizeObserverRef.current.disconnect();
+      }
+      window.removeEventListener('resize', updateNavbarHeight);
+    };
+  }, []);
+
+  // Handle mouse movement with navbar offset (debounced)
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    setMousePosition({ 
+      x: e.clientX, 
+      y: e.clientY - navbarHeight // Subtract navbar height
+    });
+  }, [navbarHeight]);
+
+  useEffect(() => {
+    if (mounted) {
+      window.addEventListener('mousemove', handleMouseMove);
+      return () => window.removeEventListener('mousemove', handleMouseMove);
+    }
+  }, [handleMouseMove, mounted]);
 
   if (!mounted || !resolvedTheme) {
     return (
@@ -38,7 +80,7 @@ const Hero = () => {
 
   const handleSubmit = () => {
     if (vaultAddress && isAddress(vaultAddress)) {
-      router.push(`/usePool/${vaultAddress}`);
+      router.push(`/pool?id=${vaultAddress}`);
     } else {
       alert('Please enter a valid Ethereum address (0x followed by 40 hex characters)');
     }
@@ -56,8 +98,12 @@ const Hero = () => {
 
   // Calculate flashlight position
   const getFlashlightStyle = () => ({
-    '--flashlight-x': `${mousePosition.x - 100}px`,
-    '--flashlight-y': `${mousePosition.y - 100}px`,
+    position: 'absolute' as const,
+    left: `${mousePosition.x}px`,
+    top: `${mousePosition.y}px`,
+    transform: 'translate(-50%, -50%)',
+    width: '200px',
+    height: '200px',
   } as React.CSSProperties);
 
   return (
@@ -92,14 +138,13 @@ const Hero = () => {
 
       {/* Flashlight Effect */}
       <div
-        className={`absolute rounded-full z-30 bg-black dark:bg-white pointer-events-none transition-opacity duration-300 w-[200px] h-[200px] ${lightOn ? 'opacity-100' : 'opacity-0'
-          }`}
+        className="absolute rounded-full z-30 bg-black dark:bg-white pointer-events-none opacity-0"
         style={getFlashlightStyle()}
       />
 
       {/* Foreground Content */}
       <div
-        className="absolute inset-0 flex flex-col items-center justify-center "
+        className="absolute inset-0 flex flex-col items-center justify-center"
         style={{
           backgroundColor: resolvedTheme === 'dark' ? 'black' : 'white',
           ...getMaskStyle(),
@@ -132,14 +177,6 @@ const Hero = () => {
         />
       </div>
 
-      {/* Toggle Flashlight Button */}
-      <button
-        className="hidden fixed bottom-10 left-1/2 transform -translate-x-1/2 bg-white text-black px-4 py-2 rounded-lg z-40"
-        onClick={() => setLightOn((prev) => !prev)}
-      >
-        {lightOn ? 'Turn Off Flashlight' : 'Turn On Flashlight'}
-      </button>
-
       {/* Global CSS for mask effects */}
       <style jsx global>{`
         [style*="--mouse-x"] {
@@ -154,16 +191,12 @@ const Hero = () => {
             black var(--mask-size)
           );
         }
-        [style*="--flashlight-x"] {
-          top: var(--flashlight-y);
-          left: var(--flashlight-x);
-        }
       `}</style>
     </div>
   );
 };
 
-// Extracted button group component to avoid duplication
+// ButtonGroup component remains the same as in your original code
 const ButtonGroup = ({
   resolvedTheme,
   setIsModalOpen,
