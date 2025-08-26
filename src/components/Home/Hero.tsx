@@ -29,10 +29,8 @@ const Hero = () => {
       }
     };
 
-    // Initial measurement
     updateNavbarHeight();
 
-    // Setup ResizeObserver if supported
     if (typeof ResizeObserver !== 'undefined') {
       const navbar = document.querySelector('header');
       if (navbar) {
@@ -42,7 +40,6 @@ const Hero = () => {
         resizeObserverRef.current.observe(navbar);
       }
     } else {
-      // Fallback to window resize
       window.addEventListener('resize', updateNavbarHeight);
     }
 
@@ -59,7 +56,7 @@ const Hero = () => {
   const handleMouseMove = useCallback((e: MouseEvent) => {
     setMousePosition({ 
       x: e.clientX, 
-      y: e.clientY - navbarHeight // Subtract navbar height
+      y: e.clientY - navbarHeight 
     });
   }, [navbarHeight]);
 
@@ -69,14 +66,6 @@ const Hero = () => {
       return () => window.removeEventListener('mousemove', handleMouseMove);
     }
   }, [handleMouseMove, mounted]);
-
-  if (!mounted || !resolvedTheme) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-black dark:bg-white">
-        <p className="text-white dark:text-black text-xl">Loading...</p>
-      </div>
-    );
-  }
 
   const handleSubmit = () => {
     if (vaultAddress && isAddress(vaultAddress)) {
@@ -88,6 +77,8 @@ const Hero = () => {
 
   // Calculate mask styles based on mouse position and hover state
   const getMaskStyle = () => {
+    if (!mounted) return {};
+    
     const size = isHovered ? 150 : 20;
     return {
       '--mouse-x': `${mousePosition.x}px`,
@@ -97,14 +88,26 @@ const Hero = () => {
   };
 
   // Calculate flashlight position
-  const getFlashlightStyle = () => ({
-    position: 'absolute' as const,
-    left: `${mousePosition.x}px`,
-    top: `${mousePosition.y}px`,
-    transform: 'translate(-50%, -50%)',
-    width: '200px',
-    height: '200px',
-  } as React.CSSProperties);
+  const getFlashlightStyle = () => {
+    if (!mounted) return { display: 'none' };
+    
+    return {
+      position: 'absolute' as const,
+      left: `${mousePosition.x}px`,
+      top: `${mousePosition.y}px`,
+      transform: 'translate(-50%, -50%)',
+      width: '200px',
+      height: '200px',
+    } as React.CSSProperties;
+  };
+
+  if (!mounted) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-black">
+        <div className="text-white text-xl">Loading...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="relative w-full min-h-screen overflow-hidden bg-black flex items-center justify-center">
@@ -177,26 +180,27 @@ const Hero = () => {
         />
       </div>
 
-      {/* Global CSS for mask effects */}
-      <style jsx global>{`
-        [style*="--mouse-x"] {
-          mask-image: radial-gradient(
-            circle at var(--mouse-x) var(--mouse-y), 
-            transparent var(--mask-size), 
-            black var(--mask-size)
-          );
-          -webkit-mask-image: radial-gradient(
-            circle at var(--mouse-x) var(--mouse-y), 
-            transparent var(--mask-size), 
-            black var(--mask-size)
-          );
-        }
-      `}</style>
+      {/* Global CSS for mask effects - only render when mounted */}
+      {mounted && (
+        <style jsx global>{`
+          [style*="--mouse-x"] {
+            mask-image: radial-gradient(
+              circle at var(--mouse-x) var(--mouse-y), 
+              transparent var(--mask-size), 
+              black var(--mask-size)
+            );
+            -webkit-mask-image: radial-gradient(
+              circle at var(--mouse-x) var(--mouse-y), 
+              transparent var(--mask-size), 
+              black var(--mask-size)
+            );
+          }
+        `}</style>
+      )}
     </div>
   );
 };
 
-// ButtonGroup component remains the same as in your original code
 const ButtonGroup = ({
   resolvedTheme,
   setIsModalOpen,
@@ -277,7 +281,7 @@ const ButtonGroup = ({
             >
               Continue
             </button>
-          </div>
+            </div>
         </div>
       </div>
     )}

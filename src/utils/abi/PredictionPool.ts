@@ -3,7 +3,7 @@ export const PredictionPoolABI=[
     "type": "constructor",
     "inputs": [
       {
-        "name": "_name",
+        "name": "_poolName",
         "type": "string",
         "internalType": "string"
       },
@@ -33,14 +33,29 @@ export const PredictionPoolABI=[
         "internalType": "uint256"
       },
       {
-        "name": "_oracle",
+        "name": "_chainlinkPriceFeed",
         "type": "address",
         "internalType": "address"
       },
       {
-        "name": "_priceFeedId",
-        "type": "bytes32",
-        "internalType": "bytes32"
+        "name": "bullName",
+        "type": "string",
+        "internalType": "string"
+      },
+      {
+        "name": "bullSymbol",
+        "type": "string",
+        "internalType": "string"
+      },
+      {
+        "name": "bearName",
+        "type": "string",
+        "internalType": "string"
+      },
+      {
+        "name": "bearSymbol",
+        "type": "string",
+        "internalType": "string"
       }
     ],
     "stateMutability": "nonpayable"
@@ -60,20 +75,7 @@ export const PredictionPoolABI=[
   },
   {
     "type": "function",
-    "name": "MAX_ABS_EXPO",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "int32",
-        "internalType": "int32"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "STALENESS_THRESHOLD",
+    "name": "MAX_PRICE_AGE",
     "inputs": [],
     "outputs": [
       {
@@ -125,19 +127,6 @@ export const PredictionPoolABI=[
   },
   {
     "type": "function",
-    "name": "checkPriceFeed",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "bool",
-        "internalType": "bool"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "getCurrentPrice",
     "inputs": [],
     "outputs": [
@@ -145,6 +134,29 @@ export const PredictionPoolABI=[
         "name": "",
         "type": "uint256",
         "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getPriceFeedInfo",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "feedAddress",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "decimals",
+        "type": "uint8",
+        "internalType": "uint8"
+      },
+      {
+        "name": "description",
+        "type": "string",
+        "internalType": "string"
       }
     ],
     "stateMutability": "view"
@@ -164,26 +176,13 @@ export const PredictionPoolABI=[
   },
   {
     "type": "function",
-    "name": "name",
+    "name": "isPriceFresh",
     "inputs": [],
     "outputs": [
       {
         "name": "",
-        "type": "string",
-        "internalType": "string"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "oracle",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "address",
-        "internalType": "contract IPyth"
+        "type": "bool",
+        "internalType": "bool"
       }
     ],
     "stateMutability": "view"
@@ -203,6 +202,19 @@ export const PredictionPoolABI=[
   },
   {
     "type": "function",
+    "name": "poolName",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "string",
+        "internalType": "string"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "previousPrice",
     "inputs": [],
     "outputs": [
@@ -216,16 +228,36 @@ export const PredictionPoolABI=[
   },
   {
     "type": "function",
-    "name": "priceFeedId",
+    "name": "priceDecimals",
     "inputs": [],
     "outputs": [
       {
         "name": "",
-        "type": "bytes32",
-        "internalType": "bytes32"
+        "type": "uint8",
+        "internalType": "uint8"
       }
     ],
     "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "priceFeed",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "contract AggregatorV3Interface"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "rebalance",
+    "inputs": [],
+    "outputs": [],
+    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
@@ -262,38 +294,12 @@ export const PredictionPoolABI=[
   },
   {
     "type": "function",
-    "name": "updateOracle",
+    "name": "updatePriceFeed",
     "inputs": [
       {
-        "name": "newOracle",
+        "name": "newPriceFeed",
         "type": "address",
         "internalType": "address"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "updatePriceAndDistributeOutcome",
-    "inputs": [
-      {
-        "name": "priceUpdateData",
-        "type": "bytes[]",
-        "internalType": "bytes[]"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "payable"
-  },
-  {
-    "type": "function",
-    "name": "updatePriceFeedId",
-    "inputs": [
-      {
-        "name": "newFeedId",
-        "type": "bytes32",
-        "internalType": "bytes32"
       }
     ],
     "outputs": [],
@@ -337,19 +343,6 @@ export const PredictionPoolABI=[
       }
     ],
     "stateMutability": "view"
-  },
-  {
-    "type": "event",
-    "name": "OracleUpdated",
-    "inputs": [
-      {
-        "name": "newOracle",
-        "type": "address",
-        "indexed": false,
-        "internalType": "address"
-      }
-    ],
-    "anonymous": false
   },
   {
     "type": "event",
@@ -400,10 +393,10 @@ export const PredictionPoolABI=[
     "name": "PriceFeedUpdated",
     "inputs": [
       {
-        "name": "newPriceFeedId",
-        "type": "bytes32",
+        "name": "newPriceFeed",
+        "type": "address",
         "indexed": false,
-        "internalType": "bytes32"
+        "internalType": "address"
       }
     ],
     "anonymous": false
@@ -426,11 +419,6 @@ export const PredictionPoolABI=[
       }
     ],
     "anonymous": false
-  },
-  {
-    "type": "error",
-    "name": "InsufficientFee",
-    "inputs": []
   },
   {
     "type": "error",
@@ -471,17 +459,12 @@ export const PredictionPoolABI=[
   },
   {
     "type": "error",
-    "name": "PriceUpdateFailed",
+    "name": "PriceDataIncomplete",
     "inputs": []
   },
   {
     "type": "error",
     "name": "ReentrancyGuardReentrantCall",
-    "inputs": []
-  },
-  {
-    "type": "error",
-    "name": "RefundFailed",
     "inputs": []
   },
   {

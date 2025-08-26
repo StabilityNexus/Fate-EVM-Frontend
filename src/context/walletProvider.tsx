@@ -22,12 +22,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         setMounted(true);
     }, []);
 
-    if (!mounted) {
-        // Prevent rendering on server or before mount to avoid hydration mismatch
-        return null;
-    }
-
-    const theme = resolvedTheme === 'dark'
+    // Use a fallback theme for SSR/initial render
+    const theme = (mounted && resolvedTheme === 'dark') 
         ? darkTheme({
             accentColor: 'white',
             accentColorForeground: 'black',
@@ -41,6 +37,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             overlayBlur: 'small',
         });
 
+    // Always render the providers, but use a consistent theme until mounted
     return (
         <WagmiProvider config={config}>
             <QueryClientProvider client={queryClient}>

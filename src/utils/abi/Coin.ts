@@ -47,7 +47,7 @@ export const CoinABI=[
   },
   {
     "type": "function",
-    "name": "DENOMINATOR",
+    "name": "FEE_DENOMINATOR",
     "inputs": [],
     "outputs": [
       {
@@ -727,6 +727,16 @@ export const CoinABI=[
   },
   {
     "type": "error",
+    "name": "InvalidOtherCoinAddress",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "OnlyPredictionPool",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "SafeERC20FailedOperation",
     "inputs": [
       {
@@ -735,5 +745,15 @@ export const CoinABI=[
         "internalType": "address"
       }
     ]
+  },
+  {
+    "type": "error",
+    "name": "SupplyWouldBecomeZero",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "ZeroAddress",
+    "inputs": []
   }
 ]

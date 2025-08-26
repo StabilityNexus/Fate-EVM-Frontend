@@ -4,6 +4,7 @@ import "./globals.css";
 import { ClientProviders } from "@/components/layout/Layout";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
+import { ThemeProvider } from "@/components/themeProvider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -29,7 +30,8 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        <ClientProviders>
+        <ThemeProvider>
+          <ClientProviders>
           {/* Absolute positioned navbar to avoid affecting hero positioning */}
           <Navbar className="fixed top-0 left-0 right-0 z-50 bg-white/80 dark:bg-black/80 backdrop-blur-md" />
           
@@ -39,6 +41,7 @@ export default function RootLayout({
           
           <Footer />
         </ClientProviders>
+        </ThemeProvider>
       </body>
     </html>
   );
