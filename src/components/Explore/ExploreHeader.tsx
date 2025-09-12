@@ -57,7 +57,7 @@ const ExploreHeader: React.FC<ExploreHeaderProps> = ({
         <button
           onClick={onCreate}
           disabled={isCreatingPool || !isConnected || !isWalletConnectedChainSupported}
-          className="flex items-center gap-2 px-6 py-3 bg-black text-white rounded-lg hover:bg-gray-800 transition transform hover:scale-105 dark:bg-white dark:text-black shadow-md disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+          className="flex items-center gap-2 px-6 py-3 bg-black text-white rounded-lg hover:bg-gray-800 transition transform hover:scale-105 dark:bg-white dark:text-black dark:hover:bg-gray-100 shadow-md disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none border border-black dark:border-white"
           type="button"
         >
           <Plus size={20} />

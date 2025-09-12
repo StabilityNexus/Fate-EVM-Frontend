@@ -3,6 +3,22 @@ import { PredictionCard } from "@/components/FatePoolCard/FatePoolCard";
 import type { Pool } from "@/lib/types";
 import { getPriceFeedName as getPriceFeedNameUtil } from "@/utils/supportedChainFeed";
 import { getChainConfig as getChainConfigUtil } from "@/utils/chainConfig";
+import { getHebeswapPairByAddress } from "@/utils/hebeswapConfig";
+
+// Helper function to get oracle name/description
+const getOracleName = (oracleAddress: string, chainId: number): string => {
+  if (chainId === 61) {
+    // Ethereum Classic - check if it's a Hebeswap pair
+    const hebeswapPair = getHebeswapPairByAddress(oracleAddress);
+    if (hebeswapPair) {
+      return `${hebeswapPair.baseTokenSymbol}/${hebeswapPair.quoteTokenSymbol} Pair`;
+    }
+    return `${oracleAddress.slice(0, 6)}...${oracleAddress.slice(-4)}`;
+  } else {
+    // Other chains - use Chainlink price feed names
+    return getPriceFeedNameUtil(oracleAddress, chainId);
+  }
+};
 
 interface PoolListProps {
   loading: boolean;
@@ -12,6 +28,9 @@ interface PoolListProps {
   searchQuery: string;
   onUsePool: (poolId: string) => void;
   onClearSearch: () => void;
+  currentChainId?: number;
+  isConnected?: boolean;
+  isConnectedChainSupported?: boolean;
 }
 
 const PoolList: React.FC<PoolListProps> = ({
@@ -22,6 +41,9 @@ const PoolList: React.FC<PoolListProps> = ({
   searchQuery,
   onUsePool,
   onClearSearch,
+  currentChainId,
+  isConnected,
+  isConnectedChainSupported,
 }) => {
   if (loading) {
     return (
@@ -52,7 +74,13 @@ const PoolList: React.FC<PoolListProps> = ({
         <p className="text-gray-500 dark:text-gray-400 mb-4">
           {searchQuery
             ? "Try adjusting your search terms or clear the search to see all pools."
-            : "No prediction pools have been created yet across the supported networks."}
+            : !isConnected
+            ? "Please connect your wallet to view pools on your connected chain."
+            : !isConnectedChainSupported
+            ? "Please switch to a supported chain to view pools."
+            : currentChainId
+            ? `No prediction pools have been created yet on ${getChainConfigUtil(currentChainId)?.name || `Chain ${currentChainId}`}.`
+            : "No prediction pools have been created yet on the connected chain."}
         </p>
         {searchQuery && (
           <button
@@ -70,6 +98,7 @@ const PoolList: React.FC<PoolListProps> = ({
   return (
     <div className="space-y-12">
       {sortedChainIds.map((chainId) => (
+        
         <div key={chainId}>
           <h2 className="text-2xl font-bold text-black dark:text-white mb-6">
             Pools on {getChainConfigUtil(chainId)?.name || `Chain ${chainId}`}
@@ -81,7 +110,7 @@ const PoolList: React.FC<PoolListProps> = ({
                   name={pool.name}
                   baseToken={pool.baseToken}
                   creator={pool.creator}
-                  priceFeed={getPriceFeedNameUtil(pool.priceFeedAddress, pool.chainId)}
+                  priceFeed={getOracleName(pool.priceFeedAddress, pool.chainId)}
                   bullCoinName={pool.bullToken.name}
                   bullCoinSymbol={pool.bullToken.symbol}
                   bearCoinName={pool.bearToken.name}
@@ -89,7 +118,8 @@ const PoolList: React.FC<PoolListProps> = ({
                   bullPercentage={pool.bullPercentage}
                   bearPercentage={pool.bearPercentage}
                   fees={{
-                    vault: pool.vaultFee,
+                    mint: pool.mintFee,
+                    burn: pool.burnFee,
                     creator: pool.vaultCreatorFee,
                     treasury: pool.treasuryFee,
                   }}

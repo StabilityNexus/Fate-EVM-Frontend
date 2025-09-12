@@ -1,23 +1,4 @@
-export const PredictionPoolFactoryABI=[
-  {
-    "type": "function",
-    "name": "allPools",
-    "inputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "stateMutability": "view"
-  },
+export const PredictionPoolFactoryABI = [
   {
     "type": "function",
     "name": "createPool",
@@ -33,22 +14,7 @@ export const PredictionPoolFactoryABI=[
         "internalType": "address"
       },
       {
-        "name": "vaultFee",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "vaultCreatorFee",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "treasuryFee",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "chainlinkPriceFeed",
+        "name": "oracle",
         "type": "address",
         "internalType": "address"
       },
@@ -71,6 +37,26 @@ export const PredictionPoolFactoryABI=[
         "name": "bearSymbol",
         "type": "string",
         "internalType": "string"
+      },
+      {
+        "name": "mintFee",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "burnFee",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "creatorFee",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "treasuryFee",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "outputs": [
@@ -97,10 +83,60 @@ export const PredictionPoolFactoryABI=[
   },
   {
     "type": "function",
-    "name": "getPool",
+    "name": "getPoolCount",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "isValidOracle",
     "inputs": [
       {
-        "name": "index",
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "registerOracle",
+    "inputs": [
+      {
+        "name": "oracle",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "poolsByCreator",
+    "inputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "",
         "type": "uint256",
         "internalType": "uint256"
       }
@@ -116,13 +152,19 @@ export const PredictionPoolFactoryABI=[
   },
   {
     "type": "function",
-    "name": "getPoolCount",
-    "inputs": [],
-    "outputs": [
+    "name": "allPools",
+    "inputs": [
       {
         "name": "",
         "type": "uint256",
         "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
       }
     ],
     "stateMutability": "view"
@@ -156,12 +198,23 @@ export const PredictionPoolFactoryABI=[
         "internalType": "address"
       },
       {
-        "name": "chainlinkPriceFeed",
+        "name": "oracle",
         "type": "address",
         "indexed": false,
         "internalType": "address"
       }
     ],
     "anonymous": false
+  },
+  {
+    "type": "error",
+    "name": "InvalidFeeConfiguration",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidAddress",
+    "inputs": []
   }
-]
+];
+

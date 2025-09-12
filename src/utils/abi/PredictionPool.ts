@@ -18,22 +18,7 @@ export const PredictionPoolABI=[
         "internalType": "address"
       },
       {
-        "name": "_vaultFee",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "_vaultCreatorFee",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "_treasuryFee",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "_chainlinkPriceFeed",
+        "name": "_oracle",
         "type": "address",
         "internalType": "address"
       },
@@ -56,26 +41,33 @@ export const PredictionPoolABI=[
         "name": "bearSymbol",
         "type": "string",
         "internalType": "string"
+      },
+      {
+        "name": "_mintFee",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "_burnFee",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "_creatorFee",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "_treasuryFee",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "stateMutability": "nonpayable"
   },
   {
     "type": "function",
-    "name": "FEE_DENOMINATOR",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "MAX_PRICE_AGE",
+    "name": "DENOMINATOR",
     "inputs": [],
     "outputs": [
       {
@@ -127,6 +119,32 @@ export const PredictionPoolABI=[
   },
   {
     "type": "function",
+    "name": "burnFee",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "creatorFee",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "getCurrentPrice",
     "inputs": [],
     "outputs": [
@@ -140,49 +158,59 @@ export const PredictionPoolABI=[
   },
   {
     "type": "function",
-    "name": "getPriceFeedInfo",
+    "name": "getPoolStats",
     "inputs": [],
     "outputs": [
       {
-        "name": "feedAddress",
+        "name": "bullReserves",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "bearReserves",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "totalReserves",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "currentPrice",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "lastPrice",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "mintFee",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "oracle",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
         "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "decimals",
-        "type": "uint8",
-        "internalType": "uint8"
-      },
-      {
-        "name": "description",
-        "type": "string",
-        "internalType": "string"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "isInitialized",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "bool",
-        "internalType": "bool"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "isPriceFresh",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "bool",
-        "internalType": "bool"
+        "internalType": "contract IOracle"
       }
     ],
     "stateMutability": "view"
@@ -222,32 +250,6 @@ export const PredictionPoolABI=[
         "name": "",
         "type": "uint256",
         "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "priceDecimals",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint8",
-        "internalType": "uint8"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "priceFeed",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "address",
-        "internalType": "contract AggregatorV3Interface"
       }
     ],
     "stateMutability": "view"
@@ -294,10 +296,10 @@ export const PredictionPoolABI=[
   },
   {
     "type": "function",
-    "name": "updatePriceFeed",
+    "name": "updateOracle",
     "inputs": [
       {
-        "name": "newPriceFeed",
+        "name": "newOracle",
         "type": "address",
         "internalType": "address"
       }
@@ -319,49 +321,77 @@ export const PredictionPoolABI=[
     "stateMutability": "view"
   },
   {
-    "type": "function",
-    "name": "vaultCreatorFee",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "vaultFee",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
     "type": "event",
-    "name": "OutcomeDistributed",
+    "name": "Rebalanced",
     "inputs": [
       {
-        "name": "bullReserves",
+        "name": "caller",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "blockNumber",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "oldPrice",
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
       },
       {
-        "name": "bearReserves",
+        "name": "newPrice",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "priceChangePercent",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "bullReservesBefore",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "bearReservesBefore",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "bullReservesAfter",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "bearReservesAfter",
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
       },
       {
         "name": "transferAmount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "wasTransferToBull",
+        "type": "bool",
+        "indexed": false,
+        "internalType": "bool"
+      },
+      {
+        "name": "timestamp",
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
@@ -389,38 +419,6 @@ export const PredictionPoolABI=[
     "anonymous": false
   },
   {
-    "type": "event",
-    "name": "PriceFeedUpdated",
-    "inputs": [
-      {
-        "name": "newPriceFeed",
-        "type": "address",
-        "indexed": false,
-        "internalType": "address"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "PriceUpdated",
-    "inputs": [
-      {
-        "name": "oldPrice",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      },
-      {
-        "name": "newPrice",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      }
-    ],
-    "anonymous": false
-  },
-  {
     "type": "error",
     "name": "InvalidAddress",
     "inputs": []
@@ -428,11 +426,6 @@ export const PredictionPoolABI=[
   {
     "type": "error",
     "name": "InvalidFeeConfiguration",
-    "inputs": []
-  },
-  {
-    "type": "error",
-    "name": "InvalidPrice",
     "inputs": []
   },
   {
@@ -459,17 +452,10 @@ export const PredictionPoolABI=[
   },
   {
     "type": "error",
-    "name": "PriceDataIncomplete",
-    "inputs": []
-  },
-  {
-    "type": "error",
     "name": "ReentrancyGuardReentrantCall",
-    "inputs": []
-  },
-  {
-    "type": "error",
-    "name": "StalePrice",
     "inputs": []
   }
 ]
+
+
+

@@ -21,8 +21,9 @@ const ReviewStep: React.FC<ReviewStepProps> = ({
   const { address } = useAccount();
 
   const totalFees = (
-    parseFloat(formData.vaultFee || "0") +
-    parseFloat(formData.vaultCreatorFee || "0") +
+    parseFloat(formData.mintFee || "0") +
+    parseFloat(formData.burnFee || "0") +
+    parseFloat(formData.creatorFee || "0") +
     parseFloat(formData.treasuryFee || "0")
   ).toFixed(2);
 
@@ -57,11 +58,34 @@ const ReviewStep: React.FC<ReviewStepProps> = ({
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-600 dark:text-gray-400">Price Feed Address:</span>
-              <span className="font-medium text-black dark:text-white break-all">
-                {formData.priceFeedAddress || "Not specified"}
+              <span className="text-gray-600 dark:text-gray-400">Oracle Type:</span>
+              <span className="font-medium text-black dark:text-white capitalize">
+                {formData.oracleType || "Not specified"}
               </span>
             </div>
+            {formData.oracleType === 'chainlink' ? (
+              <div className="flex justify-between">
+                <span className="text-gray-600 dark:text-gray-400">Chainlink Price Feed:</span>
+                <span className="font-medium text-black dark:text-white break-all">
+                  {formData.priceFeedAddress || "Not specified"}
+                </span>
+              </div>
+            ) : (
+              <>
+                <div className="flex justify-between">
+                  <span className="text-gray-600 dark:text-gray-400">Hebeswap Pair Address:</span>
+                  <span className="font-medium text-black dark:text-white break-all">
+                    {formData.hebeswapPairAddress || "Not specified"}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600 dark:text-gray-400">Quote Token Address:</span>
+                  <span className="font-medium text-black dark:text-white break-all">
+                    {formData.hebeswapQuoteToken || "Not specified"}
+                  </span>
+                </div>
+              </>
+            )}
             <div className="flex justify-between">
               <span className="text-gray-600 dark:text-gray-400">Pool Creator:</span>
               <span className="font-medium text-black dark:text-white break-all">
@@ -121,15 +145,21 @@ const ReviewStep: React.FC<ReviewStepProps> = ({
           </h3>
           <div className="grid grid-cols-1 gap-2 text-sm">
             <div className="flex justify-between">
-              <span className="text-gray-600 dark:text-gray-400">Vault Fee:</span>
+              <span className="text-gray-600 dark:text-gray-400">Mint Fee:</span>
               <span className="font-medium text-black dark:text-white">
-                {formData.vaultFee || "0"}%
+                {formData.mintFee || "0"}%
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-600 dark:text-gray-400">Burn Fee:</span>
+              <span className="font-medium text-black dark:text-white">
+                {formData.burnFee || "0"}%
               </span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-600 dark:text-gray-400">Creator Fee:</span>
               <span className="font-medium text-black dark:text-white">
-                {formData.vaultCreatorFee || "0"}%
+                {formData.creatorFee || "0"}%
               </span>
             </div>
             <div className="flex justify-between">

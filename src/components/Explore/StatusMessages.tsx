@@ -1,3 +1,4 @@
+// src/components/Explore/StatusMessages.tsx
 import React from "react";
 import { AlertCircle, RefreshCw } from "lucide-react";
 import type { ChainLoadingState } from "@/lib/types";
@@ -10,6 +11,7 @@ interface StatusMessagesProps {
   currentChainName: string;
   supportedChainsList: string;
   getChainConfig: (chainId: number) => { chain: unknown; name: string } | null;
+  currentChainId: number | undefined; // Added currentChainId
 }
 
 const StatusMessages: React.FC<StatusMessagesProps> = ({
@@ -20,9 +22,18 @@ const StatusMessages: React.FC<StatusMessagesProps> = ({
   currentChainName,
   supportedChainsList,
   getChainConfig,
+  currentChainId, // Added currentChainId
 }) => {
-  const loadingChains = chainStates.some((state) => state.loading);
-  const chainsWithErrors = chainStates.filter((state) => state.error);
+  // Determine which chains to display in the loader
+  const displayChains = React.useMemo(() => {
+    if (isConnected && isConnectedChainSupported && currentChainId) {
+      return chainStates.filter(state => state.chainId === currentChainId);
+    }
+    return chainStates;
+  }, [isConnected, isConnectedChainSupported, currentChainId, chainStates]);
+
+  const loadingChains = displayChains.some((state) => state.loading);
+  const chainsWithErrors = displayChains.filter((state) => state.error);
 
   return (
     <>
@@ -30,10 +41,10 @@ const StatusMessages: React.FC<StatusMessagesProps> = ({
         <div className="flex justify-between mb-6 p-4 bg-black/10 dark:bg-white/10 border border-[#3b3b3b] dark:border-[#c7c9c8] rounded-lg">
           <div className="flex items-center gap-2 text-black dark:text-white mb-2">
             <RefreshCw size={16} className="animate-spin" />
-            <span className="text-sm font-medium text-black dark:text-white">Loading pools from chains...</span>
+            <span className="text-sm font-medium text-black dark:text-white">Loading pools...</span>
           </div>
           <div className="flex flex-wrap gap-4 text-xs text-black dark:text-white">
-            {chainStates.map((state) => {
+            {displayChains.map((state) => {
               const chainName = getChainConfig(state.chainId)?.name ?? `Chain ${state.chainId}`;
               return (
                 <div key={state.chainId} className="flex items-center gap-1">

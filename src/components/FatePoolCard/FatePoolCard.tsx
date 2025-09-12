@@ -1,6 +1,7 @@
 import React from "react";
 import { ArrowRight, TrendingUp, TrendingDown, Activity } from "lucide-react";
 import { RangeSlider } from "./RangeSlider";
+// import { isAddress } from "viem";
 
 interface PredictionCardProps {
   name: string;
@@ -14,7 +15,8 @@ interface PredictionCardProps {
   bullPercentage: number;
   bearPercentage: number;
   fees?: {
-    vault: number;
+    mint: number;
+    burn: number;
     creator: number;
     treasury: number;
   };
@@ -81,9 +83,6 @@ export function PredictionCard({
               <div className="text-lg font-bold text-gray-900 dark:text-white">
                 {bullPercentage.toFixed(1)}%
               </div>
-              <div className="text-xs text-gray-500 dark:text-gray-400">
-                Bullish
-              </div>
             </div>
           </div>
 
@@ -106,52 +105,59 @@ export function PredictionCard({
               <div className="text-lg font-bold text-gray-900 dark:text-white">
                 {bearPercentage.toFixed(1)}%
               </div>
-              <div className="text-xs text-gray-500 dark:text-gray-400">
-                Bearish
-              </div>
-            </div>
-          </div>
-
-          {/* Progress Bar */}
-          <div className="space-y-2">
-            <RangeSlider value={bullPercentage} onChange={() => {}} />
-            <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400">
-              <span>Bullish Sentiment</span>
-              <span>Bearish Sentiment</span>
             </div>
           </div>
         </div>
 
-        {/* Fees Section (if provided) */}
+        {/* Market Position Slider */}
+        <div className="space-y-3">
+          <RangeSlider 
+            value={bullPercentage} 
+            onChange={() => {}} // Read-only for display
+            min={0}
+            max={100}
+            step={0.1}
+            disabled={true}
+          />
+        </div>
+
+        {/* Fee Structure */}
         {fees && (
-          <div className="space-y-2 py-3 px-4 bg-gray-100 dark:bg-gray-800/50 rounded-xl border border-gray-500 dark:border-gray-700">
-            <div className="text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider mb-2">
-              Fee Structure
-            </div>
-            <div className="grid grid-cols-3 gap-2 text-center">
-              <div>
-                <div className="text-xs text-gray-500 dark:text-gray-400">Vault</div>
-                <div className="text-sm font-semibold text-gray-900 dark:text-white">{fees.vault.toFixed(1)}%</div>
+          <div className="space-y-2">
+            <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Fees</h4>
+            <div className="flex gap-2 text-xs">
+              <div className="flex-1 text-center p-2 bg-gray-50 dark:bg-gray-800 rounded">
+                <div className="font-medium text-gray-900 dark:text-white">{fees.mint}%</div>
+                <div className="text-gray-500 dark:text-gray-400">Mint</div>
               </div>
-              <div>
-                <div className="text-xs text-gray-500 dark:text-gray-400">Creator</div>
-                <div className="text-sm font-semibold text-gray-900 dark:text-white">{fees.creator.toFixed(1)}%</div>
+              <div className="flex-1 text-center p-2 bg-gray-50 dark:bg-gray-800 rounded">
+                <div className="font-medium text-gray-900 dark:text-white">{fees.burn}%</div>
+                <div className="text-gray-500 dark:text-gray-400">Burn</div>
               </div>
-              <div>
-                <div className="text-xs text-gray-500 dark:text-gray-400">Treasury</div>
-                <div className="text-sm font-semibold text-gray-900 dark:text-white">{fees.treasury.toFixed(1)}%</div>
+              <div className="flex-1 text-center p-2 bg-gray-50 dark:bg-gray-800 rounded">
+                <div className="font-medium text-gray-900 dark:text-white">{fees.creator}%</div>
+                <div className="text-gray-500 dark:text-gray-400">Creator</div>
+              </div>
+              <div className="flex-1 text-center p-2 bg-gray-50 dark:bg-gray-800 rounded">
+                <div className="font-medium text-gray-900 dark:text-white">{fees.treasury}%</div>
+                <div className="text-gray-500 dark:text-gray-400">Treasury</div>
               </div>
             </div>
           </div>
         )}
 
-        {/* Enter Pool Button */}
+        {/* Action Button */}
         <button
-          onClick={onUse}
-          className="w-full relative group/button py-4 px-6 bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-2xl font-semibold 
+          onClick={() => {
+            // Validate that onUse function exists before calling
+            if (onUse) {
+              onUse();
+            }
+          }}
+          className="w-full relative group/button py-4 px-6 bg-black dark:bg-white text-white dark:text-black rounded-2xl font-semibold 
           flex items-center justify-center gap-3 transition-all duration-300
-          hover:bg-gray-800 dark:hover:bg-gray-100 hover:shadow-lg hover:shadow-gray-500/25 dark:hover:shadow-gray-300/25
-          active:scale-[0.98] border border-gray-800 dark:border-gray-200
+          hover:bg-gray-800 dark:hover:bg-gray-100 hover:shadow-lg hover:shadow-black/25 dark:hover:shadow-white/25
+          active:scale-[0.98] border border-black dark:border-white
           before:absolute before:inset-0 before:rounded-2xl before:bg-gradient-to-r before:from-transparent before:via-white/10 before:to-transparent before:opacity-0 before:transition-opacity before:duration-300 hover:before:opacity-100"
         >
           <span className="relative z-10">Enter Prediction Pool</span>

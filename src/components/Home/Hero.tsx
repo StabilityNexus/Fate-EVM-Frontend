@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { isAddress } from 'viem';
 import { cn } from '@/lib/utils';
+import { Loading } from '@/components/ui/loading';
 
 const Hero = () => {
   const router = useRouter();
@@ -103,8 +104,8 @@ const Hero = () => {
 
   if (!mounted) {
     return (
-      <div className="flex items-center justify-center h-screen bg-black">
-        <div className="text-white text-xl">Loading...</div>
+      <div className="flex items-center justify-center h-screen bg-white dark:bg-black">
+        <Loading size="xl" />
       </div>
     );
   }
@@ -257,8 +258,8 @@ const ButtonGroup = ({
       Use Pool
     </button>
 
-    {isModalOpen && (
-      <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
+         {isModalOpen && (
+       <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
         <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg w-96">
           <h2 className="text-xl font-semibold mb-4 text-black dark:text-white">Enter Pool Address</h2>
           <input

@@ -107,60 +107,6 @@ export async function getBothPrices(
   }
 }
 
-/**
- * Initializes the pool by calling rebalance to set the previous price.
- * This should be called immediately after pool deployment to establish the initial price reference.
- */
-export async function initializePoolPrice(
-  walletClient: WalletClient,
-  poolAddress: Address,
-): Promise<TransactionReceipt> {
-  try {
-    const provider = new ethers.BrowserProvider(walletClient.transport);
-    const signer = await provider.getSigner();
-
-    const poolContract = new ethers.Contract(poolAddress, PredictionPoolABI, signer);
-
-    // Check if the pool is already initialized
-    const isInitialized: boolean = await poolContract.isInitialized();
-    if (isInitialized) {
-      console.log('Pool is already initialized');
-      throw new Error('Pool is already initialized');
-    }
-
-    // Estimate gas with buffer
-    const gasEstimate: bigint = await poolContract.rebalance.estimateGas();
-    const gasWithBuffer = gasEstimate + gasEstimate / BigInt(5); // 20% buffer
-
-    const tx = await poolContract.rebalance({
-      gasLimit: gasWithBuffer,
-    });
-
-    const receipt = await tx.wait();
-    console.log('Pool initialized successfully with transaction:', receipt.hash);
-    
-    return receipt as TransactionReceipt;
-  } catch (err) {
-    const contractError = err as ContractError;
-    console.error('Error in initializePoolPrice:', {
-      message: contractError.message,
-      reason: contractError.reason,
-      code: contractError.code,
-      data: contractError.data
-    });
-
-    // Re-throw with more context
-    if (contractError.reason) {
-      throw new Error(`Pool initialization failed: ${contractError.reason}`);
-    } else if (contractError.message.includes('already initialized')) {
-      throw new Error('Pool has already been initialized');
-    } else if (contractError.code === 'CALL_EXCEPTION') {
-      throw new Error('Pool initialization failed - contract call exception');
-    } else {
-      throw new Error(`Pool initialization failed: ${contractError.message || 'Unknown error'}`);
-    }
-  }
-}
 
 export async function rebalancePool(
   walletClient: WalletClient,
@@ -184,43 +130,41 @@ export async function rebalancePool(
 }
 
 /**
- * Fetches the price feed address, decimals, and description from the pool contract.
+ * Fetches the oracle address from the pool contract.
  */
-export async function getPriceFeedInfo(
+export async function getOracleInfo(
   walletClient: WalletClient,
   vaultId: Address,
-): Promise<{ feedAddress: Address; decimals: number; description: string }> {
+): Promise<{ oracleAddress: Address }> {
   try {
     const provider = new ethers.BrowserProvider(walletClient.transport);
     const poolContract = new ethers.Contract(vaultId, PredictionPoolABI, provider);
 
-    const [feedAddress, decimals, description] = await poolContract.getPriceFeedInfo();
+    const oracleAddress = await poolContract.oracle();
 
     return {
-      feedAddress: feedAddress as Address,
-      decimals: Number(decimals),
-      description: description as string,
+      oracleAddress: oracleAddress as Address,
     };
   } catch (err) {
     const contractError = err as ContractError;
-    console.error('Error in getPriceFeedInfo:', {
+    console.error('Error in getOracleInfo:', {
       message: contractError.message,
       reason: contractError.reason,
       code: contractError.code,
       data: contractError.data,
     });
-    throw new Error(contractError.reason || contractError.message || 'Failed to fetch price feed info');
+    throw new Error(contractError.reason || contractError.message || 'Failed to fetch oracle info');
   }
 }
 
 /**
- * Updates the price feed address on the PredictionPool contract.
+ * Updates the oracle address on the PredictionPool contract.
  * This is an owner-only function.
  */
-export async function updatePriceFeed(
+export async function updateOracle(
   walletClient: WalletClient,
   vaultId: Address,
-  newPriceFeedAddress: Address,
+  newOracleAddress: Address,
 ): Promise<TransactionReceipt> {
   const provider = new ethers.BrowserProvider(walletClient.transport);
   const signer = await provider.getSigner();
@@ -228,10 +172,10 @@ export async function updatePriceFeed(
   const poolContract = new ethers.Contract(vaultId, PredictionPoolABI, signer);
 
   // Estimate gas for the transaction
-  const gasEstimate: bigint = await poolContract.updatePriceFeed.estimateGas(newPriceFeedAddress);
+  const gasEstimate: bigint = await poolContract.updateOracle.estimateGas(newOracleAddress);
   const gasWithBuffer = gasEstimate + gasEstimate / BigInt(5); // 20% buffer
 
-  const tx = await poolContract.updatePriceFeed(newPriceFeedAddress, {
+  const tx = await poolContract.updateOracle(newOracleAddress, {
     gasLimit: gasWithBuffer,
   });
 

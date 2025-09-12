@@ -38,6 +38,12 @@ export const CHAIN_PRICE_FEED_OPTIONS: Record<number, { address: string; name: s
     { address: "0xa767f745331D267c7751297D982b050c93985627", name: "ADA / USD" },
     { address: "0x0E8a53DD9c13589df6382F13dA6B3Ec8F919B323", name: "SOL / USD" },
   ],
+  // Ethereum Classic (Chain ID: 61)
+  61: [
+    { address: "0x0000000000000000000000000000000000000000", name: "ETH / USD" }, // Update with actual address
+    { address: "0x0000000000000000000000000000000000000000", name: "BTC / USD" }, // Update with actual address
+    { address: "0x0000000000000000000000000000000000000000", name: "ETC / USD" }, // Update with actual address
+  ],
 };
 
 // Get all supported chain IDs
@@ -46,13 +52,22 @@ export const SUPPORTED_CHAINS = Object.keys(CHAIN_PRICE_FEED_OPTIONS).map(Number
 // Helper function to get price feed name by address and chain ID
 export const getPriceFeedName = (address: string, chainId: number): string => {
   const chainFeeds = CHAIN_PRICE_FEED_OPTIONS[chainId];
+  
   if (chainFeeds) {
     const feed = chainFeeds.find(feed => feed.address.toLowerCase() === address.toLowerCase());
     if (feed) {
       return feed.name;
     }
   }
-  return `${address.slice(0, 6)}...${address.slice(-4)}`;
+  
+  // For unknown oracles, try to make an educated guess based on common patterns
+  // Most prediction pools use ETH/USD as the underlying asset
+  if (address && address.length === 42 && address.startsWith('0x')) {
+    return "ETH / USD"; // Default to ETH/USD for unknown oracles
+  }
+  
+  // Return a more user-friendly message for invalid addresses
+  return `Unknown Oracle (${address.slice(0, 6)}...${address.slice(-4)})`;
 };
 
 // Helper function to check if a chain is supported

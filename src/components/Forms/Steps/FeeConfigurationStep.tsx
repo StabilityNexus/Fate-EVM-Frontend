@@ -9,8 +9,10 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { InfoIcon, Percent } from "lucide-react";
+import { InfoIcon, Percent, Coins } from "lucide-react";
 import type { FormData } from "../FormData";
+import { useChainId } from "wagmi";
+import { HEBESWAP_PAIRS } from "@/utils/hebeswapConfig";
 
 interface FeeConfigurationStepProps {
   formData: FormData;
@@ -23,15 +25,22 @@ const FeeConfigurationStep: React.FC<FeeConfigurationStepProps> = ({
   updateFormData,
   errors,
 }) => {
-  // Set default values if empty
+  const chainId = useChainId();
+  
+  // Set default values if empty - only run once
+  const hasSetDefaults = React.useRef(false);
   React.useEffect(() => {
-    const defaults = {
-      vaultFee: formData.vaultFee || "3.0",
-      vaultCreatorFee: formData.vaultCreatorFee || "2.0",
-      treasuryFee: formData.treasuryFee || "0.5"
-    };
-    updateFormData(defaults);
-  }, []);
+    if (!hasSetDefaults.current) {
+      const defaults = {
+        mintFee: formData.mintFee || "3.0",
+        burnFee: formData.burnFee || "3.0",
+        creatorFee: formData.creatorFee || "2.0",
+        treasuryFee: formData.treasuryFee || "0.5"
+      };
+      updateFormData(defaults);
+      hasSetDefaults.current = true;
+    }
+  }, [formData.mintFee, formData.burnFee, formData.creatorFee, formData.treasuryFee, updateFormData]);
 
   const handleFeeChange = (e: React.ChangeEvent<HTMLInputElement>, field: keyof FormData) => {
     const value = e.target.value.trim();
@@ -42,6 +51,16 @@ const FeeConfigurationStep: React.FC<FeeConfigurationStepProps> = ({
     const n = Number(value);
     if (Number.isFinite(n) && n >= 0 && n <= 100) {
       updateFormData({ [field]: value } as Partial<FormData>);
+    }
+  };
+
+  const handleHebeswapPairChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const selectedPair = HEBESWAP_PAIRS.find(pair => pair.pairAddress === e.target.value);
+    if (selectedPair) {
+      updateFormData({
+        hebeswapPairAddress: selectedPair.pairAddress,
+        hebeswapQuoteToken: selectedPair.quoteToken
+      });
     }
   };
 
@@ -56,12 +75,13 @@ const FeeConfigurationStep: React.FC<FeeConfigurationStepProps> = ({
         </p>
       </div>
 
-      <div className="grid md:grid-cols-2 gap-4">
+      {/* Hebeswap Pair Selection (only for Ethereum Classic) */}
+      {chainId === 61 && formData.oracleType === 'hebeswap' && (
         <div className="space-y-2">
           <div className="flex items-center gap-2">
-            <Percent className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+            <Coins className="h-4 w-4 text-gray-600 dark:text-gray-400" />
             <Label className="text-sm font-medium text-gray-600 dark:text-gray-400">
-              Vault Fee *
+              Hebeswap Trading Pair *
             </Label>
             <TooltipProvider>
               <Tooltip>
@@ -70,7 +90,55 @@ const FeeConfigurationStep: React.FC<FeeConfigurationStepProps> = ({
                 </TooltipTrigger>
                 <TooltipContent className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400">
                   <p className="w-64 text-sm">
-                    Percentage fee charged by the vault on transactions (0-100%)
+                    Select a Hebeswap trading pair for price feeds on Ethereum Classic
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+          <select
+            value={formData.hebeswapPairAddress}
+            onChange={handleHebeswapPairChange}
+            className={`w-full px-3 py-2.5 border rounded-md transition-all duration-200 cursor-pointer ${
+              errors.hebeswapPairAddress 
+                ? "border-red-500 focus:border-red-500 focus:ring-1 focus:ring-red-500" 
+                : "border-gray-200 dark:border-gray-700 focus:border-black dark:focus:border-white focus:ring-2 focus:ring-black dark:focus:ring-white"
+            } text-black dark:text-white bg-white dark:bg-gray-800 focus:outline-none`}
+          >
+            <option value="" disabled className="text-gray-500">
+              Select a Hebeswap Pair
+            </option>
+            {HEBESWAP_PAIRS.map((pair) => (
+              <option 
+                key={pair.pairAddress} 
+                value={pair.pairAddress}
+                className="text-black dark:text-white bg-white dark:bg-gray-800"
+              >
+                {pair.description}
+              </option>
+            ))}
+          </select>
+          {errors.hebeswapPairAddress && (
+            <p className="text-red-500 text-sm">{errors.hebeswapPairAddress}</p>
+          )}
+        </div>
+      )}
+
+      <div className="grid md:grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <Percent className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+            <Label className="text-sm font-medium text-gray-600 dark:text-gray-400">
+              Mint Fee *
+            </Label>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <InfoIcon className="h-4 w-4 text-gray-600/70 dark:text-gray-400/70 cursor-help" />
+                </TooltipTrigger>
+                <TooltipContent className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400">
+                  <p className="w-64 text-sm">
+                    Percentage fee charged when minting tokens (0-100%)
                   </p>
                 </TooltipContent>
               </Tooltip>
@@ -82,14 +150,50 @@ const FeeConfigurationStep: React.FC<FeeConfigurationStepProps> = ({
             step="0.01"
             min="0"
             max="100"
-            value={formData.vaultFee}
-            onChange={(e) => handleFeeChange(e, 'vaultFee')}
+            value={formData.mintFee}
+            onChange={(e) => handleFeeChange(e, 'mintFee')}
             className={`transition-all focus:ring-2 focus:ring-black dark:focus:ring-white border-gray-200 dark:border-gray-700 text-black dark:text-white ${
-              errors.vaultFee ? "border-red-500" : ""
+              errors.mintFee ? "border-red-500" : ""
             }`}
           />
-          {errors.vaultFee && (
-            <p className="text-red-500 text-sm">{errors.vaultFee}</p>
+          {errors.mintFee && (
+            <p className="text-red-500 text-sm">{errors.mintFee}</p>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <Percent className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+            <Label className="text-sm font-medium text-gray-600 dark:text-gray-400">
+              Burn Fee *
+            </Label>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <InfoIcon className="h-4 w-4 text-gray-600/70 dark:text-gray-400/70 cursor-help" />
+                </TooltipTrigger>
+                <TooltipContent className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400">
+                  <p className="w-64 text-sm">
+                    Percentage fee charged when burning tokens (0-100%)
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+          <Input
+            type="number"
+            placeholder="3.0"
+            step="0.01"
+            min="0"
+            max="100"
+            value={formData.burnFee}
+            onChange={(e) => handleFeeChange(e, 'burnFee')}
+            className={`transition-all focus:ring-2 focus:ring-black dark:focus:ring-white border-gray-200 dark:border-gray-700 text-black dark:text-white ${
+              errors.burnFee ? "border-red-500" : ""
+            }`}
+          />
+          {errors.burnFee && (
+            <p className="text-red-500 text-sm">{errors.burnFee}</p>
           )}
         </div>
 
@@ -118,14 +222,14 @@ const FeeConfigurationStep: React.FC<FeeConfigurationStepProps> = ({
             step="0.01"
             min="0"
             max="100"
-            value={formData.vaultCreatorFee}
-            onChange={(e) => handleFeeChange(e, 'vaultCreatorFee')}
+            value={formData.creatorFee}
+            onChange={(e) => handleFeeChange(e, 'creatorFee')}
             className={`transition-all focus:ring-2 focus:ring-black dark:focus:ring-white border-gray-200 dark:border-gray-700 text-black dark:text-white ${
-              errors.vaultCreatorFee ? "border-red-500" : ""
+              errors.creatorFee ? "border-red-500" : ""
             }`}
           />
-          {errors.vaultCreatorFee && (
-            <p className="text-red-500 text-sm">{errors.vaultCreatorFee}</p>
+          {errors.creatorFee && (
+            <p className="text-red-500 text-sm">{errors.creatorFee}</p>
           )}
         </div>
 

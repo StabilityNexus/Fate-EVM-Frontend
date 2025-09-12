@@ -6,6 +6,7 @@ import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import { ThemeProvider } from "@/components/themeProvider";
 
+
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
@@ -19,7 +20,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Fate Protocol",
   description:
-    "Decentralized prediction markets with dual vaults. Buy and sell bullCoins and bearCoins to predict market trends.",
+    "Decentralized perpetual prediction pools. Buy and sell bullCoins and bearCoins to predict the future of prices and hedge against price volatility risks.",
 };
 
 export default function RootLayout({
@@ -29,6 +30,27 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                try {
+                  var theme = localStorage.getItem('theme') || 'system';
+                  var systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+                  var finalTheme = theme === 'system' ? systemTheme : theme;
+                  
+                  if (finalTheme === 'dark') {
+                    document.documentElement.classList.add('dark');
+                  } else {
+                    document.documentElement.classList.remove('dark');
+                  }
+                } catch (e) {}
+              })();
+            `,
+          }}
+        />
+      </head>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         <ThemeProvider>
           <ClientProviders>
@@ -37,10 +59,10 @@ export default function RootLayout({
           
           <main>
             {children}
-          </main>
+            </main>
           
           <Footer />
-        </ClientProviders>
+          </ClientProviders>
         </ThemeProvider>
       </body>
     </html>
