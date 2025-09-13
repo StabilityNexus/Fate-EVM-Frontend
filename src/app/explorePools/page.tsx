@@ -96,7 +96,8 @@ function ExploreFatePoolsClient() {
     coinAddr: string,
     other: string,
     poolAddr: string,
-    publicClient: PublicClient
+    publicClient: PublicClient,
+    sourceChainId: SupportedChainId
   ): Promise<Token | null> => {
     if (!publicClient || !isAddress(coinAddr) || coinAddr === "0x0000000000000000000000000000000000000000") {
       return null;
@@ -128,7 +129,7 @@ function ExploreFatePoolsClient() {
         // Convert Token to TokenDetails format for storage
         const tokenDetails = {
           id: token.id,
-          chainId: currentChainId as SupportedChainId, // Use current connected chain
+          chainId: sourceChainId,
           prediction_pool: token.prediction_pool,
           other_token: token.other_token,
           asset: token.asset,
@@ -151,7 +152,7 @@ function ExploreFatePoolsClient() {
       console.error(`Error fetching coin data for ${coinAddr}:`, error);
       return null;
     }
-  }, [isInitialized, batchSaveTokens, currentChainId]);
+  }, [isInitialized, batchSaveTokens]);
 
   const fetchPoolsFromChain = useCallback(async (chainId: number, factoryAddress: string): Promise<Pool[]> => {
     const chainConfig = getChainConfig(chainId);
@@ -209,7 +210,7 @@ function ExploreFatePoolsClient() {
               publicClient.readContract({ address: addr, abi: PredictionPoolABI, functionName: "oracle" }).catch((): Address => "0x0000000000000000000000000000000000000000"),
               publicClient.readContract({ address: addr, abi: PredictionPoolABI, functionName: "bullCoin" }).catch((): Address => "0x0000000000000000000000000000000000000000"),
               publicClient.readContract({ address: addr, abi: PredictionPoolABI, functionName: "bearCoin" }).catch((): Address => "0x0000000000000000000000000000000000000000"),
-              publicClient.readContract({ address: addr, abi: PredictionPoolABI, functionName: "vaultCreator" }).catch((): bigint => BigInt(0)),
+              publicClient.readContract({ address: addr, abi: PredictionPoolABI, functionName: "vaultCreator" }).catch((): Address => "0x0000000000000000000000000000000000000000"),
               publicClient.readContract({ address: addr, abi: PredictionPoolABI, functionName: "mintFee" }).catch((): bigint => BigInt(0)),
               publicClient.readContract({ address: addr, abi: PredictionPoolABI, functionName: "burnFee" }).catch((): bigint => BigInt(0)),
               publicClient.readContract({ address: addr, abi: PredictionPoolABI, functionName: "creatorFee" }).catch((): bigint => BigInt(0)),
@@ -237,7 +238,10 @@ function ExploreFatePoolsClient() {
             } else {
               console.log(`Pool ${addr}: No oracle address found, using fallback`);
             }
-            const [bull, bear] = await Promise.all([fetchCoin(bullAddr as Address, bearAddr as Address, addr, publicClient), fetchCoin(bearAddr as Address, bullAddr as Address, addr, publicClient)]);
+            const [bull, bear] = await Promise.all([
+              fetchCoin(bullAddr as Address, bearAddr as Address, addr, publicClient, chainId as SupportedChainId),
+              fetchCoin(bearAddr as Address, bullAddr as Address, addr, publicClient, chainId as SupportedChainId)
+            ]);
             if (!bull || !bear) { console.warn(`Failed to fetch token data for pool ${addr} on chain ${chainId}`); return null; }
             const bullSupply = Number(formatUnits(bull.supply, 18));
             const bearSupply = Number(formatUnits(bear.supply, 18));

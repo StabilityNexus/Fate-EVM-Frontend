@@ -26,7 +26,7 @@ import {
 } from "lucide-react";
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useAccount, useReadContracts } from "wagmi";
-import { formatUnits, Address } from "viem";
+import { formatUnits, Address, isAddress } from "viem";
 import { useRouter } from "next/navigation";
 import { Loading } from "@/components/ui/loading";
 import { PredictionPoolABI } from "@/utils/abi/PredictionPool";
@@ -38,6 +38,8 @@ import { PredictionPoolFactoryABI } from "@/utils/abi/PredictionPoolFactory";
 import { ChainlinkOracleABI } from "@/utils/abi/ChainlinkOracle";
 import { ERC20ABI } from "@/utils/abi/ERC20";
 import { createPublicClient, http } from "viem";
+
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as const;
 
 const CHART_COLORS = [
   "#fff44f", // bright lemon yellow
@@ -107,10 +109,11 @@ const calculateTokenMetricsWithEvents = async (
     let realizedPnL = 0;
     let grossInvestment = 0;
     const buyQueue: Array<{ 
-      amount: number; 
-      price: number; 
-      fees: number; 
-      grossAmount: number; // Full amount invested (including fees)
+      amount: number;              // remaining tokens
+      initialAmount: number;       // original tokens bought
+      price: number;
+      fees: number;
+      grossAmount: number;         // investment incl. fees
       timestamp: number;
       blockNumber: number;
     }> = [];
@@ -129,10 +132,11 @@ const calculateTokenMetricsWithEvents = async (
         totalCostBasis += tx.amountAsset; // Full investment amount
         
         buyQueue.push({ 
-          amount: tx.amountCoin, 
+          amount: tx.amountCoin,
+          initialAmount: tx.amountCoin,
           price: tx.price,
           fees: feePaid,
-          grossAmount: tx.amountAsset, // Full amount invested
+          grossAmount: tx.amountAsset,
           timestamp: (tx as any).timestamp || 0,
           blockNumber: Number(tx.blockNumber)
         });
@@ -152,7 +156,7 @@ const calculateTokenMetricsWithEvents = async (
           const amountFromThisBuy = Math.min(remainingToSell, oldestBuy.amount);
           
           // CORRECT: Use gross amount (including fees) for cost basis calculation
-          const costPerToken = oldestBuy.grossAmount / oldestBuy.amount;
+          const costPerToken = oldestBuy.grossAmount / oldestBuy.initialAmount;
           costOfSold += amountFromThisBuy * costPerToken;
           
           remainingToSell -= amountFromThisBuy;
@@ -176,16 +180,15 @@ const calculateTokenMetricsWithEvents = async (
 
     // Calculate remaining cost basis for current holdings (using gross amounts)
     const remainingCostBasis = buyQueue.reduce((sum, buy) => {
-      const costPerToken = buy.grossAmount / buy.amount;
-      return sum + (buy.amount * costPerToken);
+      const costPerToken = buy.grossAmount / buy.initialAmount;
+      return sum + buy.amount * costPerToken;
     }, 0);
     
-    // Check if this is a position with only buys (no sells)
-    const hasOnlyBuys = buyQueue.length > 0 && buyQueue.every(buy => buy.amount > 0);
+    // Check if there were any sell transactions (not based on mutated queue)
+    const hadSell = transactions.some((t: any) => t.type === 'sell');
     
-    // For positions with only buys, use the total investment as cost basis
-    // For positions with sells, use the remaining cost basis
-    const actualCostBasis = hasOnlyBuys ? totalCostBasis : remainingCostBasis;
+    // Use totalCostBasis if no sells, otherwise remainingCostBasis
+    const actualCostBasis = hadSell ? remainingCostBasis : totalCostBasis;
     
     const unrealizedPnL = currentValue - actualCostBasis;
     const totalPnL = realizedPnL + unrealizedPnL;
@@ -194,7 +197,7 @@ const calculateTokenMetricsWithEvents = async (
     const returns = actualCostBasis > 0 ? (totalPnL / actualCostBasis) * 100 : 0;
 
     console.log(`📊 Correct FIFO Results:`);
-    console.log(`   - Has only buys: ${hasOnlyBuys}`);
+    console.log(`   - Had sell transactions: ${hadSell}`);
     console.log(`   - Gross investment: ${grossInvestment} WETH (including fees)`);
     console.log(`   - Total fees paid: ${totalFeesPaid} WETH (transaction costs)`);
     console.log(`   - Net investment: ${netInvestment} WETH (after fees)`);
@@ -298,29 +301,17 @@ const fetchUserTransactions = async (tokenAddress: string, userAddress: string, 
     // Helper function to fetch logs in chunks to avoid RPC limits
     const fetchLogsInChunks = async (eventABI: any, args: any) => {
       const currentBlock = await publicClient.getBlockNumber();
-      const chunkSize = 5000; // Safe chunk size for most RPC providers
+      const chunkSize = BigInt(5000);
       const allLogs: any[] = [];
-      
-      // Try different time windows, starting with recent blocks
-      const timeWindows = [
-        currentBlock - BigInt(50000),   // ~1 week on Ethereum
-        currentBlock - BigInt(200000),  // ~1 month
-        currentBlock - BigInt(1000000), // ~6 months
-      ];
-      
-      let startBlock = timeWindows[0];
-      
-      // If we're on testnet, be more conservative with block range
-      if (chainId === 11155111) { // Sepolia
-        startBlock = currentBlock - BigInt(100000); // ~2 weeks on testnet
-      }
+      const lookback = chainId === 11155111 ? BigInt(100000) : BigInt(50000);
+      const startBlock = currentBlock > lookback ? currentBlock - lookback : BigInt(0);
       
       console.log(`🔍 Scanning from block ${startBlock} to ${currentBlock} (${currentBlock - startBlock} blocks)`);
       
-      for (let fromBlock = startBlock; fromBlock <= currentBlock; fromBlock += BigInt(chunkSize)) {
-        const toBlock = fromBlock + BigInt(chunkSize - 1) > currentBlock 
+      for (let fromBlock = startBlock; fromBlock <= currentBlock; fromBlock += chunkSize) {
+        const toBlock = fromBlock + chunkSize - BigInt(1) > currentBlock 
           ? currentBlock 
-          : fromBlock + BigInt(chunkSize - 1);
+          : fromBlock + chunkSize - BigInt(1);
         
         try {
           const logs = await publicClient.getLogs({
@@ -342,11 +333,11 @@ const fetchUserTransactions = async (tokenAddress: string, userAddress: string, 
           if (error?.message?.includes('range') || error?.message?.includes('blocks')) {
             console.log('🔄 Retrying with smaller chunk size...');
             try {
-              const smallerChunkSize = 1000;
-              for (let smallFromBlock = fromBlock; smallFromBlock <= toBlock; smallFromBlock += BigInt(smallerChunkSize)) {
-                const smallToBlock = smallFromBlock + BigInt(smallerChunkSize - 1) > toBlock 
+              const smallerChunkSize = BigInt(1000);
+              for (let smallFromBlock = fromBlock; smallFromBlock <= toBlock; smallFromBlock += smallerChunkSize) {
+                const smallToBlock = smallFromBlock + smallerChunkSize - BigInt(1) > toBlock 
                   ? toBlock 
-                  : smallFromBlock + BigInt(smallerChunkSize - 1);
+                  : smallFromBlock + smallerChunkSize - BigInt(1);
                 
                 const smallLogs = await publicClient.getLogs({
                   address: tokenAddress as Address,
@@ -538,7 +529,7 @@ const HistoricalInvestmentsTable: React.FC<{
             <div
               key={pool.id}
               className="group relative overflow-hidden border border-neutral-200 dark:border-neutral-600 rounded-lg p-4 dark:bg-gradient-to-r dark:from-neutral-700/20 dark:to-neutral-800/20 backdrop-blur-sm cursor-pointer transition-all duration-300 hover:shadow-lg hover:border-yellow-300/50 dark:hover:border-yellow-500/30 hover:scale-[1.01]"
-              onClick={() => window.open(`/predictionPool/pool?id=${pool.id}`, '_blank')}
+              onClick={() => window.open(`/pool?id=${pool.id}`, '_blank')}
             >
               {/* Animated background gradient */}
               <div className="absolute inset-0 bg-gradient-to-r from-transparent via-yellow-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
@@ -567,9 +558,7 @@ const HistoricalInvestmentsTable: React.FC<{
                     <div className="text-lg font-semibold text-neutral-900 dark:text-neutral-100">
                       {pool.totalCostBasis.toFixed(4)} WETH
                     </div>
-                    <div className="text-xs text-neutral-500 dark:text-neutral-400">
-                      ${(pool.totalCostBasis * 2500).toLocaleString()} USD
-                    </div>
+                    {/* Omit stale USD conversion; show only base asset */}
                   </div>
 
                   {/* Total P&L */}
@@ -806,7 +795,7 @@ const PositionCard = ({ pool }: { pool: PoolData }) => {
     <div
       className="group relative overflow-hidden border border-black dark:border-neutral-600/60 rounded-xl p-5 dark:bg-gradient-to-br dark:from-neutral-700/40 dark:to-neutral-800/40 backdrop-blur-sm cursor-pointer transition-all duration-300 hover:shadow-xl hover:border-yellow-300/50 dark:hover:border-yellow-500/30"
       onClick={() => {
-        router.push(`/${pool.id}?id=${pool.id}`);
+        router.push(`/pool?id=${pool.id}`)
       }}
     >
       {/* Animated background gradient */}
@@ -1231,13 +1220,14 @@ const EnhancedPoolDataLoader = ({
       const bearSymbol = tokenData[5]?.result as string || 'BEAR';
       const bearSupply = Number(formatUnits(tokenData[6]?.result as bigint || BigInt(0), 18));
 
-      const bullReserve = Number(formatUnits(reserveData[0]?.result as bigint || BigInt(0), 18));
-      const bearReserve = Number(formatUnits(reserveData[1]?.result as bigint || BigInt(0), 18));
+      const baseTokenDecimals = Number(reserveData[3]?.result ?? 18);
+      const bullReserve = Number(formatUnits((reserveData[0]?.result as bigint) ?? BigInt(0), baseTokenDecimals));
+      const bearReserve = Number(formatUnits((reserveData[1]?.result as bigint) ?? BigInt(0), baseTokenDecimals));
       // const baseTokenSymbol = reserveData[2]?.result as string || 'WETH';
 
-      const userBullTokens = Number(formatUnits(userBalanceData?.[0]?.result as bigint || BigInt(0), 18));
-      const userBearTokens = Number(formatUnits(userBalanceData?.[1]?.result as bigint || BigInt(0), 18));
-      const userBaseTokenBalance = Number(formatUnits(userBalanceData?.[2]?.result as bigint || BigInt(0), 18));
+      const userBullTokens = Number(formatUnits((userBalanceData?.[0]?.result as bigint) ?? BigInt(0), 18));
+      const userBearTokens = Number(formatUnits((userBalanceData?.[1]?.result as bigint) ?? BigInt(0), 18));
+      const userBaseTokenBalance = Number(formatUnits((userBalanceData?.[2]?.result as bigint) ?? BigInt(0), baseTokenDecimals));
 
       // Check if user has any transaction history even if current balance is 0
       const hasTransactionHistory = async () => {
@@ -1339,10 +1329,10 @@ const EnhancedPoolDataLoader = ({
       }
 
       const fees = {
-        mintFee: Number(formatUnits(feeData?.[0]?.result as bigint || BigInt(0), 4)) / 10000,
-        burnFee: Number(formatUnits(feeData?.[1]?.result as bigint || BigInt(0), 4)) / 10000,
-        creatorFee: Number(formatUnits(feeData?.[2]?.result as bigint || BigInt(0), 4)) / 10000,
-        treasuryFee: Number(formatUnits(feeData?.[3]?.result as bigint || BigInt(0), 4)) / 10000,
+        mintFee: Number(formatUnits(feeData?.[0]?.result as bigint || BigInt(0), 4)),
+        burnFee: Number(formatUnits(feeData?.[1]?.result as bigint || BigInt(0), 4)),
+        creatorFee: Number(formatUnits(feeData?.[2]?.result as bigint || BigInt(0), 4)),
+        treasuryFee: Number(formatUnits(feeData?.[3]?.result as bigint || BigInt(0), 4)),
       };
 
       const poolData: PoolData = {
@@ -1424,12 +1414,12 @@ export default function PortfolioPage() {
 
   // Get all pools from factory
   const { data: allPoolsData } = useReadContracts({
-    contracts: factoryAddress ? [
+    contracts: (factoryAddress && isAddress(factoryAddress as Address) && factoryAddress !== ZERO_ADDRESS) ? [
       { address: factoryAddress as Address, abi: PredictionPoolFactoryABI, functionName: 'getAllPools' },
       { address: factoryAddress as Address, abi: PredictionPoolFactoryABI, functionName: 'getPoolCount' },
     ] : [],
     query: {
-      enabled: !!factoryAddress,
+      enabled: !!(factoryAddress && isAddress(factoryAddress as Address) && factoryAddress !== ZERO_ADDRESS),
     }
   });
 
@@ -1601,7 +1591,7 @@ export default function PortfolioPage() {
 
   if (!isConnected) {
     return (
-      <div className="min-h-screen bg-white dark:bg-black flex items-center justify-center p-4">
+      <div className="min-h-screen bg-white dark:bg-black flex items-center justify-center p-4 pt-28 min-[900px]:pt-32">
         <Card className="p-8 text-center max-w-md border-black dark:border-neutral-700/60 shadow-xl bg-white/80 dark:bg-neutral-800/80 backdrop-blur-sm">
           <div className="mb-6">
             <Wallet className="h-12 w-12 mx-auto text-yellow-500 dark:text-yellow-400 mb-4" />
@@ -1626,28 +1616,8 @@ export default function PortfolioPage() {
   }
 
   return (
-    <div className="min-h-screen bg-white dark:bg-black text-neutral-900 dark:text-white p-4 md:p-6">
+    <div className="min-h-screen bg-white dark:bg-black text-neutral-900 dark:text-white p-4 pt-28 min-[900px]:p-6 min-[900px]:pt-32">
       <div className="max-w-7xl mx-auto space-y-8">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-neutral-900 dark:text-white mb-2">
-          Portfolio
-        </h1>
-            <p className="text-neutral-600 dark:text-neutral-400">
-              Track your bull and bear positions across all prediction pools
-          </p>
-        </div>
-          <Button 
-            onClick={() => router.push('/explorePools')}
-            variant="outline"
-            className="border-black dark:border-neutral-600"
-          >
-            Explore Pools
-          </Button>
-        </div>
-
-
         {/* Enhanced Pool Data Loaders - Only loads pools where user has positions */}
         {availablePools.map((poolAddress, index) => (
           <EnhancedPoolDataLoader
@@ -1732,7 +1702,7 @@ export default function PortfolioPage() {
                         style={{ animationDelay: `${index * 100}ms` }}
                       >
                         <PositionCard pool={pool} />
-                      </div>
+        </div>
                     ))}
                   </div>
                 </CardContent>
