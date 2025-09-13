@@ -30,9 +30,9 @@ export interface TokenDetails {
   name: string;
   symbol: string;
   vault_creator: string;
-  mint_fee: bigint;
-  burn_fee: bigint;
-  creator_fee: bigint;
+  mint_fee?: bigint;
+  burn_fee?: bigint;
+  creator_fee?: bigint;
   treasury_fee: bigint;
   asset_balance: bigint;
   supply: bigint;

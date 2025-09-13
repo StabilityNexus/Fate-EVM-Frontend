@@ -342,7 +342,7 @@ function ExploreFatePoolsClient() {
                   vaultFee: poolDetails.vaultFee,
                   vaultCreatorFee: poolDetails.vaultCreatorFee,
                   treasuryFee: poolDetails.treasuryFee,
-                  mintFee: poolDetails.vaultFee, // Use vaultFee as mintFee for cached data
+                  mintFee: poolDetails.vaultFee ?? 0, // Use vaultFee as mintFee for cached data
                   burnFee: 0, // Default burnFee for cached data
                   bullPercentage: poolDetails.bullPercentage,
                   bearPercentage: poolDetails.bearPercentage,
@@ -458,16 +458,13 @@ function ExploreFatePoolsClient() {
       setRefreshing(false);
     }
   }, [
-    isInitialized,
     fetchPoolsFromChain,
     updateChainState,
     supportedChainIds,
     lastFetchTime,
     isConnected,
     currentChainId,
-    isConnectedChainSupported,
-    getTokensForPool,
-    getAllPools
+    isConnectedChainSupported
   ]);
 
   const handleRefresh = useCallback(async (): Promise<void> => {

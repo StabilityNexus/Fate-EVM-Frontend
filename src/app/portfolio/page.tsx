@@ -78,7 +78,6 @@ const calculateTokenMetricsWithEvents = async (
   tokenAddress: string,
   userAddress: string,
   chainId: number,
-  fees?: { mintFee: number; burnFee: number; creatorFee: number; treasuryFee: number }
 ) => {
   const currentPrice = safeNumber(supply > 0 ? reserve / supply : 0);
   const currentValue = userTokens * currentPrice;
@@ -141,9 +140,9 @@ const calculateTokenMetricsWithEvents = async (
         console.log(`📈 Buy: ${tx.amountCoin} tokens @ ${tx.price} WETH/token, Total invested: ${tx.amountAsset} WETH (fees: ${feePaid} WETH)`);
       } else if (tx.type === 'sell') {
         let remainingToSell = tx.amountCoin;
-        let sellValue = tx.amountAsset;
+        const sellValue = tx.amountAsset;
         let costOfSold = 0;
-        let feesOnThisSale = (tx as any).feePaid || 0;
+        const feesOnThisSale = (tx as any).feePaid || 0;
 
         console.log(`📉 Sell: ${tx.amountCoin} tokens for ${tx.amountAsset} WETH, Fees: ${feesOnThisSale} WETH`);
 
@@ -359,7 +358,7 @@ const fetchUserTransactions = async (tokenAddress: string, userAddress: string, 
                 
                 allLogs.push(...smallLogs);
               }
-            } catch (retryError) {
+            } catch {
               console.warn(`❌ Retry also failed for block ${fromBlock} to ${toBlock}`);
             }
           }
@@ -506,7 +505,7 @@ const HistoricalInvestmentsTable: React.FC<{
   historicalPools: PoolData[];
   userAddress?: string;
   chainId?: number;
-}> = ({ historicalPools, userAddress, chainId }) => {
+}> = ({ historicalPools }) => {
   const [displayedItems, setDisplayedItems] = useState(5); // Show 5 items initially
   const [isLoadingMore, setIsLoadingMore] = useState(false);
 
@@ -535,7 +534,7 @@ const HistoricalInvestmentsTable: React.FC<{
       <CardContent>
         {/* Simple Card Rows - Full Width */}
         <div className="space-y-3">
-          {displayedPools.map((pool, index) => (
+          {displayedPools.map((pool) => (
             <div
               key={pool.id}
               className="group relative overflow-hidden border border-neutral-200 dark:border-neutral-600 rounded-lg p-4 dark:bg-gradient-to-r dark:from-neutral-700/20 dark:to-neutral-800/20 backdrop-blur-sm cursor-pointer transition-all duration-300 hover:shadow-lg hover:border-yellow-300/50 dark:hover:border-yellow-500/30 hover:scale-[1.01]"
@@ -1234,7 +1233,7 @@ const EnhancedPoolDataLoader = ({
 
       const bullReserve = Number(formatUnits(reserveData[0]?.result as bigint || BigInt(0), 18));
       const bearReserve = Number(formatUnits(reserveData[1]?.result as bigint || BigInt(0), 18));
-      const baseTokenSymbol = reserveData[2]?.result as string || 'WETH';
+      // const baseTokenSymbol = reserveData[2]?.result as string || 'WETH';
 
       const userBullTokens = Number(formatUnits(userBalanceData?.[0]?.result as bigint || BigInt(0), 18));
       const userBearTokens = Number(formatUnits(userBalanceData?.[1]?.result as bigint || BigInt(0), 18));
@@ -1402,7 +1401,7 @@ const EnhancedPoolDataLoader = ({
     };
 
     processPoolData();
-  }, [poolBasicData, tokenData, reserveData, userBalanceData, underlyingOracleData, feeData, userAddress, poolAddress, index, chainId, onDataLoad]);
+  }, [poolBasicData, tokenData, reserveData, userBalanceData, underlyingOracleData, feeData, poolAddress, onDataLoad, userAddress, chainId, index, baseToken, bearTokenAddress, bullTokenAddress, currentPrice, oracleAddress, poolName, previousPrice]);
 
   return null;
 };
@@ -1524,8 +1523,16 @@ export default function PortfolioPage() {
     totalPortfolioValue,
     totalPnL,
     totalReturnPercentage,
-    hasAnyPositions,
-  } = useMemo(() => {
+  } = useMemo((): {
+    activePoolsData: PoolData[];
+    historicalPoolsData: PoolData[];
+    bullPositionsData: PoolData[];
+    bearPositionsData: PoolData[];
+    totalPortfolioValue: number;
+    totalPnL: number;
+    totalReturnPercentage: number;
+    totalCostBasis: number;
+  } => {
     // Active pools have current balances > 0
     const activePoolsData = poolsData.filter((pool) => 
       pool.bullBalance > 0 || pool.bearBalance > 0
@@ -1558,7 +1565,7 @@ export default function PortfolioPage() {
     const totalReturnPercentage =
       totalCostBasis > 0 ? (totalPnL / totalCostBasis) * 100 : 0;
 
-    const hasAnyPositions = activePoolsData.length > 0 || historicalPoolsData.length > 0;
+    // const hasAnyPositions = activePoolsData.length > 0 || historicalPoolsData.length > 0;
 
     return {
       activePoolsData,
@@ -1569,7 +1576,6 @@ export default function PortfolioPage() {
       totalCostBasis,
       totalPnL,
       totalReturnPercentage,
-      hasAnyPositions,
     };
   }, [poolsData]);
 

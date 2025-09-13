@@ -77,7 +77,8 @@ function TradingViewWidget({
     slotRef.current.appendChild(script);
 
     return () => {
-      if (slotRef.current) slotRef.current.innerHTML = "";
+      const currentSlot = slotRef.current;
+      if (currentSlot) currentSlot.innerHTML = "";
     };
   }, [assetId, coinId, contentHeight, theme]);
 

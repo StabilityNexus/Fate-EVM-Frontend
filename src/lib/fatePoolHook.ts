@@ -59,6 +59,13 @@ export interface UseFatePoolsStorageReturn {
 }
 
 export const useFatePoolsStorage = (): UseFatePoolsStorageReturn => {
+  // Early return for SSR - prevent any IndexedDB operations on server
+  const [isClient, setIsClient] = useState(false);
+  
+  useEffect(() => {
+    setIsClient(typeof window !== 'undefined');
+  }, []);
+  
   const [isInitialized, setIsInitialized] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isOnline, setIsOnline] = useState(false);
@@ -108,6 +115,11 @@ export const useFatePoolsStorage = (): UseFatePoolsStorageReturn => {
     }
   }, []);
 
+  // Helper function to check if operations are allowed
+  const canOperate = () => {
+    return isClient && isClientRef.current && typeof window !== 'undefined';
+  };
+
   // Monitor online status only on client
   useEffect(() => {
     if (!isClientRef.current) return;
@@ -137,6 +149,13 @@ export const useFatePoolsStorage = (): UseFatePoolsStorageReturn => {
     const initDB = async () => {
       try {
         setError(null);
+        
+        // Additional check to ensure we're in a browser environment
+        if (typeof window === 'undefined' || !window.indexedDB) {
+          console.warn('IndexedDB not available, skipping initialization');
+          setIsInitialized(false);
+          return;
+        }
         
         // Wait a bit to ensure the DOM is fully ready
         await new Promise(resolve => setTimeout(resolve, 100));
@@ -184,7 +203,7 @@ export const useFatePoolsStorage = (): UseFatePoolsStorageReturn => {
   const savePoolDetails = useCallback(
     async (pool: Omit<PoolDetails, 'createdAt' | 'updatedAt'>) => {
       try {
-        if (!isClientRef.current) {
+        if (!canOperate()) {
           throw new Error('Not available on server side');
         }
         

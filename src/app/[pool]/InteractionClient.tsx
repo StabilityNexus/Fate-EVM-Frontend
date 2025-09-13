@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo, useRef, memo } from 'react';
-import { Coins, AlertCircle, Info, RefreshCw, Wrench, TrendingUp, TrendingDown } from 'lucide-react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { RefreshCw, Wrench, TrendingUp, TrendingDown } from 'lucide-react';
 import {
   useAccount,
   useWalletClient,
@@ -9,38 +9,52 @@ import {
   useWriteContract,
   useWaitForTransactionReceipt
 } from 'wagmi';
-import { formatUnits, parseUnits, type Address, type Log, createPublicClient, http } from 'viem';
+import { formatUnits, parseUnits, type Address, createPublicClient, http } from 'viem';
 import { PredictionPoolABI } from '@/utils/abi/PredictionPool';
 import { CoinABI } from '@/utils/abi/Coin';
 import { ERC20ABI } from '@/utils/abi/ERC20';
 import { ChainlinkOracleABI } from '@/utils/abi/ChainlinkOracle';
 import { toast } from 'sonner';
-import { getBothPrices, rebalancePool, updateOracle } from '@/lib/vaultUtils';
+import { updateOracle } from '@/lib/vaultUtils';
 import { useSearchParams } from 'next/navigation';
 import { FatePoolFactories } from '@/utils/addresses';
+import { getPriceFeedName, CHAIN_PRICE_FEED_OPTIONS } from '@/utils/supportedChainFeed';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Loading } from '@/components/ui/loading';
-import { RangeSlider } from '@/components/FatePoolCard/RangeSlider';
-import type { Token, Pool, PendingApproval, ProcessingError, TokenActionPanelProps } from '@/lib/types';
-import { getChainConfig } from '@/utils/chainConfig';
-import { getPriceFeedName, getPriceFeedOptions, CHAIN_PRICE_FEED_OPTIONS } from '@/utils/supportedChainFeed';
-import { ChainlinkAdapterFactories } from '@/utils/addresses';
+// import { getChainConfig } from '@/utils/chainConfig';
 
 // Note: ChainlinkAdapterFactories is imported but can be used for future oracle management features
 import TradingViewWidget from '@/components/ui/TradingViewWidget';
 import Navbar from '@/components/layout/Navbar';
 import { useTheme } from "next-themes";
 import { InfoIcon } from 'lucide-react';
-import { Card, CardContent } from "@/components/ui/card";
 
 // EVM-based pool hook
 const usePool = (poolId: Address | undefined, isConnected: boolean) => {
   const { chain } = useAccount();
   const { address } = useAccount();
 
-  const [pool, setPool] = useState<any>(null);
+  const [pool, setPool] = useState<{
+    id: { id: string };
+    name: string;
+    asset_address: string;
+    oracle_address: string;
+    current_price: number;
+    bull_reserve: bigint;
+    bear_reserve: bigint;
+    bull_token: { id: string; fields: { symbol: string; total_supply: bigint; name: string } };
+    bear_token: { id: string; fields: { symbol: string; total_supply: bigint; name: string } };
+    vault_creator: string;
+    creator_fee: number;
+    mint_fee: number;
+    burn_fee: number;
+    treasury_fee: number;
+    bull_percentage: number;
+    bear_percentage: number;
+    chainId: number;
+  } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -61,7 +75,7 @@ const usePool = (poolId: Address | undefined, isConnected: boolean) => {
   const baseToken = poolData?.[0]?.result as Address;
   const bullAddr = poolData?.[1]?.result as Address;
   const bearAddr = poolData?.[2]?.result as Address;
-  const prevPrice = poolData?.[3]?.result as bigint;
+  // const prevPrice = poolData?.[3]?.result as bigint;
   const oracle = poolData?.[4]?.result as Address;
   const poolName = poolData?.[5]?.result as string;
 
@@ -137,8 +151,8 @@ const usePool = (poolId: Address | undefined, isConnected: boolean) => {
       const bullPercentage = totalReserves > 0 ? (Number(formatUnits(bullReserve, 18)) / totalReserves) * 100 : 50;
       const bearPercentage = 100 - bullPercentage;
 
-      const userBullBalance = userBalancesData?.[0]?.result as bigint || BigInt(0);
-      const userBearBalance = userBalancesData?.[1]?.result as bigint || BigInt(0);
+      // const userBullBalance = userBalancesData?.[0]?.result as bigint || BigInt(0);
+      // const userBearBalance = userBalancesData?.[1]?.result as bigint || BigInt(0);
       
       const newPool = {
         id: { id: poolId },
@@ -176,11 +190,11 @@ const usePool = (poolId: Address | undefined, isConnected: boolean) => {
 
       setPool(newPool);
       setLoading(false);
-    } catch (e: any) {
-      setError(e.message || "Failed to load pool data");
+    } catch (e: unknown) {
+      setError((e as Error).message || "Failed to load pool data");
       setLoading(false);
     }
-  }, [poolId, tokenData, userBalancesData, isConnected, poolName, baseToken, bullAddr, bearAddr, vaultCreator]);
+  }, [poolId, tokenData, userBalancesData, isConnected, poolName, baseToken, bullAddr, bearAddr, vaultCreator, chain, poolFeeData, oracle]);
 
   const userBalances = {
     bull_tokens: userBalancesData?.[0]?.result as bigint || BigInt(0),
@@ -211,7 +225,7 @@ const formatNumberDown = (n: number, decimals = 9) => {
 };
 
 const formatValue = (value: number) => `${formatNumber(value, 3)} WETH`;
-const safeNumber = (num: any, fallback = 0) => !isFinite(num) || isNaN(num) ? fallback : Number(num);
+const safeNumber = (num: unknown, fallback = 0) => !isFinite(Number(num)) || isNaN(Number(num)) ? fallback : Number(num);
 
 // Fetch user transactions for P&L calculation
 const fetchUserTransactions = async (
@@ -233,7 +247,7 @@ const fetchUserTransactions = async (
         blockExplorers: {
           default: { name: 'Etherscan', url: 'https://sepolia.etherscan.io' }
         }
-      } as any,
+      } as const,
       transport: http()
     });
 
@@ -358,7 +372,7 @@ const calculateTokenMetricsWithEvents = async (
     console.log(`🧮 Starting FIFO calculation for ${userTokens} current tokens`);
 
     // Process transactions chronologically
-    const sortedTxns = transactions.sort((a: any, b: any) => Number(a.blockNumber) - Number(b.blockNumber));
+    const sortedTxns = transactions.sort((a: { blockNumber: bigint }, b: { blockNumber: bigint }) => Number(a.blockNumber) - Number(b.blockNumber));
     
     for (const tx of sortedTxns) {
       if (tx.type === 'buy') {
@@ -377,7 +391,7 @@ const calculateTokenMetricsWithEvents = async (
         console.log(`📈 Buy: ${tx.amountCoin} tokens @ ${tx.price} WETH/token, Total invested: ${grossAmount} WETH`);
       } else if (tx.type === 'sell') {
         let remainingToSell = tx.amountCoin;
-        let sellValue = tx.amountAsset;
+        const sellValue = tx.amountAsset;
         let costOfSold = 0;
 
         console.log(`📉 Sell: ${tx.amountCoin} tokens for ${tx.amountAsset} WETH`);
@@ -473,7 +487,37 @@ const calculateTokenMetricsWithEvents = async (
   }
 };
 
-function VaultSection({ isBull, poolData, userTokens, price, value, returns, symbol, connected, handlePoll, reserve, supply, tokenAddress }: any) {
+function VaultSection({ isBull, poolData, userTokens, price, value, symbol, connected, handlePoll, reserve, supply, tokenAddress }: {
+  isBull: boolean;
+  poolData: {
+    id: { id: string };
+    name: string;
+    asset_address: string;
+    oracle_address: string;
+    current_price: number;
+    bull_reserve: bigint;
+    bear_reserve: bigint;
+    bull_token: { id: string; fields: { symbol: string; total_supply: bigint; name: string } };
+    bear_token: { id: string; fields: { symbol: string; total_supply: bigint; name: string } };
+    vault_creator: string;
+    creator_fee: number;
+    mint_fee: number;
+    burn_fee: number;
+    treasury_fee: number;
+    bull_percentage: number;
+    bear_percentage: number;
+    chainId: number;
+  };
+  userTokens: bigint;
+  price: number;
+  value: number;
+  symbol: string;
+  connected: boolean;
+  handlePoll: () => void;
+  reserve: number;
+  supply: number;
+  tokenAddress: string;
+}) {
   const { address } = useAccount();
   const { writeContract, data: hash, isPending: isTransactionPending } = useWriteContract();
   const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({ hash });
@@ -489,21 +533,21 @@ function VaultSection({ isBull, poolData, userTokens, price, value, returns, sym
 
   // Get base token balance for MAX calculation
   const { data: baseTokenBalanceData } = useReadContracts({
-    contracts: address && poolData?.asset_id ? [
-      { address: poolData.asset_id, abi: ERC20ABI, functionName: 'balanceOf', args: [address] },
+    contracts: address && poolData?.asset_address ? [
+      { address: poolData.asset_address as `0x${string}`, abi: ERC20ABI, functionName: 'balanceOf', args: [address as `0x${string}`] },
     ] : [],
     query: {
-      enabled: !!(address && poolData?.asset_id),
+      enabled: !!(address && poolData?.asset_address),
     }
   });
 
   // Get allowance for the token
   const { data: allowanceData } = useReadContracts({
-    contracts: address && poolData?.asset_id && tokenAddress ? [
-      { address: poolData.asset_id, abi: ERC20ABI, functionName: 'allowance', args: [address, tokenAddress] },
+    contracts: address && poolData?.asset_address && tokenAddress ? [
+      { address: poolData.asset_address as `0x${string}`, abi: ERC20ABI, functionName: 'allowance', args: [address as `0x${string}`, tokenAddress as `0x${string}`] },
     ] : [],
     query: {
-      enabled: !!(address && poolData?.asset_id && tokenAddress),
+      enabled: !!(address && poolData?.asset_address && tokenAddress),
     }
   });
 
@@ -557,13 +601,13 @@ function VaultSection({ isBull, poolData, userTokens, price, value, returns, sym
 
 
 
-  const handleBuyTransaction = async (amount: string) => {
+  const handleBuyTransaction = useCallback(async (amount: string) => {
     try {
       const amountWei = parseUnits(amount, 18);
       
       const loadingToast = toast.loading("Processing buy transaction...");
       await writeContract({
-        address: tokenAddress!,
+        address: tokenAddress! as `0x${string}`,
         abi: CoinABI,
         functionName: 'buy',
         args: [address!, amountWei],
@@ -573,7 +617,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, returns, sym
       console.error("Buy transaction error:", err);
       toast.error((err as Error).message || "Failed to buy tokens");
     }
-  };
+  }, [tokenAddress, address, writeContract]);
 
   const handleBuy = async () => {
     if (!address || !connected) {
@@ -586,7 +630,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, returns, sym
       return;
     }
 
-    if (!tokenAddress || !poolData?.asset_id) {
+    if (!tokenAddress || !poolData?.asset_address) {
       toast.error("Token information not available");
       return;
     }
@@ -607,7 +651,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, returns, sym
         const approvalToast = toast.loading("Approving tokens...");
         setPendingApproval({ amount: buyAmount, type: 'buy' });
         await writeContract({
-          address: poolData.asset_id,
+          address: poolData.asset_address as `0x${string}`,
           abi: ERC20ABI,
           functionName: 'approve',
           args: [tokenAddress, amountWei],
@@ -651,7 +695,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, returns, sym
 
       const loadingToast = toast.loading("Processing sell transaction...");
       await writeContract({
-        address: tokenAddress,
+        address: tokenAddress as `0x${string}`,
         abi: CoinABI,
         functionName: 'sell',
         args: [amountWei],
@@ -674,7 +718,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, returns, sym
         handlePoll();
       }
     }
-  }, [isConfirmed, isTransactionPending, pendingApproval, handlePoll]);
+  }, [isConfirmed, isTransactionPending, pendingApproval, handlePoll, handleBuyTransaction]);
 
   const vaultTitle = isBull ? 'Bull Vault' : 'Bear Vault';
   const vaultIcon = isBull ? (
@@ -682,7 +726,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, returns, sym
   ) : (
     <TrendingDown className="w-5 h-5 text-white" />
   );
-  const vaultColor = isBull ? 'text-green-600' : 'text-red-600';
+  // const vaultColor = isBull ? 'text-green-600' : 'text-red-600';
   const buttonColor = isBull ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700';
 
   return (
@@ -820,22 +864,22 @@ function VaultSection({ isBull, poolData, userTokens, price, value, returns, sym
   );
 }
 
-const formatAddress = (address: Address | string | undefined): string => {
-  if (!address) return 'N/A';
-  if (typeof address !== 'string' || address.length < 10) {
-    return address;
-  }
-  return `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
-};
+// const formatAddress = (address: Address | string | undefined): string => {
+//   if (!address) return 'N/A';
+//   if (typeof address !== 'string' || address.length < 10) {
+//     return address;
+//   }
+//   return `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
+// };
 
 export default function InteractionClient() {
-  const stickyRef = useRef<HTMLElement | null>(null);
+  // const stickyRef = useRef<HTMLElement | null>(null);
   const { theme } = useTheme();
   const params = useSearchParams();
   const { address, isConnected } = useAccount();
   const poolId = (params.get("id") || FatePoolFactories[1]) as Address;
 
-  const { pool, userBalances, userAvgPrices, loading, error, refetch } = usePool(poolId, isConnected);
+  const { pool, userBalances, loading, error, refetch } = usePool(poolId, isConnected);
   const { data: walletClient } = useWalletClient();
 
   // Read oracle prices from prediction pool contract
@@ -861,7 +905,7 @@ export default function InteractionClient() {
 
   const [isDistributeLoading, setIsDistributeLoading] = useState(false);
   const [distributeError, setDistributeError] = useState("");
-  const [lastUpdateTime, setLastUpdateTime] = useState<Date>(new Date());
+  // const [lastUpdateTime, setLastUpdateTime] = useState<Date>(new Date());
   const [lastRebalanceTime, setLastRebalanceTime] = useState<Date | null>(null);
   
   // Initialize from localStorage on mount
@@ -874,12 +918,12 @@ export default function InteractionClient() {
       }
     }
   }, [poolId]);
-  const [gasEstimate, setGasEstimate] = useState<bigint>(BigInt(150000));
-  const [gasPrice, setGasPrice] = useState<bigint>(BigInt(0));
+  // const [gasEstimate, setGasEstimate] = useState<bigint>(BigInt(150000));
+  // const [gasPrice, setGasPrice] = useState<bigint>(BigInt(0));
   const [newOracleAddress, setNewOracleAddress] = useState<string>('');
   const [isFetchingRebalanceEvents, setIsFetchingRebalanceEvents] = useState(false);
   
-  const POLLING_INTERVAL = 5000;
+  // const POLLING_INTERVAL = 5000;
   const [pollingEnabledState, setPollingEnabledState] = useState(true);
 
   // Fetch the last rebalance event from blockchain
@@ -952,7 +996,7 @@ export default function InteractionClient() {
         console.log('Approach 2: Searching by event topic hash...');
         
         // Get the event topic hash (keccak256 of event signature)
-        const eventSignature = 'Rebalanced(address,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256)';
+        // const eventSignature = 'Rebalanced(address,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256)';
         const allLogs = await publicClient.getLogs({
           address: poolId as Address,
           fromBlock: 'earliest',
@@ -962,7 +1006,7 @@ export default function InteractionClient() {
         console.log('Approach 2: Found total logs:', allLogs.length);
         
         // Look for rebalance events by checking if they have the expected number of topics
-        const rebalanceEvents = allLogs.filter((log: any) => {
+        const rebalanceEvents = allLogs.filter((log: { topics: string[] }) => {
           // Rebalanced event has 2 indexed parameters (caller, blockNumber) + event signature = 3 topics total
           return log.topics && log.topics.length === 3;
         });
@@ -1042,27 +1086,27 @@ export default function InteractionClient() {
       if (!walletClient) return;
       
       try {
-        const publicClient = createPublicClient({
-          chain: walletClient.chain,
-          transport: http()
-        });
+        // const publicClient = createPublicClient({
+        //   chain: walletClient.chain,
+        //   transport: http()
+        // });
         
-        const gasPrice = await publicClient.getGasPrice();
-        setGasPrice(gasPrice);
+        // const gasPrice = await publicClient.getGasPrice();
+        // setGasPrice(gasPrice);
         
         // Estimate gas for a typical buy transaction
         if (poolId) {
           try {
-            const gasEstimate = await publicClient.estimateContractGas({
-              address: poolId,
-              abi: PredictionPoolABI,
-              functionName: 'rebalance',
-              account: address,
-            });
-            setGasEstimate(gasEstimate);
-          } catch (error) {
+            // const gasEstimate = await publicClient.estimateContractGas({
+            //   address: poolId,
+            //   abi: PredictionPoolABI,
+            //   functionName: 'rebalance',
+            //   account: address,
+            // });
+            // setGasEstimate(gasEstimate);
+          } catch {
             // Use default estimate if specific estimation fails
-            setGasEstimate(BigInt(150000));
+            // setGasEstimate(BigInt(150000));
           }
         }
       } catch (error) {
@@ -1105,7 +1149,7 @@ export default function InteractionClient() {
 
     try {
       await refetch?.();
-      setLastUpdateTime(new Date());
+      // setLastUpdateTime(new Date());
     } catch (err) {
       console.error("Polling error:", err);
     }
@@ -1138,7 +1182,7 @@ export default function InteractionClient() {
         functionName: 'rebalance',
       });
       toast.dismiss(loadingToast);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Rebalance error:', err);
       let errorMessage = 'Failed to rebalance pool';
       if ((err as Error).message.includes("user rejected transaction")) {
@@ -1163,7 +1207,7 @@ export default function InteractionClient() {
       toast.success('Oracle updated successfully!');
       setNewOracleAddress('');
       await handlePoll();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Update oracle error:', err);
       let errorMessage = 'Failed to update oracle';
       if ((err as Error).message.includes("user rejected transaction")) {
@@ -1177,46 +1221,51 @@ export default function InteractionClient() {
     }
   };
 
-  const poolData = pool
+  const poolData = useMemo(() => pool
     ? {
-        id: pool.id?.id || "",
+        id: { id: pool.id?.id || "" },
         name: pool.name || "Prediction Pool",
-        asset_id: pool.asset_address || "0x...",
+        asset_address: pool.asset_address || "0x...",
         oracle_address: pool.oracle_address || "0x...", // Use actual oracle address
-        current_price: parseInt(pool.current_price) || 0,
-        bull_reserve: parseInt(pool.bull_reserve) || 0,
-        bear_reserve: parseInt(pool.bear_reserve) || 0,
-        bull_supply: parseInt(pool.bull_token?.fields?.total_supply) || 0,
-        bear_supply: parseInt(pool.bear_token?.fields?.total_supply) || 0,
+        current_price: pool.current_price || 0,
+        bull_reserve: pool.bull_reserve || BigInt(0),
+        bear_reserve: pool.bear_reserve || BigInt(0),
+        bull_token: pool.bull_token || { id: "0x...", fields: { symbol: "BULL", total_supply: BigInt(0), name: "Bull Token" } },
+        bear_token: pool.bear_token || { id: "0x...", fields: { symbol: "BEAR", total_supply: BigInt(0), name: "Bear Token" } },
+        vault_creator: pool.vault_creator || "",
         creator_fee: pool.creator_fee || 0,
         mint_fee: pool.mint_fee || 0,
         burn_fee: pool.burn_fee || 0,
         treasury_fee: pool.treasury_fee || 0,
+        bull_percentage: pool.bull_percentage || 50,
+        bear_percentage: pool.bear_percentage || 50,
         chainId: pool.chainId || 1,
       }
     : {
-        id: "",
+        id: { id: "" },
         name: "Loading...",
-        description: "Loading pool data...",
-        asset_id: "0x...",
+        asset_address: "0x...",
         oracle_address: "0x...",
         current_price: 0,
-        bull_reserve: 0,
-        bear_reserve: 0,
-        bull_supply: 0,
-        bear_supply: 0,
+        bull_reserve: BigInt(0),
+        bear_reserve: BigInt(0),
+        bull_token: { id: "0x...", fields: { symbol: "BULL", total_supply: BigInt(0), name: "Bull Token" } },
+        bear_token: { id: "0x...", fields: { symbol: "BEAR", total_supply: BigInt(0), name: "Bear Token" } },
+        vault_creator: "",
         creator_fee: 0,
         mint_fee: 0,
         burn_fee: 0,
         treasury_fee: 0,
+        bull_percentage: 50,
+        bear_percentage: 50,
         chainId: 1,
-      };
+      }, [pool]);
 
   const calculations = useMemo(() => {
-    const bullReserveNum = Number(formatUnits(BigInt(poolData.bull_reserve), 18));
-    const bearReserveNum = Number(formatUnits(BigInt(poolData.bear_reserve), 18));
-    const bullSupplyNum = Number(formatUnits(BigInt(poolData.bull_supply), 18));
-    const bearSupplyNum = Number(formatUnits(BigInt(poolData.bear_supply), 18));
+    const bullReserveNum = Number(formatUnits(poolData.bull_reserve, 18));
+    const bearReserveNum = Number(formatUnits(poolData.bear_reserve, 18));
+    const bullSupplyNum = Number(formatUnits(poolData.bull_token.fields.total_supply, 18));
+    const bearSupplyNum = Number(formatUnits(poolData.bear_token.fields.total_supply, 18));
     const userBullTokens = Number(formatUnits(userBalances.bull_tokens, 18));
     const userBearTokens = Number(formatUnits(userBalances.bear_tokens, 18));
 
@@ -1380,7 +1429,7 @@ export default function InteractionClient() {
                  </div>
                  </div>
                 <p className="text-neutral-600 dark:text-neutral-400 text-sm mb-2">
-                  {poolData.description}
+                  Prediction Pool
                 </p>
 
                  <div className="flex items-center space-x-2">
@@ -1492,13 +1541,12 @@ export default function InteractionClient() {
               userTokens={userBalances.bull_tokens}
               price={calculations.bullPrice}
               value={calculations.userBullValue}
-              returns={calculations.userBullReturns}
-              symbol={pool?.bull_token?.fields?.symbol || "BULL"}
+              symbol={poolData.bull_token.fields.symbol}
               connected={isConnected}
               handlePoll={handlePoll}
               reserve={calculations.bullReserveNum}
               supply={calculations.bullSupplyNum}
-              tokenAddress={pool?.bull_token?.id}
+              tokenAddress={poolData.bull_token.id}
             />
 
             <div className="lg:col-span-2">
@@ -1643,13 +1691,12 @@ export default function InteractionClient() {
               userTokens={userBalances.bear_tokens}
               price={calculations.bearPrice}
               value={calculations.userBearValue}
-              returns={calculations.userBearReturns}
-              symbol={pool?.bear_token?.fields?.symbol || "BEAR"}
+              symbol={poolData.bear_token.fields.symbol}
               connected={isConnected}
               handlePoll={handlePoll}
               reserve={calculations.bearReserveNum}
               supply={calculations.bearSupplyNum}
-              tokenAddress={pool?.bear_token?.id}
+              tokenAddress={poolData.bear_token.id}
             />
         </div>
 

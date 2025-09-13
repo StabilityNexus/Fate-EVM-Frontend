@@ -118,8 +118,8 @@ const PoolList: React.FC<PoolListProps> = ({
                   bullPercentage={pool.bullPercentage}
                   bearPercentage={pool.bearPercentage}
                   fees={{
-                    mint: pool.mintFee,
-                    burn: pool.burnFee,
+                    mint: pool.mintFee ?? 0,
+                    burn: pool.burnFee ?? 0,
                     creator: pool.vaultCreatorFee,
                     treasury: pool.treasuryFee,
                   }}

@@ -24,9 +24,13 @@ export interface BaseToken {
 
 export interface Token extends BaseToken {
   vault_creator: Address;
-  vault_fee: bigint;
-  vault_creator_fee: bigint;
+  vault_fee?: bigint;
+  vault_creator_fee?: bigint;
   treasury_fee: bigint;
+  // Additional fee properties for compatibility
+  mint_fee?: bigint;
+  burn_fee?: bigint;
+  creator_fee?: bigint;
   asset_balance: bigint;
   supply: bigint;
   prediction_pool: Address;
@@ -65,6 +69,9 @@ export interface Pool extends PredictionPool {
   bullPercentage: number;
   bearPercentage: number;
   previous_price: bigint;
+  // Additional fee properties for compatibility
+  mintFee?: number;
+  burnFee?: number;
 }
 
 export interface PoolStats {

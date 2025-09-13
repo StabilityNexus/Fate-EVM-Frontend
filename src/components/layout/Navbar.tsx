@@ -88,20 +88,20 @@ const Navbar: React.FC<NavbarProps> = ({ className = "" }) => {
                 </li>
                 <li>
                   <Link
-                    href="/#Contact"
+                    href="/create"
                     className="block py-2 text-black dark:text-white hover:text-yellow-400 dark:hover:text-yellow-400"
                     onClick={() => setIsMenuOpen(false)}
                   >
-                    About
+                    Create
                   </Link>
                 </li>
                 <li>
                   <Link
-                    href="/#Contact"
+                    href="/portfolio"
                     className="block py-2 text-black dark:text-white hover:text-yellow-400 dark:hover:text-yellow-400"
                     onClick={() => setIsMenuOpen(false)}
                   >
-                    Learn More
+                    Portfolio
                   </Link>
                 </li>
               </ul>
@@ -124,16 +124,16 @@ const Navbar: React.FC<NavbarProps> = ({ className = "" }) => {
             Explore
           </Link>
           <Link
-            href="/#Contact"
+            href="/create"
             className="hover:text-yellow-400 dark:hover:text-yellow-400 transition-colors"
           >
-            About
+            Create
           </Link>
           <Link
-            href="/#Contact"
+            href="/portfolio"
             className="hover:text-yellow-400 dark:hover:text-yellow-400 transition-colors"
           >
-            Learn More
+            Portfolio
           </Link>
         </nav>
 
