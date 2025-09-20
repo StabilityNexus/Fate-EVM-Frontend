@@ -1,15 +1,19 @@
-export type FormData = {
+export interface FormData {
   poolName: string;
-  poolDescription?: string;
   baseTokenAddress: string;
-  assetId: string;
+  oracleType: 'chainlink' | 'hebeswap';
+  priceFeedAddress: string;
+  hebeswapPairAddress: string;
+  hebeswapQuoteToken: string;
   bullCoinName: string;
   bullCoinSymbol: string;
   bearCoinName: string;
   bearCoinSymbol: string;
-  oracleAddress: string;
   creatorAddress: string;
-  vaultFee: string;
-  vaultCreatorFee: string;
+  mintFee: string;
+  burnFee: string;
+  creatorFee: string;
   treasuryFee: string;
+  quoteTokenAddress?: string; 
+  oracleDescription?: string; 
 };

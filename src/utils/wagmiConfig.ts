@@ -1,38 +1,47 @@
 import {
   mainnet,
   polygon,
-  citreaTestnet,
-  scrollSepolia,
   sepolia,
+  base,
+  bsc,
 } from "wagmi/chains";
+import { ethereumClassic } from "./chains/EthereumClassic";
 import { getDefaultConfig } from "@rainbow-me/rainbowkit";
-import { milkomeda } from "@/utils/chains/Milkomeda";
-import { ethereumClassic } from "@/utils/chains/EthereumClassic";
 import { http } from "wagmi";
 
-// Ensure your environment variable is set properly
 const PROJECT_ID = process.env.NEXT_PUBLIC_PROJECT_ID ?? "DEFAULT_PROJECT_ID";
 
-export const config = getDefaultConfig({
-  appName: "Fate Protocol",
-  projectId: PROJECT_ID,
-  chains: [
-    scrollSepolia,
-    polygon,
-    mainnet,
-    citreaTestnet,
-    ethereumClassic,
-    milkomeda,
-    sepolia,
-  ],
-  transports: {
-    [mainnet.id]: http(),
-    [polygon.id]: http(),
-    [scrollSepolia.id]: http(),
-    [citreaTestnet.id]: http(),
-    [ethereumClassic.id]: http(),
-    [milkomeda.id]: http(),
-    [sepolia.id]: http(),
-  },
-  ssr: false,
-});
+// Memoize the config to prevent recreation
+let memoizedConfig: ReturnType<typeof getDefaultConfig> | null = null;
+
+export const config = (() => {
+  if (memoizedConfig) {
+    return memoizedConfig;
+  }
+  
+  memoizedConfig = getDefaultConfig({
+    appName: "Fate Protocol",
+    projectId: PROJECT_ID,
+    chains: [
+      mainnet,    // 1 - Ethereum Mainnet
+      polygon,    // 137 - Polygon
+      bsc,        // 56 - BSC Mainnet
+      base,       // 8453 - Base Mainnet
+      ethereumClassic, // 61 - Ethereum Classic
+      sepolia,    // 11155111 - Sepolia Testnet
+    ],
+    transports: {
+      [mainnet.id]: http(),
+      [polygon.id]: http(),
+      [bsc.id]: http(),
+      [base.id]: http(),
+      [ethereumClassic.id]: http(),
+      [sepolia.id]: http(),
+    },
+    ssr: false, // Disable SSR to prevent wallet disconnection issues
+    // Add connection persistence
+    // enableAnalytics: false, // Disable analytics to prevent connection issues
+  });
+  
+  return memoizedConfig;
+})();

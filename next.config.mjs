@@ -1,10 +1,11 @@
+/** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'export',
-  distDir: 'out',
+  //trailingSlash: true,
+  distDir:"out",
   images: {
     unoptimized: true,
   },
-  basePath: ''
 };
 
 export default nextConfig;

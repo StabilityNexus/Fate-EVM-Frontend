@@ -117,7 +117,7 @@ export default function Footer() {
             className="cursor-pointer"
           >
             <Image
-              src="/logo-animated.gif"
+              src="./logo-animated.gif"
               alt="Fate Protocol"
               width={80}
               height={80}

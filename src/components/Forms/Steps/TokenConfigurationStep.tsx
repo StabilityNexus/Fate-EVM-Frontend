@@ -20,14 +20,6 @@ const TokenConfigurationStep: React.FC<TokenConfigurationStepProps> = ({
 }) => {
   return (
     <div className="space-y-6">
-      <div className="text-center mb-6">
-        <h2 className="text-2xl font-bold text-black dark:text-white mb-2">
-          Token Configuration
-        </h2>
-        <p className="text-gray-600 dark:text-gray-400">
-          Configure your bull and bear tokens
-        </p>
-      </div>
 
       <div className="grid md:grid-cols-2 gap-6">
         {/* Bull Token */}

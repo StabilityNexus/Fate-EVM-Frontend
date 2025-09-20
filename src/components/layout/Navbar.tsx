@@ -48,7 +48,7 @@ const Navbar: React.FC<NavbarProps> = ({ className = "" }) => {
         </div>
 
         {/* Mobile Menu Toggle */}
-        <div className="flex items-center space-x-4 md:hidden">
+        <div className="flex items-center space-x-4 max-[900px]:flex hidden">
           <button
             className="z-20 relative"
             onClick={() => setIsMenuOpen(!isMenuOpen)}
@@ -80,7 +80,7 @@ const Navbar: React.FC<NavbarProps> = ({ className = "" }) => {
                 <li>
                   <Link
                     href="/explorePools"
-                    className="block py-2 hover:text-blue-600 dark:text-white"
+                    className="block py-2 text-black dark:text-white hover:text-yellow-400 dark:hover:text-yellow-400"
                     onClick={() => setIsMenuOpen(false)}
                   >
                     Explore
@@ -88,20 +88,20 @@ const Navbar: React.FC<NavbarProps> = ({ className = "" }) => {
                 </li>
                 <li>
                   <Link
-                    href="/#Contact"
-                    className="block py-2 hover:text-blue-600 dark:text-white"
+                    href="/create"
+                    className="block py-2 text-black dark:text-white hover:text-yellow-400 dark:hover:text-yellow-400"
                     onClick={() => setIsMenuOpen(false)}
                   >
-                    About
+                    Create
                   </Link>
                 </li>
                 <li>
                   <Link
-                    href="/#Contact"
-                    className="block py-2 hover:text-blue-600 dark:text-white"
+                    href="/portfolio"
+                    className="block py-2 text-black dark:text-white hover:text-yellow-400 dark:hover:text-yellow-400"
                     onClick={() => setIsMenuOpen(false)}
                   >
-                    Learn More
+                    Portfolio
                   </Link>
                 </li>
               </ul>
@@ -112,24 +112,33 @@ const Navbar: React.FC<NavbarProps> = ({ className = "" }) => {
         {/* Desktop Navigation Links - Centered */}
         <nav
           className={cn(
-            "hidden md:flex absolute left-1/2 transform -translate-x-1/2 space-x-8 text-md text-center px-8 py-2 rounded-full",
-            "bg-black/10 dark:bg-white/20 dark:text-white backdrop-blur-sm",
+            "hidden min-[900px]:flex absolute left-1/2 transform -translate-x-1/2 space-x-8 text-md text-center px-8 py-2 rounded-full",
+            "bg-[#f0f1f4] dark:bg-[#1a1b1f] dark:text-white backdrop-blur-sm",
             "font-[var(--font-bebas-nueue)]"
           )}
         >
-          <Link href="/explorePools" className="hover:text-blue-600 transition-colors">
+          <Link
+            href="/explorePools"
+            className="hover:text-yellow-400 dark:hover:text-yellow-400 transition-colors"
+          >
             Explore
           </Link>
-          <Link href="/#Contact" className="hover:text-blue-600 transition-colors">
-            About
+          <Link
+            href="/createPool"
+            className="hover:text-yellow-400 dark:hover:text-yellow-400 transition-colors"
+          >
+            Create
           </Link>
-          <Link href="/#Contact" className="hover:text-blue-600 transition-colors">
-            Learn More
+          <Link
+            href="/portfolio"
+            className="hover:text-yellow-400 dark:hover:text-yellow-400 transition-colors"
+          >
+            Portfolio
           </Link>
         </nav>
 
         {/* Theme Toggle & Connect Button - Right Side */}
-        <div className="hidden md:flex items-center space-x-4">
+        <div className="hidden min-[900px]:flex items-center space-x-4">
           <ModeToggle />
           <WalletButton />
         </div>

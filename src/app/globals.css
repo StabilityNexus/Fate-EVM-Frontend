@@ -7,6 +7,13 @@
   --foreground: #171717;
 }
 
+/* Dark mode overrides */
+.dark {
+  --background: #0a0a0a;
+  --foreground: #ededed;
+}
+
+/* Prevent flash of wrong theme on page load */
 @media (prefers-color-scheme: dark) {
   :root {
     --background: #0a0a0a;
@@ -14,10 +21,36 @@
   }
 }
 
+/* Add this to prevent theme flash */
+html {
+  background-color: var(--background);
+  color: var(--foreground);
+  transition: background-color 0.1s ease-in-out, color 0.1s ease-in-out;
+}
+
+/* Ensure body also has the correct background */
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  transition: background-color 0.1s ease-in-out, color 0.1s ease-in-out;
+}
+
+/* Additional theme flash prevention */
+html.dark {
+  background-color: #0a0a0a;
+  color: #ededed;
+}
+
+html:not(.dark) {
+  background-color: #ffffff;
+  color: #171717;
+}
+
 body {
   color: var(--foreground);
   background: var(--background);
   font-family: Arial, Helvetica, sans-serif;
+  transition: background-color 0.1s ease-in-out, color 0.1s ease-in-out;
 }
 
 ::-webkit-scrollbar {
@@ -90,4 +123,153 @@ body {
 .hero-button-dark:hover {
   background-color: black;
   color: white;
+}
+
+/* CSS Loader Animation */
+.loader {
+  width: 100px;
+  aspect-ratio: 1;
+  padding: 10px;
+  box-sizing: border-box;
+  display: grid;
+  background: var(--loader-container-bg);
+  border-radius: 8px;
+}
+
+.loader:before,
+.loader:after {
+  content: "";
+  grid-area: 1/1;
+  width: 40px;
+  height: 40px;
+  background: var(--loader-element-bg);
+  animation: l7 2s infinite;
+  border-radius: 4px;
+}
+
+.loader:after {
+  animation-delay: -1s;
+}
+
+/* Light mode: white background, black animation */
+:root {
+  --loader-container-bg: #ffffff;
+  --loader-element-bg: #000000;
+  --loader-blend-mode: normal;
+}
+
+/* Dark mode: black background, white animation */
+.dark {
+  --loader-container-bg: #000000;
+  --loader-element-bg: #ffffff;
+  --loader-blend-mode: normal;
+}
+
+@keyframes l7 {
+  0% { transform: translate(0, 0); }
+  25% { transform: translate(100%, 0); }
+  50% { transform: translate(100%, 100%); }
+  75% { transform: translate(0, 100%); }
+  100% { transform: translate(0, 0); }
+}
+
+/* Custom wallet button styling - More specific selectors */
+[data-testid="rk-connect-button"],
+[data-testid="rk-connect-button"] button,
+[data-testid="rk-connect-button"] > div,
+.rainbow-kit-connect-button,
+.rainbow-kit-connect-button button {
+  background-color: black !important;
+  color: white !important;
+  border: 2px solid black !important;
+  border-radius: 8px !important;
+  font-weight: 600 !important;
+  transition: all 0.2s ease !important;
+  box-shadow: none !important;
+}
+
+[data-testid="rk-connect-button"]:hover,
+[data-testid="rk-connect-button"] button:hover,
+[data-testid="rk-connect-button"] > div:hover,
+.rainbow-kit-connect-button:hover,
+.rainbow-kit-connect-button button:hover {
+  background-color: #333333 !important;
+  border-color: #333333 !important;
+  color: white !important;
+}
+
+/* Dark mode wallet button */
+.dark [data-testid="rk-connect-button"],
+.dark [data-testid="rk-connect-button"] button,
+.dark [data-testid="rk-connect-button"] > div,
+.dark .rainbow-kit-connect-button,
+.dark .rainbow-kit-connect-button button {
+  background-color: white !important;
+  color: black !important;
+  border: 2px solid white !important;
+}
+
+.dark [data-testid="rk-connect-button"]:hover,
+.dark [data-testid="rk-connect-button"] button:hover,
+.dark [data-testid="rk-connect-button"] > div:hover,
+.dark .rainbow-kit-connect-button:hover,
+.dark .rainbow-kit-connect-button button:hover {
+  background-color: #f0f0f0 !important;
+  border-color: #f0f0f0 !important;
+  color: black !important;
+}
+
+/* Override any RainbowKit default styles */
+[data-testid="rk-connect-button"] *,
+.rainbow-kit-connect-button * {
+  background-color: inherit !important;
+  color: inherit !important;
+  border-color: inherit !important;
+}
+
+/* Additional RainbowKit button overrides */
+.rainbow-kit-connect-button,
+.rainbow-kit-connect-button__button,
+[data-testid="rk-connect-button"] .rainbow-kit-connect-button__button {
+  background-color: black !important;
+  color: white !important;
+  border: 2px solid black !important;
+  border-radius: 8px !important;
+  font-weight: 600 !important;
+  transition: all 0.2s ease !important;
+  box-shadow: none !important;
+}
+
+.rainbow-kit-connect-button:hover,
+.rainbow-kit-connect-button__button:hover,
+[data-testid="rk-connect-button"] .rainbow-kit-connect-button__button:hover {
+  background-color: #333333 !important;
+  border-color: #333333 !important;
+  color: white !important;
+}
+
+/* Dark mode overrides */
+.dark .rainbow-kit-connect-button,
+.dark .rainbow-kit-connect-button__button,
+.dark [data-testid="rk-connect-button"] .rainbow-kit-connect-button__button {
+  background-color: white !important;
+  color: black !important;
+  border: 2px solid white !important;
+}
+
+.dark .rainbow-kit-connect-button:hover,
+.dark .rainbow-kit-connect-button__button:hover,
+.dark [data-testid="rk-connect-button"] .rainbow-kit-connect-button__button:hover {
+  background-color: #f0f0f0 !important;
+  border-color: #f0f0f0 !important;
+  color: black !important;
+}
+
+/* Fix exclamation icon color to red */
+.text-red-500 {
+  color: #ef4444 !important;
+}
+
+.text-red-600 {
+  color: #dc2626 !important;
 }

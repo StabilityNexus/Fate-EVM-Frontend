@@ -1,23 +1,4 @@
-export const PredictionPoolFactoryABI=[
-  {
-    "type": "function",
-    "name": "allPools",
-    "inputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "stateMutability": "view"
-  },
+export const PredictionPoolFactoryABI = [
   {
     "type": "function",
     "name": "createPool",
@@ -33,12 +14,42 @@ export const PredictionPoolFactoryABI=[
         "internalType": "address"
       },
       {
-        "name": "vaultFee",
+        "name": "oracle",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "bullName",
+        "type": "string",
+        "internalType": "string"
+      },
+      {
+        "name": "bullSymbol",
+        "type": "string",
+        "internalType": "string"
+      },
+      {
+        "name": "bearName",
+        "type": "string",
+        "internalType": "string"
+      },
+      {
+        "name": "bearSymbol",
+        "type": "string",
+        "internalType": "string"
+      },
+      {
+        "name": "mintFee",
         "type": "uint256",
         "internalType": "uint256"
       },
       {
-        "name": "vaultCreatorFee",
+        "name": "burnFee",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "creatorFee",
         "type": "uint256",
         "internalType": "uint256"
       },
@@ -46,16 +57,6 @@ export const PredictionPoolFactoryABI=[
         "name": "treasuryFee",
         "type": "uint256",
         "internalType": "uint256"
-      },
-      {
-        "name": "oracle",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "priceFeedId",
-        "type": "bytes32",
-        "internalType": "bytes32"
       }
     ],
     "outputs": [
@@ -76,6 +77,94 @@ export const PredictionPoolFactoryABI=[
         "name": "",
         "type": "address[]",
         "internalType": "address[]"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getPoolCount",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "isValidOracle",
+    "inputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "registerOracle",
+    "inputs": [
+      {
+        "name": "oracle",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "poolsByCreator",
+    "inputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "allPools",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
       }
     ],
     "stateMutability": "view"
@@ -107,8 +196,25 @@ export const PredictionPoolFactoryABI=[
         "type": "address",
         "indexed": false,
         "internalType": "address"
+      },
+      {
+        "name": "oracle",
+        "type": "address",
+        "indexed": false,
+        "internalType": "address"
       }
     ],
     "anonymous": false
+  },
+  {
+    "type": "error",
+    "name": "InvalidFeeConfiguration",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidAddress",
+    "inputs": []
   }
-]
+];
+
