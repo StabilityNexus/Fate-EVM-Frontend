@@ -12,7 +12,6 @@ import {
   X
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useAccount, useWalletClient } from "wagmi";
 import { toast } from "sonner";
 import { isAddress } from "viem";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
@@ -24,8 +23,6 @@ interface BottomNavigationProps {
 const BottomNavigation: React.FC<BottomNavigationProps> = ({ isConnected }) => {
   const pathname = usePathname();
   const router = useRouter();
-  const {} = useAccount();
-  const {} = useWalletClient();
   const [isUsePoolOpen, setIsUsePoolOpen] = useState(false);
   const [poolAddress, setPoolAddress] = useState("");
 

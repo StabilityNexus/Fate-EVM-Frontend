@@ -17,6 +17,7 @@ const ViewToggle: React.FC<ViewToggleProps> = ({ viewMode, onViewModeChange }) =
             : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
         }`}
         type="button"
+        aria-label="Grid view"
       >
         <Grid2X2 size={16} />
       </button>
@@ -28,6 +29,7 @@ const ViewToggle: React.FC<ViewToggleProps> = ({ viewMode, onViewModeChange }) =
             : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
         }`}
         type="button"
+        aria-label="Table view"
       >
         <List size={16} />
       </button>
