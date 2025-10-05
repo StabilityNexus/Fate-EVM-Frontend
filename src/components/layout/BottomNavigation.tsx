@@ -13,7 +13,6 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAccount, useWalletClient } from "wagmi";
-import { getChainConfig } from "@/utils/chainConfig";
 import { toast } from "sonner";
 import { isAddress } from "viem";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
@@ -25,8 +24,8 @@ interface BottomNavigationProps {
 const BottomNavigation: React.FC<BottomNavigationProps> = ({ isConnected }) => {
   const pathname = usePathname();
   const router = useRouter();
-  const { address, chainId } = useAccount();
-  const { data: walletClient } = useWalletClient();
+  const {} = useAccount();
+  const {} = useWalletClient();
   const [isUsePoolOpen, setIsUsePoolOpen] = useState(false);
   const [poolAddress, setPoolAddress] = useState("");
 
@@ -82,7 +81,7 @@ const BottomNavigation: React.FC<BottomNavigationProps> = ({ isConnected }) => {
         <div className="px-2">
           <div className="flex items-center justify-between w-full max-w-md mx-auto">
             {/* Left side navigation items */}
-            {navItems.slice(0, 2).map((item, index) => {
+            {navItems.slice(0, 2).map((item) => {
               const Icon = item.icon;
               
               return (
@@ -214,7 +213,7 @@ const BottomNavigation: React.FC<BottomNavigationProps> = ({ isConnected }) => {
             </div>
             
             {/* Right side navigation items */}
-            {navItems.slice(2).map((item, index) => {
+            {navItems.slice(2).map((item) => {
               const Icon = item.icon;
               
               return (

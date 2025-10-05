@@ -1,5 +1,5 @@
 import React from "react";
-import { Plus, Wallet, RefreshCw } from "lucide-react";
+import { Plus, RefreshCw } from "lucide-react";
 
 interface ExploreHeaderProps {
   isConnected: boolean;

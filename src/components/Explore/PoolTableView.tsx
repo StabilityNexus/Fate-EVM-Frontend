@@ -2,7 +2,6 @@ import React from "react";
 import { ExternalLink, TrendingUp, TrendingDown } from "lucide-react";
 import type { Pool } from "@/lib/types";
 import { getPriceFeedName as getPriceFeedNameUtil } from "@/utils/supportedChainFeed";
-import { getChainConfig as getChainConfigUtil } from "@/utils/chainConfig";
 import { getHebeswapPairByAddress } from "@/utils/hebeswapConfig";
 
 // Helper function to get oracle name/description
