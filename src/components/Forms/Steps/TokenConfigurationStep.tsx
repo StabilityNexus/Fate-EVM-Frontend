@@ -24,7 +24,7 @@ const TokenConfigurationStep: React.FC<TokenConfigurationStepProps> = ({
       <div className="grid md:grid-cols-2 gap-6">
         {/* Bull Token */}
         <div className="space-y-4">
-          <h3 className="text-lg font-semibold text-green-600 dark:text-green-400">
+          <h3 className="text-sm md:text-lg font-semibold text-green-600 dark:text-green-400">
             Bull Token
           </h3>
 
@@ -75,7 +75,7 @@ const TokenConfigurationStep: React.FC<TokenConfigurationStepProps> = ({
 
         {/* Bear Token */}
         <div className="space-y-4">
-          <h3 className="text-lg font-semibold text-red-600 dark:text-red-400">
+          <h3 className="text-sm md:text-lg font-semibold text-red-600 dark:text-red-400">
             Bear Token
           </h3>
 

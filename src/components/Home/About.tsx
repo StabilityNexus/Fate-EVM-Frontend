@@ -59,16 +59,16 @@ export default function AboutSection() {
       <div className="absolute inset-0 bg-gradient-to-br from-white to-gray-300 dark:from-black dark:via-gray-900 dark:to-gray-800 opacity-60 blur-2xl pointer-events-none" />
 
       <div className="container mx-auto px-10">
-        <h2 className="text-4xl font-bold text-center mb-12 text-black dark:text-white tracking-widest">
+        <h2 className="text-2xl md:text-4xl font-bold text-center mb-12 text-black dark:text-white tracking-widest">
           Redefining Prediction Markets
         </h2>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 text-center md:text-left md:grid-cols-3 gap-8">
           {features.map((feature, index) => (
             <motion.div
               key={index}
               whileHover={{ scale: 1.05 }}
-              className="bg-white/30 dark:bg-black/30 backdrop-blur-md shadow-md border border-white dark:border-gray-700 rounded-xl p-6 transition-all duration-300"
+              className="bg-white/30 dark:bg-black/30 backdrop-blur-md shadow-md border border-white dark:border-gray-700 rounded-xl p-2 md:p-6 transition-all duration-300"
             >
               <CardHeader>
                 <div className="flex justify-center">{feature.icon}</div>
@@ -84,7 +84,7 @@ export default function AboutSection() {
         </div>
 
         {/* Meaningful Outro Statement */}
-        <div className="mt-20 text-center text-black dark:text-white text-lg">
+        <div className="mt-20 text-center text-black dark:text-white text-md md:text-lg">
           <p>
             *In a world of uncertainty, we provide clarity — empowering you to predict, protect, and prosper.*
           </p>

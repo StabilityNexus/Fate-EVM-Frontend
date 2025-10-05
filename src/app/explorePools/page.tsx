@@ -39,6 +39,11 @@ const getSupportedChains = (): string => {
     .join(", ");
 };
 
+// Helper function to get supported chains count
+const getSupportedChainsCount = (): number => {
+  return Object.keys(FatePoolFactories as FactoryAddresses).length;
+};
+
 // Client-side wrapper component
 function ExploreFatePoolsClient() {
   const [pools, setPools] = useState<Pool[]>([]);
@@ -48,6 +53,7 @@ function ExploreFatePoolsClient() {
   const [chainStates, setChainStates] = useState<ChainLoadingState[]>([]);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [lastFetchTime, setLastFetchTime] = useState<number>(0);
+  const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
 
   const router = useRouter();
   const { isConnected } = useAccount();
@@ -572,7 +578,7 @@ function ExploreFatePoolsClient() {
         <ExploreHeader
           isConnected={isConnected}
           currentChainName={currentChainName}
-          supportedChainsList={getSupportedChains()}
+          supportedChainsCount={getSupportedChainsCount()}
           loading={loading}
           refreshing={refreshing}
           onRefresh={handleRefresh}
@@ -594,6 +600,8 @@ function ExploreFatePoolsClient() {
           searchQuery={searchQuery}
           onSearchChange={(e) => setSearchQuery(e.target.value)}
           onClearSearch={clearSearch}
+          viewMode={viewMode}
+          onViewModeChange={setViewMode}
         />
         <PoolList
           loading={loading}
@@ -606,6 +614,7 @@ function ExploreFatePoolsClient() {
           currentChainId={currentChainId}
           isConnected={isConnected}
           isConnectedChainSupported={isConnectedChainSupported}
+          viewMode={viewMode}
         />
       </div>
     </div>

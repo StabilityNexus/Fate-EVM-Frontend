@@ -115,14 +115,14 @@ const Hero = () => {
       {/* Background Content */}
       <div className="absolute inset-0 flex flex-col items-center justify-center bg-black dark:bg-white">
         <h1
-          className="text-white dark:text-black text-8xl font-bold text-center font-italiannoRegular"
+          className="text-white dark:text-black text-4xl md:text-8xl font-bold text-center font-italiannoRegular"
           onMouseEnter={() => setIsHovered(true)}
           onMouseLeave={() => setIsHovered(false)}
         >
           Fate Protocol
         </h1>
         <p
-          className="text-white dark:text-black text-2xl mt-4 text-center"
+          className="text-white dark:text-black text-md md:text-2xl mt-4 text-center"
           onMouseEnter={() => setIsHovered(true)}
           onMouseLeave={() => setIsHovered(false)}
         >
@@ -155,14 +155,14 @@ const Hero = () => {
         }}
       >
         <h1
-          className="text-black dark:text-white text-8xl font-bold text-center font-italiannoRegular"
+          className="text-black dark:text-white text-4xl md:text-8xl font-bold text-center font-italiannoRegular"
           onMouseEnter={() => setIsHovered(true)}
           onMouseLeave={() => setIsHovered(false)}
         >
           Fate Protocol
         </h1>
         <p
-          className="text-black dark:text-white text-2xl mt-4 text-center"
+          className="text-black dark:text-white text-md md:text-2xl mt-4 text-center"
           onMouseEnter={() => setIsHovered(true)}
           onMouseLeave={() => setIsHovered(false)}
         >
@@ -219,11 +219,11 @@ const ButtonGroup = ({
   handleSubmit: () => void;
   isForeground?: boolean;
 }) => (
-  <div className="flex gap-4 justify-center mt-8">
+  <div className="flex flex-col w-2/3 sm:flex-row md:flex-row gap-4 justify-center mt-8">
     <Link href="/createPool">
       <button
         className={cn(
-          'px-6 py-3 border-2 rounded-full text-lg transition-all duration-300',
+          'px-6 w-full py-3 border-2 rounded-full text-md md:text-lg transition-all duration-300',
           resolvedTheme === (isForeground ? 'dark' : 'light')
             ? 'border-white text-white hover:bg-white hover:text-black'
             : 'border-black text-black hover:bg-black hover:text-white'
@@ -236,7 +236,7 @@ const ButtonGroup = ({
     <Link href="/explorePools">
       <button
         className={cn(
-          'px-6 py-3 border-2 rounded-full text-lg transition-all duration-300',
+          'px-6 w-full py-3 border-2 rounded-full text-md md:text-lg transition-all duration-300',
           resolvedTheme === (isForeground ? 'dark' : 'light')
             ? 'border-white text-white hover:bg-white hover:text-black'
             : 'border-black text-black hover:bg-black hover:text-white'
@@ -249,7 +249,7 @@ const ButtonGroup = ({
     <button
       onClick={() => setIsModalOpen(true)}
       className={cn(
-        'px-6 py-3 border-2 rounded-full text-lg transition-all duration-300',
+        'px-6 py-3 border-2 rounded-full text-md md:text-lg transition-all duration-300',
         resolvedTheme === (isForeground ? 'dark' : 'light')
           ? 'border-white text-white hover:bg-white hover:text-black'
           : 'border-black text-black hover:bg-black hover:text-white'

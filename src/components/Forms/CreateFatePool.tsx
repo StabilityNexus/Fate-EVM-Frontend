@@ -386,10 +386,10 @@ export default function CreateFatePool() {
         <div className="max-w-md w-full bg-white dark:bg-black rounded-lg shadow-lg p-8 text-center">
           <div className="flex flex-col items-center space-y-4">
                             <AlertCircle className="w-12 h-12 text-red-500" />
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+            <h2 className="text-lg md:text-2xl font-bold text-gray-900 dark:text-white">
               Connect Your Wallet
             </h2>
-            <p className="text-gray-600 dark:text-gray-300">
+            <p className="text-sm md:text-base text-gray-600 dark:text-gray-300">
               Please connect your wallet to create a prediction pool
             </p>
             <ConnectButton />
@@ -405,15 +405,15 @@ export default function CreateFatePool() {
         <div className="max-w-md w-full bg-white dark:bg-gray-800 rounded-lg shadow-lg p-8 text-center">
           <div className="flex flex-col items-center space-y-4">
                             <AlertCircle className="w-12 h-12 text-red-500" />
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+            <h2 className="text-lg md:text-2xl font-bold text-gray-900 dark:text-white">
               Unsupported Network
             </h2>
-            <p className="text-gray-600 dark:text-gray-300">
+            <p className="text-sm md:text-base text-gray-600 dark:text-gray-300">
               Please switch to a supported network to create a prediction pool
             </p>
-            <div className="text-sm text-gray-500 space-y-1">
+            <div className="text-xs md:text-sm text-gray-500 space-y-1">
               <p className="font-medium">Supported networks:</p>
-              <ul className="text-xs space-y-0.5">
+              <ul className="text-xs md:text-sm space-y-0.5">
                 <li>• Ethereum Mainnet (1)</li>
                 <li>• Polygon (137)</li>
                 <li>• Scroll Sepolia (534352)</li>
@@ -433,10 +433,10 @@ export default function CreateFatePool() {
       <div className="max-w-3xl mx-auto">
         <div className="bg-white dark:bg-black rounded-xl shadow-md overflow-hidden">
           <div className="p-6 sm:p-8">
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white text-center mb-2">
+            <h1 className="text-lg md:text-2xl font-bold text-gray-900 dark:text-white text-center mb-2">
               Create Fate Pool
             </h1>
-            <p className="text-gray-600 dark:text-gray-300 text-center mb-8">
+            <p className="text-sm md:text-base text-gray-600 dark:text-gray-300 text-center mb-8">
               Set up your prediction pool in a few simple steps
             </p>
 
@@ -486,7 +486,7 @@ export default function CreateFatePool() {
                       onClick={prevStep}
                       disabled={currentStep === 1}
                       className={`
-                        px-6 py-2.5 rounded-xl font-medium
+                        px-4 py-2 md:px-6 md:py-2.5 rounded-xl font-medium text-sm md:text-base
                         transition-all duration-300 ease-in-out
                         bg-gray-300 text-gray-800 hover:bg-gray-200
                         dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700
@@ -500,7 +500,7 @@ export default function CreateFatePool() {
                     <button
                       type="button"
                       onClick={nextStep}
-                      className="px-6 py-2.5 rounded-xl font-semibold 
+                      className="px-4 py-2 md:px-6 md:py-2.5 rounded-xl font-semibold text-sm md:text-base
                                  transition-all duration-300 ease-in-out 
                                  bg-neutral-900 text-white hover:bg-neutral-700
                                  dark:bg-neutral-100 dark:text-black dark:hover:bg-neutral-200 

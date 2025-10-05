@@ -105,10 +105,14 @@ const navigation = [
   },
 ];
 
-export default function Footer() {
+interface FooterProps {
+  className?: string;
+}
+
+export default function Footer({ className = "" }: FooterProps) {
   return (
-    <footer className="w-full  rounded-lg backdrop-blur-md bg-white/10 dark:bg-black shadow-lg border border-white/10 dark:border-black/10">
-      <div className="px-8 py-6 space-y-6">
+    <footer className={`w-full rounded-lg backdrop-blur-md bg-white/10 dark:bg-black shadow-lg border border-white/10 dark:border-black/10 ${className}`}>
+      <div className="px-4 sm:px-8  py-6 space-y-6">
         {/* Logo and Social Links */}
         <div className="flex flex-col  md:flex-row ">
           <div className="w-full flex mb-4 md:mb-0 justify-between"><Link
@@ -117,7 +121,7 @@ export default function Footer() {
             className="cursor-pointer"
           >
             <Image
-              src="./logo-animated.gif"
+              src="/logo-animated.gif"
               alt="Fate Protocol"
               width={80}
               height={80}
@@ -125,12 +129,12 @@ export default function Footer() {
               priority
             />
           </Link>
-            <h5 className="text-xl sm:hidden md:hidden flex justify-center items-center">
+            <h5 className="text-md sm:hidden md:hidden flex justify-center items-center">
               A Project by Stability Nexus
             </h5>
 
           </div>
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-3 sm:space-x-4">
             {navigation.map((item) => (
               <Link
                 key={item.name}
