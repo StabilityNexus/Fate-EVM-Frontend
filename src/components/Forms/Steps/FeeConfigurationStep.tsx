@@ -67,10 +67,10 @@ const FeeConfigurationStep: React.FC<FeeConfigurationStepProps> = ({
   return (
     <div className="space-y-6">
       <div className="text-center mb-6">
-        <h2 className="text-2xl font-bold text-black dark:text-white mb-2">
+        <h2 className="text-lg md:text-2xl font-bold text-black dark:text-white mb-2">
           Fee Configuration
         </h2>
-        <p className="text-gray-600 dark:text-gray-400">
+        <p className="text-sm md:text-base text-gray-600 dark:text-gray-400">
           Configure fee structure for your pool
         </p>
       </div>

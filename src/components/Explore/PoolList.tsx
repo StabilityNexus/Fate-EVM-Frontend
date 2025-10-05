@@ -1,5 +1,6 @@
 import React from "react";
 import { PredictionCard } from "@/components/FatePoolCard/FatePoolCard";
+import PoolTableView from "./PoolTableView";
 import type { Pool } from "@/lib/types";
 import { getPriceFeedName as getPriceFeedNameUtil } from "@/utils/supportedChainFeed";
 import { getChainConfig as getChainConfigUtil } from "@/utils/chainConfig";
@@ -31,6 +32,7 @@ interface PoolListProps {
   currentChainId?: number;
   isConnected?: boolean;
   isConnectedChainSupported?: boolean;
+  viewMode: 'grid' | 'table';
 }
 
 const PoolList: React.FC<PoolListProps> = ({
@@ -44,8 +46,34 @@ const PoolList: React.FC<PoolListProps> = ({
   currentChainId,
   isConnected,
   isConnectedChainSupported,
+  viewMode,
 }) => {
   if (loading) {
+    if (viewMode === 'table') {
+      return (
+        <div className="overflow-x-auto">
+          <div className="w-full border-collapse">
+            <div className="border-b border-gray-200 dark:border-gray-700">
+              <div className="grid grid-cols-5 gap-4 py-3 px-4">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="h-4 bg-gray-200 dark:bg-gray-700 animate-pulse rounded" />
+                ))}
+              </div>
+            </div>
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="border-b border-gray-100 dark:border-gray-800">
+                <div className="grid grid-cols-5 gap-4 py-4 px-4">
+                  {Array.from({ length: 5 }).map((_, j) => (
+                    <div key={j} className="h-4 bg-gray-200 dark:bg-gray-700 animate-pulse rounded" />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+    
     return (
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {Array.from({ length: 6 }).map((_, i) => (
@@ -91,6 +119,25 @@ const PoolList: React.FC<PoolListProps> = ({
             Clear search
           </button>
         )}
+      </div>
+    );
+  }
+
+  if (viewMode === 'table') {
+    return (
+      <div className="space-y-8">
+        {sortedChainIds.map((chainId) => (
+          <div key={chainId}>
+            <h2 className="text-2xl font-bold text-black dark:text-white mb-6">
+              Pools on {getChainConfigUtil(chainId)?.name || `Chain ${chainId}`}
+            </h2>
+            <PoolTableView
+              pools={groupedPools[chainId]}
+              onUsePool={onUsePool}
+              isConnected={isConnected || false}
+            />
+          </div>
+        ))}
       </div>
     );
   }

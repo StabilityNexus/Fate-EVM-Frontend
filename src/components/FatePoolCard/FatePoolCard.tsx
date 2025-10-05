@@ -154,7 +154,7 @@ export function PredictionCard({
               onUse();
             }
           }}
-          className="w-full relative group/button py-4 px-6 bg-black dark:bg-white text-white dark:text-black rounded-2xl font-semibold 
+          className="w-full relative group/button py-4 sm:px-6 px-2 bg-black dark:bg-white text-white dark:text-black rounded-2xl font-semibold 
           flex items-center justify-center gap-3 transition-all duration-300
           hover:bg-gray-800 dark:hover:bg-gray-100 hover:shadow-lg hover:shadow-black/25 dark:hover:shadow-white/25
           active:scale-[0.98] border border-black dark:border-white

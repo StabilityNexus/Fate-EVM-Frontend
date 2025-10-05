@@ -48,14 +48,15 @@ function TradingViewWidget({
     console.log('TradingViewWidget - AssetId:', assetId);
     console.log('TradingViewWidget - CoinId:', coinId);
 
+    const currentSlot = slotRef.current;
     const script = document.createElement("script");
     script.src =
       "https://widgets.coingecko.com/gecko-coin-price-chart-widget.js";
     script.async = true;
     script.onload = () => {
       console.log('CoinGecko script loaded');
-      if (slotRef.current) {
-        slotRef.current.innerHTML = `
+      if (currentSlot) {
+        currentSlot.innerHTML = `
           <gecko-coin-price-chart-widget
             locale="en"
             outlined="false"
@@ -73,11 +74,10 @@ function TradingViewWidget({
     script.onerror = (error) => {
       console.error('Failed to load CoinGecko script:', error);
     };
-    slotRef.current.innerHTML = "";
-    slotRef.current.appendChild(script);
+    currentSlot.innerHTML = "";
+    currentSlot.appendChild(script);
 
     return () => {
-      const currentSlot = slotRef.current;
       if (currentSlot) currentSlot.innerHTML = "";
     };
   }, [assetId, coinId, contentHeight, theme]);

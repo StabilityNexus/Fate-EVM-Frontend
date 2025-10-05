@@ -116,9 +116,9 @@ export const useFatePoolsStorage = (): UseFatePoolsStorageReturn => {
   }, []);
 
   // Helper function to check if operations are allowed
-  const canOperate = () => {
+  const canOperate = useCallback(() => {
     return isClient && isClientRef.current && typeof window !== 'undefined';
-  };
+  }, [isClient]);
 
   // Monitor online status only on client
   useEffect(() => {
@@ -219,7 +219,7 @@ export const useFatePoolsStorage = (): UseFatePoolsStorageReturn => {
         throw err;
       }
     },
-    [isInitialized, address]
+    [isInitialized, address, canOperate]
   );
 
   const getPoolDetails = useCallback(

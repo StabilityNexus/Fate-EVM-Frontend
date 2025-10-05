@@ -61,7 +61,7 @@ export default function RootLayout({
             {children}
             </main>
           
-          <Footer />
+          <Footer className="pb-20 lg:pb-4" />
           </ClientProviders>
         </ThemeProvider>
       </body>

@@ -30,10 +30,10 @@ const ReviewStep: React.FC<ReviewStepProps> = ({
   return (
     <div className="space-y-6">
       <div className="text-center mb-6">
-        <h2 className="text-2xl font-bold text-black dark:text-white mb-2">
+        <h2 className="text-lg md:text-2xl font-bold text-black dark:text-white mb-2">
           Review & Submit
         </h2>
-        <p className="text-gray-600 dark:text-gray-400">
+        <p className="text-sm md:text-base text-gray-600 dark:text-gray-400">
           Review your configuration before creating the pool
         </p>
       </div>
@@ -182,7 +182,7 @@ const ReviewStep: React.FC<ReviewStepProps> = ({
             onClick={onBack}
             disabled={isSubmitting}
             className={`
-              px-6 py-2.5 rounded-xl font-medium
+              px-4 py-2 md:px-6 md:py-2.5 rounded-xl font-medium text-sm md:text-base
               transition-all duration-300 ease-in-out
               bg-gray-300 text-gray-800 hover:bg-gray-200
               dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700
@@ -204,7 +204,7 @@ const ReviewStep: React.FC<ReviewStepProps> = ({
                 preventDefault: () => {},
               } as React.FormEvent<HTMLFormElement>);
             }}
-            className="px-6 py-2.5 rounded-xl font-semibold 
+            className="px-4 py-2 md:px-6 md:py-2.5 rounded-xl font-semibold text-sm md:text-base
                       transition-all duration-300 ease-in-out 
                       bg-neutral-900 text-white hover:bg-neutral-700
                       dark:bg-neutral-100 dark:text-black dark:hover:bg-neutral-200 

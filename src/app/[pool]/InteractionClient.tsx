@@ -736,7 +736,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
         <div className={`w-8 h-8 rounded flex items-center justify-center ${isBull ? 'bg-black' : 'bg-gray-400'}`}>
           {vaultIcon}
         </div>
-        <h3 className="text-lg font-bold text-black dark:text-white">{vaultTitle}</h3>
+        <h3 className="text-sm md:text-lg font-bold text-black dark:text-white">{vaultTitle}</h3>
       </div>
 
       {/* Divider */}
@@ -771,7 +771,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
         <>
           {/* Your Position */}
           <div className="bg-gray-50 dark:bg-neutral-800 rounded-lg p-4 mb-4">
-            <h4 className="font-bold text-black dark:text-white mb-3">YOUR POSITION</h4>
+            <h4 className="font-bold text-sm md:text-base text-black dark:text-white mb-3">YOUR POSITION</h4>
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600 dark:text-gray-400">Tokens</span>
@@ -801,7 +801,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
 
           {/* Buy Section */}
           <div className="mb-4">
-            <h4 className="font-bold text-black dark:text-white mb-3">BUY {symbol}</h4>
+            <h4 className="font-bold text-sm md:text-base text-black dark:text-white mb-3">BUY {symbol}</h4>
             <div className="space-y-2">
               <div>
                 <Input
@@ -831,7 +831,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
 
           {/* Sell Section */}
           <div>
-            <h4 className="font-bold text-black dark:text-white mb-3">SELL {symbol}</h4>
+            <h4 className="font-bold text-sm md:text-base text-black dark:text-white mb-3">SELL {symbol}</h4>
             <div className="space-y-2">
               <div>
                 <Input
@@ -1390,7 +1390,7 @@ export default function InteractionClient() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-white dark:bg-neutral-900">
         <div className="text-center">
-          <h2 className="text-xl font-semibold mb-2 text-neutral-900 dark:text-white">
+          <h2 className="text-lg md:text-xl font-semibold mb-2 text-neutral-900 dark:text-white">
             Error Loading Pool
           </h2>
           <p className="text-neutral-600 dark:text-neutral-400">{error}</p>
@@ -1414,7 +1414,7 @@ export default function InteractionClient() {
             <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
               <div className="flex-2 p-1">
                 <div className="flex items-center space-x-3">
-                  <h1 className="text-3xl font-bold text-neutral-900 dark:text-white">
+                  <h1 className="text-xl md:text-3xl font-bold text-neutral-900 dark:text-white">
                     {poolData.name}
                </h1>
                  <div className="flex items-center space-x-2">
@@ -1500,7 +1500,7 @@ export default function InteractionClient() {
                     <div className="text-xs font-medium text-neutral-600 dark:text-neutral-400 mb-1">
                       Total Value Locked
                 </div>
-                    <div className="text-lg font-bold transition-all duration-300">
+                    <div className="text-sm md:text-lg font-bold transition-all duration-300">
                       {formatValue(calculations.totalReserves)}
               </div>
                     <div className="w-full rounded-full h-2 my-2 flex overflow-hidden bg-neutral-200 dark:bg-neutral-700">
@@ -1559,23 +1559,23 @@ export default function InteractionClient() {
                     showHeader={true}
                   />
 
-                  <div className="mt-6 p-6 border rounded-xl border-black dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800">
-                    <h4 className="font-bold mb-3 text-lg text-neutral-900 dark:text-white">
+                  <div className="mt-6 p-4 md:p-6 border rounded-xl border-black dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800">
+                    <h4 className="font-bold mb-3 text-sm md:text-lg text-neutral-900 dark:text-white">
                       Rebalance Pool
                     </h4>
-                    <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-6 leading-relaxed">
+                    <p className="text-xs md:text-sm text-neutral-600 dark:text-neutral-400 mb-4 md:mb-6 leading-relaxed">
                       Fetch the current oracle price and move funds from the losing vault to the winning vault.
                     </p>
                     
                     {/* Token Information Section */}
-                    <div className="grid grid-cols-2 gap-6 mb-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 mb-4 md:mb-6">
                       {/* Bull Token */}
                       <div className="space-y-2">
-                        <h5 className="font-bold text-green-600 dark:text-green-400">Bull Token (BULL)</h5>
-                        <div className="text-sm">
+                        <h5 className="font-bold text-sm md:text-base text-green-600 dark:text-green-400">Bull Token (BULL)</h5>
+                        <div className="text-xs md:text-sm">
                           <div className="flex justify-between">
                             <span className="text-neutral-600 dark:text-neutral-400">Current price:</span>
-                            <span className="font-medium">1 BULL = {calculations.bullPrice.toFixed(4)} WETH</span>
+                            <span className="font-medium text-right">{calculations.bullPrice.toFixed(4)} WETH</span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-neutral-600 dark:text-neutral-400">Underlying asset:</span>
@@ -1586,11 +1586,11 @@ export default function InteractionClient() {
 
                       {/* Bear Token */}
                       <div className="space-y-2">
-                        <h5 className="font-bold text-red-600 dark:text-red-400">Bear Token (BEAR)</h5>
-                        <div className="text-sm">
+                        <h5 className="font-bold text-sm md:text-base text-red-600 dark:text-red-400">Bear Token (BEAR)</h5>
+                        <div className="text-xs md:text-sm">
                           <div className="flex justify-between">
                             <span className="text-neutral-600 dark:text-neutral-400">Current price:</span>
-                            <span className="font-medium">1 BEAR = {calculations.bearPrice.toFixed(4)} WETH</span>
+                            <span className="font-medium text-right">{calculations.bearPrice.toFixed(4)} WETH</span>
                         </div>
                           <div className="flex justify-between">
                             <span className="text-neutral-600 dark:text-neutral-400">Underlying asset:</span>
@@ -1601,36 +1601,36 @@ export default function InteractionClient() {
                   </div>
 
                     {/* Oracle Price Information */}
-                    <div className="bg-white dark:bg-neutral-900 p-4 rounded-lg border border-black dark:border-neutral-600 mb-6">
+                    <div className="bg-white dark:bg-neutral-900 p-3 md:p-4 rounded-lg border border-black dark:border-neutral-600 mb-4 md:mb-6">
                       <div className="flex justify-between items-center mb-3">
-                        <h5 className="font-bold text-neutral-900 dark:text-white">Oracle Price Information</h5>
+                        <h5 className="font-bold text-xs md:text-sm text-neutral-900 dark:text-white">Oracle Price Information</h5>
                         <RefreshCw 
                           className="w-4 h-4 text-neutral-600 dark:text-neutral-400 cursor-pointer hover:text-neutral-900 dark:hover:text-white" 
                           onClick={handlePoll}
                         />
                       </div>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between">
+                    <div className="space-y-2 text-xs md:text-sm">
+                      <div className="flex justify-between items-center">
                           <span className="text-neutral-600 dark:text-neutral-400">Current price:</span>
-                          <span className="font-medium">
+                          <span className="font-medium text-right">
                             {oraclePriceData?.[0]?.result 
                               ? (Number(oraclePriceData[0].result) / 1e18).toFixed(4) 
                               : 'Loading...'
                             }
                         </span>
                       </div>
-                      <div className="flex justify-between">
-                          <span className="text-neutral-600 dark:text-neutral-400">Previous pool price:</span>
-                          <span className="font-medium">
+                      <div className="flex justify-between items-center">
+                          <span className="text-neutral-600 dark:text-neutral-400">Previous price:</span>
+                          <span className="font-medium text-right">
                             {oraclePriceData?.[1]?.result 
                               ? (Number(oraclePriceData[1].result) / 1e18).toFixed(4) 
                               : 'Loading...'
                             }
                         </span>
                       </div>
-                      <div className="flex justify-between">
+                      <div className="flex justify-between items-center">
                           <span className="text-neutral-600 dark:text-neutral-400">Price change:</span>
-                          <span className={`font-medium flex items-center gap-1 ${
+                          <span className={`font-medium text-right flex items-center gap-1 ${
                             oraclePriceData?.[0]?.result && oraclePriceData?.[1]?.result
                               ? (Number(oraclePriceData[0].result) > Number(oraclePriceData[1].result) 
                                   ? 'text-green-600 dark:text-green-400' 
@@ -1656,7 +1656,7 @@ export default function InteractionClient() {
                         <TooltipTrigger asChild>
                           <div className="w-full">
                 <Button
-                              className="w-full bg-black hover:bg-gray-800 dark:bg-white dark:hover:bg-gray-200 text-white dark:text-black font-semibold py-3 transition-all duration-200 shadow-lg hover:shadow-xl"
+                              className="w-full bg-black hover:bg-gray-800 dark:bg-white dark:hover:bg-gray-200 text-white dark:text-black font-semibold py-2 md:py-3 text-sm md:text-base transition-all duration-200 shadow-lg hover:shadow-xl"
                               onClick={handleDistribute}
                               disabled={
                                 address !== pool?.vault_creator && address !== undefined ||
@@ -1672,7 +1672,7 @@ export default function InteractionClient() {
                         </TooltipTrigger>
                         {address !== pool?.vault_creator && (
                           <TooltipContent>
-                            <p className="bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 p-2 rounded-md text-sm">
+                            <p className="bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 p-2 rounded-md text-xs md:text-sm">
                               This action can only be performed by the pool creator
                             </p>
                           </TooltipContent>
@@ -1703,7 +1703,7 @@ export default function InteractionClient() {
           {/* Creator Tools Section - Full Width at Bottom */}
           {address === pool?.vault_creator && (
             <div className="w-full mt-8 p-6 border rounded-xl border-black dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800">
-              <h4 className="font-bold mb-4 text-xl text-neutral-900 dark:text-white flex items-center gap-2">
+              <h4 className="font-bold mb-4 text-lg md:text-xl text-neutral-900 dark:text-white flex items-center gap-2">
                 <Wrench className="w-6 h-6" />
               Creator Tools
               </h4>
@@ -1732,22 +1732,22 @@ export default function InteractionClient() {
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
                   <div className="bg-white dark:bg-neutral-900 p-4 rounded-lg border border-black dark:border-neutral-600">
                     <div className="font-medium text-neutral-600 dark:text-neutral-400 mb-1">Mint Fee</div>
-                    <div className="font-bold text-lg text-neutral-900 dark:text-white">{poolData.mint_fee}%</div>
+                    <div className="font-bold text-sm md:text-lg text-neutral-900 dark:text-white">{poolData.mint_fee}%</div>
                     <div className="text-xs text-neutral-500 dark:text-neutral-400">Charged when buying tokens</div>
           </div>
                   <div className="bg-white dark:bg-neutral-900 p-4 rounded-lg border border-black dark:border-neutral-600">
                     <div className="font-medium text-neutral-600 dark:text-neutral-400 mb-1">Burn Fee</div>
-                    <div className="font-bold text-lg text-neutral-900 dark:text-white">{poolData.burn_fee}%</div>
+                    <div className="font-bold text-sm md:text-lg text-neutral-900 dark:text-white">{poolData.burn_fee}%</div>
                     <div className="text-xs text-neutral-500 dark:text-neutral-400">Charged when selling tokens</div>
       </div>
                   <div className="bg-white dark:bg-neutral-900 p-4 rounded-lg border border-black dark:border-neutral-600">
                     <div className="font-medium text-neutral-600 dark:text-neutral-400 mb-1">Creator Fee</div>
-                    <div className="font-bold text-lg text-neutral-900 dark:text-white">{poolData.creator_fee}%</div>
+                    <div className="font-bold text-sm md:text-lg text-neutral-900 dark:text-white">{poolData.creator_fee}%</div>
                     <div className="text-xs text-neutral-500 dark:text-neutral-400">Paid to pool creator</div>
     </div>
                   <div className="bg-white dark:bg-neutral-900 p-4 rounded-lg border border-black dark:border-neutral-600">
                     <div className="font-medium text-neutral-600 dark:text-neutral-400 mb-1">Treasury Fee</div>
-                    <div className="font-bold text-lg text-neutral-900 dark:text-white">{poolData.treasury_fee}%</div>
+                    <div className="font-bold text-sm md:text-lg text-neutral-900 dark:text-white">{poolData.treasury_fee}%</div>
                     <div className="text-xs text-neutral-500 dark:text-neutral-400">Paid to treasury</div>
       </div>
     </div>

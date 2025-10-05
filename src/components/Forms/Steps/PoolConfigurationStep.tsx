@@ -60,14 +60,14 @@ const PoolConfigurationStep: React.FC<PoolConfigurationStepProps> = ({
   return (
     <div className="space-y-6">
       <div className="text-center mb-6">
-        <h2 className="text-2xl font-bold text-black dark:text-white mb-2">
+        <h2 className="text-lg md:text-2xl font-bold text-black dark:text-white mb-2">
           Pool Configuration
         </h2>
-        <p className="text-gray-600 dark:text-gray-400 mb-4">
+        <p className="text-gray-600 dark:text-gray-400 mb-4 text-sm md:text-base">
           General settings for your new prediction pool
         </p>
         
-        {/* Chain Indicator */}
+        {/* Chain Indicator 
         <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium ${
           chainId === 61
             ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 border border-blue-200 dark:border-blue-800'
@@ -78,6 +78,7 @@ const PoolConfigurationStep: React.FC<PoolConfigurationStepProps> = ({
           }`}></div>
           Connected to: {chainId === 61 ? 'Ethereum Classic (ETC)' : 'Chain ID ' + chainId}
         </div>
+        */}
       </div>
       <div className="space-y-4">
         {/* Pool Name */}
@@ -217,10 +218,10 @@ const PoolConfigurationStep: React.FC<PoolConfigurationStepProps> = ({
                 {formData.oracleType === 'hebeswap' ? 'Hebeswap' : 'Chainlink'}
               </span>
             </div>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
+            <p className="text-sm text-gray-600 dark:text-gray-400 hidden md:block">
               {formData.oracleType === 'hebeswap' 
-                ? '🔵 Automatically selected for Ethereum Classic (Chain ID 61) - Hebeswap is the native oracle system for ETC'
-                : '🟢 Automatically selected for all other chains - Chainlink provides reliable price feeds across most networks'
+                ? '🔵 Hebeswap is the native oracle system for ETC'
+                : '🟢 Chainlink provides reliable price feeds across most networks'
               }
             </p>
             {formData.oracleType === 'hebeswap' && (
@@ -246,7 +247,7 @@ const PoolConfigurationStep: React.FC<PoolConfigurationStepProps> = ({
                   </TooltipTrigger>
                   <TooltipContent className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400">
                     <p className="w-80 text-sm">
-                      🚀 Smart Oracle Management: The system will automatically create an oracle adapter for this price feed if it doesn&apos;t exist, or use an existing one if available. This ensures efficient gas usage and prevents duplicate oracle deployments.
+                      Smart Oracle Management: The system will automatically create an oracle adapter for this price feed if it doesn&apos;t exist, or use an existing one if available. This ensures efficient gas usage and prevents duplicate oracle deployments.
                     </p>
                   </TooltipContent>
                 </Tooltip>
@@ -255,7 +256,7 @@ const PoolConfigurationStep: React.FC<PoolConfigurationStepProps> = ({
             <select
               value={formData.priceFeedAddress}
               onChange={(e) => updateFormData({ priceFeedAddress: e.target.value })}
-              className={`w-full px-3 py-2.5 border rounded-md transition-all duration-200 cursor-pointer ${
+              className={`w-full px-3 py-2.5 border rounded-md transition-all duration-200 cursor-pointer text-sm md:text-base ${
                 errors.priceFeedAddress 
                   ? "border-red-500 focus:border-red-500 focus:ring-1 focus:ring-red-500" 
                   : "border-gray-200 dark:border-gray-700 focus:border-black dark:focus:border-white focus:ring-2 focus:ring-black dark:focus:ring-white"
@@ -274,9 +275,6 @@ const PoolConfigurationStep: React.FC<PoolConfigurationStepProps> = ({
                 </option>
               ))}
             </select>
-            <p className="text-xs text-green-600 dark:text-green-400 mt-1">
-              ✅ The system will automatically handle oracle adapter creation. If an adapter for this price feed already exists, it will be reused to save gas.
-            </p>
             {errors.priceFeedAddress && (
               <p className="text-red-500 text-sm">{errors.priceFeedAddress}</p>
             )}
@@ -319,7 +317,7 @@ const PoolConfigurationStep: React.FC<PoolConfigurationStepProps> = ({
                     });
                   }
                 }}
-                className={`w-full px-3 py-2.5 border rounded-md transition-all duration-200 cursor-pointer ${
+                className={`w-full px-3 py-2.5 border rounded-md transition-all duration-200 cursor-pointer text-sm md:text-base ${
                   errors.hebeswapPairAddress 
                     ? "border-red-500 focus:border-red-500 focus:ring-1 focus:ring-red-500" 
                     : "border-gray-200 dark:border-gray-700 focus:border-black dark:focus:border-white focus:ring-2 focus:ring-black dark:focus:ring-white"
