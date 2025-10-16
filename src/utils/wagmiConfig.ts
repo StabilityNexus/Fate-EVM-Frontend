@@ -9,7 +9,7 @@ import { ethereumClassic } from "./chains/EthereumClassic";
 import { getDefaultConfig } from "@rainbow-me/rainbowkit";
 import { http } from "wagmi";
 
-const PROJECT_ID = process.env.NEXT_PUBLIC_PROJECT_ID ?? "DEFAULT_PROJECT_ID";
+// const PROJECT_ID = process.env.NEXT_PUBLIC_PROJECT_ID ?? "DEFAULT_PROJECT_ID";
 
 // Memoize the config to prevent recreation
 let memoizedConfig: ReturnType<typeof getDefaultConfig> | null = null;

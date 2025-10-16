@@ -73,7 +73,7 @@ function TradingViewWidget({
       }
     };
     script.onerror = (error) => {
-      logger.error('Failed to load CoinGecko script:', error);
+      logger.error('Failed to load CoinGecko script:', error instanceof Error ? error : undefined);
     };
     currentSlot.innerHTML = "";
     currentSlot.appendChild(script);

@@ -156,7 +156,7 @@ function ExploreFatePoolsClient() {
       }
       return token;
     } catch (error) {
-      logger.error(`Error fetching coin data for ${coinAddr}:`, error);
+      logger.error(`Error fetching coin data for ${coinAddr}:`, error instanceof Error ? error : undefined);
       return null;
     }
   }, [isInitialized, batchSaveTokens]);
@@ -198,7 +198,7 @@ function ExploreFatePoolsClient() {
           abi: PredictionPoolFactoryABI,
           functionName: "getAllPools"
         }).catch((error) => {
-          logger.error(`Failed to call getAllPools on chain ${chainId}:`, error);
+          logger.error(`Failed to call getAllPools on chain ${chainId}:`, error instanceof Error ? error : undefined);
           return [];
         })) as Address[];
 
@@ -313,7 +313,7 @@ function ExploreFatePoolsClient() {
         updateChainState(chainId, { loading: false, error: null });
         return pools;
       } catch (error) {
-        logger.error(`Failed to fetch pools from factory on chain ${chainId}:`, error);
+        logger.error(`Failed to fetch pools from factory on chain ${chainId}:`, error instanceof Error ? error : undefined);
         // Fall back to cached data if factory fetch fails
       }
     }
@@ -382,12 +382,12 @@ function ExploreFatePoolsClient() {
               }
             }
           } catch (tokenError) {
-            logger.error(`Failed to load tokens for pool ${poolDetails.id} from cache:`, tokenError);
+            logger.error(`Failed to load tokens for pool ${poolDetails.id} from cache:`, tokenError instanceof Error ? tokenError : undefined);
           }
         }
         return convertedPools;
       } catch (cacheError) {
-        logger.error(`Failed to load cached pools for chain ${chainId}:`, cacheError);
+        logger.error(`Failed to load cached pools for chain ${chainId}:`, cacheError instanceof Error ? cacheError : undefined);
         updateChainState(chainId, { loading: false, error: `Failed to load cached data` });
         return [];
       }
@@ -455,7 +455,7 @@ function ExploreFatePoolsClient() {
           updateChainState(chainId, { loading: false, error: null, poolCount: poolsFromChain.length });
         } catch (error) {
           totalErrors++;
-          logger.error(`Chain ${chainId} failed:`, error);
+          logger.error(`Chain ${chainId} failed:`, error instanceof Error ? error : undefined);
           updateChainState(chainId, { loading: false, error: (error as Error)?.message || 'Unknown error' });
         }
       }
@@ -486,7 +486,7 @@ function ExploreFatePoolsClient() {
           }
         }
     } catch (error) {
-      logger.error("Failed to fetch pools:", error);
+      logger.error("Failed to fetch pools:", error instanceof Error ? error : undefined);
       if (showToast) { toast.error("Failed to fetch pools. Please try again."); }
     } finally {
       setLoading(false);

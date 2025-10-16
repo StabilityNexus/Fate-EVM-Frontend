@@ -48,14 +48,14 @@ export class FatePoolsIndexedDBService {
       const request = window.indexedDB.open(this.dbName, this.dbVersion);
 
       request.onerror = () => {
-        logger.error('FatePoolsDB failed to open:', request.error);
+        logger.error('FatePoolsDB failed to open:', request.error instanceof Error ? request.error : undefined);
         reject(new Error(`Failed to open IndexedDB: ${request.error?.message}`));
       };
 
       request.onsuccess = () => {
         this.db = request.result;
         this.db.onerror = (event) => {
-          logger.error('Database error:', event);
+          logger.error('Database error:', event instanceof Error ? event : undefined);
         };
         resolve();
       };
@@ -353,7 +353,7 @@ export class FatePoolsIndexedDBService {
           return;
         }
         if (Date.now() > result.expiresAt) {
-          this.deleteCache(key).catch((err) => logger.error('Failed to delete cache:', err));
+          this.deleteCache(key).catch((err) => logger.error('Failed to delete cache:', err instanceof Error ? err : undefined));
           resolve(null);
           return;
         }
@@ -458,6 +458,14 @@ export class FatePoolsIndexedDBService {
     });
   }
 
+  private putInStore(store: IDBObjectStore, data: unknown): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const request = store.put(data);
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(new Error(`Failed to put data in store: ${request.error?.message}`));
+    });
+  }
+
   // --- Database status and info ---
   async getDatabaseInfo(): Promise<{ name: string; version: number; stores: string[]; isConnected: boolean; totalPools: number; totalTokens: number; }> {
     const isConnected = this.db !== null;
@@ -477,7 +485,7 @@ export class FatePoolsIndexedDBService {
         totalPools = pools.length;
         totalTokens = tokenCount;
       } catch (error) {
-        logger.error('Error getting database stats:', error);
+        logger.error('Error getting database stats:', error instanceof Error ? error : undefined);
       }
     }
     return { name: this.dbName, version: this.dbVersion, stores: Object.values(this.stores), isConnected, totalPools, totalTokens };

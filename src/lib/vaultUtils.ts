@@ -103,7 +103,7 @@ export async function getBothPrices(
       previousPrice: Number(ethers.formatUnits(previousPrice, 18))
     };
   } catch (err) {
-    logger.error('Error in getBothPrices:', err);
+    logger.error('Error in getBothPrices:', err instanceof Error ? err : undefined);
     throw new Error('Failed to fetch price data');
   }
 }

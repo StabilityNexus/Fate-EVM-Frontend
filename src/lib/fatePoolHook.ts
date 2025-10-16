@@ -113,6 +113,13 @@ export const useFatePoolsStorage = (): UseFatePoolsStorageReturn => {
       totalPools: number;
       totalTokens: number;
     }>;
+    savePortfolioPosition: (position: Omit<PortfolioPosition, 'id'>) => Promise<void>;
+    getPortfolioPositions: (userAddress: string, chainId: SupportedChainId) => Promise<PortfolioPosition[]>;
+    savePortfolioTransaction: (transaction: Omit<PortfolioTransaction, 'id'>) => Promise<void>;
+    getPortfolioTransactions: (userAddress: string, chainId: SupportedChainId) => Promise<PortfolioTransaction[]>;
+    savePortfolioCache: (cache: Omit<PortfolioCache, 'userAddress'> & { userAddress: string }) => Promise<void>;
+    getPortfolioCache: (userAddress: string, chainId: SupportedChainId) => Promise<PortfolioCache | null>;
+    clearPortfolioData: (userAddress: string, chainId?: SupportedChainId) => Promise<void>;
     close: () => void;
   }
 
@@ -185,7 +192,7 @@ export const useFatePoolsStorage = (): UseFatePoolsStorageReturn => {
         await serviceRef.current?.cleanupExpiredCache();
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Failed to initialize database';
-        logger.error('Failed to initialize FatePoolsDB:', err);
+        logger.error('Failed to initialize FatePoolsDB:', err instanceof Error ? err : undefined);
         setError(errorMessage);
         setIsInitialized(false);
       }
@@ -227,7 +234,7 @@ export const useFatePoolsStorage = (): UseFatePoolsStorageReturn => {
         await serviceRef.current.savePoolDetails({ ...pool, userAddress: address });
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Failed to save pool details';
-        logger.error('FatePoolsStorage error (save pool details):', err);
+        logger.error('FatePoolsStorage error (save pool details):', err instanceof Error ? err : undefined);
         setError(errorMessage);
         throw err;
       }
@@ -249,7 +256,7 @@ export const useFatePoolsStorage = (): UseFatePoolsStorageReturn => {
         return await serviceRef.current.getPoolDetails(poolId);
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Failed to get pool details';
-        logger.error('FatePoolsStorage error (get pool details):', err);
+        logger.error('FatePoolsStorage error (get pool details):', err instanceof Error ? err : undefined);
         setError(errorMessage);
         throw err;
       }
@@ -271,7 +278,7 @@ export const useFatePoolsStorage = (): UseFatePoolsStorageReturn => {
         return await serviceRef.current.getAllPoolsForChain(chainId);
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Failed to get pools for chain';
-        logger.error('FatePoolsStorage error (get pools for chain):', err);
+        logger.error('FatePoolsStorage error (get pools for chain):', err instanceof Error ? err : undefined);
         setError(errorMessage);
         throw err;
       }
@@ -293,7 +300,7 @@ export const useFatePoolsStorage = (): UseFatePoolsStorageReturn => {
         return await serviceRef.current.getAllPools();
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Failed to get all pools';
-        logger.error('FatePoolsStorage error (get all pools):', err);
+        logger.error('FatePoolsStorage error (get all pools):', err instanceof Error ? err : undefined);
         setError(errorMessage);
         throw err;
       }
@@ -315,7 +322,7 @@ export const useFatePoolsStorage = (): UseFatePoolsStorageReturn => {
         return await serviceRef.current.getPoolsByCreator(creator, chainId);
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Failed to get pools by creator';
-        logger.error('FatePoolsStorage error (get pools by creator):', err);
+        logger.error('FatePoolsStorage error (get pools by creator):', err instanceof Error ? err : undefined);
         setError(errorMessage);
         throw err;
       }
@@ -337,7 +344,7 @@ export const useFatePoolsStorage = (): UseFatePoolsStorageReturn => {
         await serviceRef.current.batchSavePools(pools.map((p) => ({ ...p, userAddress: address })));
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Failed to batch save pools';
-        logger.error('FatePoolsStorage error (batch save pools):', err);
+        logger.error('FatePoolsStorage error (batch save pools):', err instanceof Error ? err : undefined);
         setError(errorMessage);
         throw err;
       }
@@ -360,7 +367,7 @@ export const useFatePoolsStorage = (): UseFatePoolsStorageReturn => {
         await serviceRef.current.saveTokenDetails(token);
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Failed to save token details';
-        logger.error('FatePoolsStorage error (save token details):', err);
+        logger.error('FatePoolsStorage error (save token details):', err instanceof Error ? err : undefined);
         setError(errorMessage);
         throw err;
       }
@@ -382,7 +389,7 @@ export const useFatePoolsStorage = (): UseFatePoolsStorageReturn => {
         return await serviceRef.current.getTokenDetails(tokenId);
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Failed to get token details';
-        logger.error('FatePoolsStorage error (get token details):', err);
+        logger.error('FatePoolsStorage error (get token details):', err instanceof Error ? err : undefined);
         setError(errorMessage);
         throw err;
       }
@@ -408,7 +415,7 @@ export const useFatePoolsStorage = (): UseFatePoolsStorageReturn => {
         return await serviceRef.current.getTokensForPool(poolAddress);
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Failed to get tokens for pool';
-        logger.error('FatePoolsStorage error (get tokens for pool):', err);
+        logger.error('FatePoolsStorage error (get tokens for pool):', err instanceof Error ? err : undefined);
         setError(errorMessage);
         throw err;
       }
@@ -430,7 +437,7 @@ export const useFatePoolsStorage = (): UseFatePoolsStorageReturn => {
         await serviceRef.current.batchSaveTokens(tokens);
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Failed to batch save tokens';
-        logger.error('FatePoolsStorage error (batch save tokens):', err);
+        logger.error('FatePoolsStorage error (batch save tokens):', err instanceof Error ? err : undefined);
         setError(errorMessage);
         throw err;
       }
@@ -453,7 +460,7 @@ export const useFatePoolsStorage = (): UseFatePoolsStorageReturn => {
         await serviceRef.current.saveChainStatus(status);
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Failed to save chain status';
-        logger.error('FatePoolsStorage error (save chain status):', err);
+        logger.error('FatePoolsStorage error (save chain status):', err instanceof Error ? err : undefined);
         setError(errorMessage);
         throw err;
       }
@@ -475,7 +482,7 @@ export const useFatePoolsStorage = (): UseFatePoolsStorageReturn => {
         return await serviceRef.current.getChainStatus(chainId);
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Failed to get chain status';
-        logger.error('FatePoolsStorage error (get chain status):', err);
+        logger.error('FatePoolsStorage error (get chain status):', err instanceof Error ? err : undefined);
         setError(errorMessage);
         throw err;
       }
@@ -497,7 +504,7 @@ export const useFatePoolsStorage = (): UseFatePoolsStorageReturn => {
         return await serviceRef.current.getAllChainStatuses();
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Failed to get all chain statuses';
-        logger.error('FatePoolsStorage error (get all chain statuses):', err);
+        logger.error('FatePoolsStorage error (get all chain statuses):', err instanceof Error ? err : undefined);
         setError(errorMessage);
         throw err;
       }
@@ -520,7 +527,7 @@ export const useFatePoolsStorage = (): UseFatePoolsStorageReturn => {
         await serviceRef.current.saveCache(key, data, ttlMinutes, chainId);
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Failed to save cache';
-        logger.error('FatePoolsStorage error (save cache):', err);
+        logger.error('FatePoolsStorage error (save cache):', err instanceof Error ? err : undefined);
         setError(errorMessage);
         throw err;
       }
@@ -542,7 +549,7 @@ export const useFatePoolsStorage = (): UseFatePoolsStorageReturn => {
         return await serviceRef.current.getCache(key);
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Failed to get cache';
-        logger.error('FatePoolsStorage error (get cache):', err);
+        logger.error('FatePoolsStorage error (get cache):', err instanceof Error ? err : undefined);
         setError(errorMessage);
         throw err;
       }
@@ -564,7 +571,7 @@ export const useFatePoolsStorage = (): UseFatePoolsStorageReturn => {
         await serviceRef.current.deleteCache(key);
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Failed to delete cache';
-        logger.error('FatePoolsStorage error (delete cache):', err);
+        logger.error('FatePoolsStorage error (delete cache):', err instanceof Error ? err : undefined);
         setError(errorMessage);
         throw err;
       }
@@ -587,7 +594,7 @@ export const useFatePoolsStorage = (): UseFatePoolsStorageReturn => {
         await serviceRef.current.cleanupExpiredCache();
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Failed to cleanup expired cache';
-        logger.error('FatePoolsStorage error (cleanup expired cache):', err);
+        logger.error('FatePoolsStorage error (cleanup expired cache):', err instanceof Error ? err : undefined);
         setError(errorMessage);
         throw err;
       }
@@ -609,7 +616,7 @@ export const useFatePoolsStorage = (): UseFatePoolsStorageReturn => {
         await serviceRef.current.clearAllData();
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Failed to clear all data';
-        logger.error('FatePoolsStorage error (clear all data):', err);
+        logger.error('FatePoolsStorage error (clear all data):', err instanceof Error ? err : undefined);
         setError(errorMessage);
         throw err;
       }
@@ -639,7 +646,7 @@ export const useFatePoolsStorage = (): UseFatePoolsStorageReturn => {
         return await serviceRef.current.getDatabaseInfo();
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Failed to get database info';
-        logger.error('FatePoolsStorage error (get database info):', err);
+        logger.error('FatePoolsStorage error (get database info):', err instanceof Error ? err : undefined);
         setError(errorMessage);
         throw err;
       }
@@ -669,7 +676,7 @@ export const useFatePoolsStorage = (): UseFatePoolsStorageReturn => {
         await serviceRef.current.savePortfolioPosition(position);
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Failed to save portfolio position';
-        logger.error('FatePoolsStorage error (save portfolio position):', err);
+        logger.error('FatePoolsStorage error (save portfolio position):', err instanceof Error ? err : undefined);
         setError(errorMessage);
         throw err;
       }
@@ -691,7 +698,7 @@ export const useFatePoolsStorage = (): UseFatePoolsStorageReturn => {
         return await serviceRef.current.getPortfolioPositions(userAddress, chainId);
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Failed to get portfolio positions';
-        logger.error('FatePoolsStorage error (get portfolio positions):', err);
+        logger.error('FatePoolsStorage error (get portfolio positions):', err instanceof Error ? err : undefined);
         setError(errorMessage);
         throw err;
       }
@@ -713,7 +720,7 @@ export const useFatePoolsStorage = (): UseFatePoolsStorageReturn => {
         await serviceRef.current.savePortfolioTransaction(transaction);
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Failed to save portfolio transaction';
-        logger.error('FatePoolsStorage error (save portfolio transaction):', err);
+        logger.error('FatePoolsStorage error (save portfolio transaction):', err instanceof Error ? err : undefined);
         setError(errorMessage);
         throw err;
       }
@@ -735,7 +742,7 @@ export const useFatePoolsStorage = (): UseFatePoolsStorageReturn => {
         return await serviceRef.current.getPortfolioTransactions(userAddress, chainId);
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Failed to get portfolio transactions';
-        logger.error('FatePoolsStorage error (get portfolio transactions):', err);
+        logger.error('FatePoolsStorage error (get portfolio transactions):', err instanceof Error ? err : undefined);
         setError(errorMessage);
         throw err;
       }
@@ -757,7 +764,7 @@ export const useFatePoolsStorage = (): UseFatePoolsStorageReturn => {
         await serviceRef.current.savePortfolioCache(cache);
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Failed to save portfolio cache';
-        logger.error('FatePoolsStorage error (save portfolio cache):', err);
+        logger.error('FatePoolsStorage error (save portfolio cache):', err instanceof Error ? err : undefined);
         setError(errorMessage);
         throw err;
       }
@@ -779,7 +786,7 @@ export const useFatePoolsStorage = (): UseFatePoolsStorageReturn => {
         return await serviceRef.current.getPortfolioCache(userAddress, chainId);
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Failed to get portfolio cache';
-        logger.error('FatePoolsStorage error (get portfolio cache):', err);
+        logger.error('FatePoolsStorage error (get portfolio cache):', err instanceof Error ? err : undefined);
         setError(errorMessage);
         throw err;
       }
@@ -801,7 +808,7 @@ export const useFatePoolsStorage = (): UseFatePoolsStorageReturn => {
         await serviceRef.current.clearPortfolioData(userAddress, chainId);
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Failed to clear portfolio data';
-        logger.error('FatePoolsStorage error (clear portfolio data):', err);
+        logger.error('FatePoolsStorage error (clear portfolio data):', err instanceof Error ? err : undefined);
         setError(errorMessage);
         throw err;
       }

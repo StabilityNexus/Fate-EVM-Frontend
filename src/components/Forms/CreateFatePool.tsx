@@ -332,7 +332,7 @@ export default function CreateFatePool() {
             toast.success("Oracle adapter created successfully!");
           }
         } catch (error) {
-          logger.error("Error checking/creating Chainlink oracle adapter:", error);
+          logger.error("Error checking/creating Chainlink oracle adapter:", error instanceof Error ? error : undefined);
           throw new Error(`Failed to get Chainlink oracle adapter: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
       } else if (formData.oracleType === "hebeswap") {
@@ -410,7 +410,7 @@ export default function CreateFatePool() {
             toast.success("Hebeswap oracle adapter created successfully!");
           }
         } catch (error) {
-          logger.error("Error checking/creating Hebeswap oracle adapter:", error);
+          logger.error("Error checking/creating Hebeswap oracle adapter:", error instanceof Error ? error : undefined);
           throw new Error(`Failed to get Hebeswap oracle adapter: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
       } else {
@@ -456,7 +456,7 @@ export default function CreateFatePool() {
           
           toast.success("Token approval successful!");
         } catch (error) {
-          logger.error("Error approving tokens:", error);
+          logger.error("Error approving tokens:", error instanceof Error ? error : undefined);
           throw new Error(`Failed to approve tokens: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
       }
@@ -488,7 +488,7 @@ export default function CreateFatePool() {
       logger.debug("formData:", { formData });
       toast.info("Pool deployment transaction submitted. Waiting for confirmation...");
     } catch (error) {
-      logger.error("Error deploying pool:", error);
+      logger.error("Error deploying pool:", error instanceof Error ? error : undefined);
       let errorMessage = "Unknown error occurred";
       if (error instanceof Error) {
         errorMessage = error.message;

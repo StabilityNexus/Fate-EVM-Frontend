@@ -318,7 +318,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
       });
       toast.dismiss(loadingToast);
     } catch (err: unknown) {
-      logger.error("Buy transaction error:", err);
+      logger.error("Buy transaction error:", err instanceof Error ? err : undefined);
       toast.error((err as Error).message || "Failed to buy tokens");
     }
   }, [tokenAddress, address, writeContract]);
@@ -367,7 +367,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
       await handleBuyTransaction(buyAmount);
       setBuyAmount('');
     } catch (err: unknown) {
-      logger.error("Buy error:", err);
+      logger.error("Buy error:", err instanceof Error ? err : undefined);
       toast.error((err as Error).message || "Failed to buy tokens");
     }
   };
@@ -407,7 +407,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
       toast.dismiss(loadingToast);
       setSellAmount('');
     } catch (err: unknown) {
-      logger.error('Sell error:', err);
+      logger.error('Sell error:', err instanceof Error ? err : undefined);
       toast.error((err as Error).message || 'Failed to sell tokens');
     }
   };
@@ -762,7 +762,7 @@ export default function InteractionClient() {
       }
       
     } catch (error) {
-      logger.error('Error fetching rebalance events:', error);
+      logger.error('Error fetching rebalance events:', error instanceof Error ? error : undefined);
       // Don't set to null on error, keep existing value
     } finally {
       setIsFetchingRebalanceEvents(false);
@@ -799,7 +799,7 @@ export default function InteractionClient() {
           }
         }
       } catch (error) {
-        logger.error('Error fetching gas data:', error);
+        logger.error('Error fetching gas data:', error instanceof Error ? error : undefined);
       }
     };
 
@@ -818,7 +818,7 @@ export default function InteractionClient() {
             setLastRebalanceTime(parsedTime);
           }
         } catch (error) {
-          logger.error('Error parsing stored rebalance time:', error);
+          logger.error('Error parsing stored rebalance time:', error instanceof Error ? error : undefined);
         }
       }
     }
@@ -840,7 +840,7 @@ export default function InteractionClient() {
       await refetch?.();
       // setLastUpdateTime(new Date());
     } catch (err) {
-      logger.error("Polling error:", err);
+      logger.error("Polling error:", err instanceof Error ? err : undefined);
     }
   }, [pool?.id?.id, loading, refetch]);
 
@@ -872,7 +872,7 @@ export default function InteractionClient() {
       });
       toast.dismiss(loadingToast);
     } catch (err: unknown) {
-      logger.error('Rebalance error:', err);
+      logger.error('Rebalance error:', err instanceof Error ? err : undefined);
       let errorMessage = 'Failed to rebalance pool';
       if ((err as Error).message.includes("user rejected transaction")) {
         errorMessage = "Transaction rejected";
@@ -897,7 +897,7 @@ export default function InteractionClient() {
       setNewOracleAddress('');
       await handlePoll();
     } catch (err: unknown) {
-      logger.error('Update oracle error:', err);
+      logger.error('Update oracle error:', err instanceof Error ? err : undefined);
       let errorMessage = 'Failed to update oracle';
       if ((err as Error).message.includes("user rejected transaction")) {
         errorMessage = "Transaction rejected";

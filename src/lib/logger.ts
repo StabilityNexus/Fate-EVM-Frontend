@@ -111,7 +111,7 @@ class Logger {
   }
 
   // Method to send logs to external service (implement as needed)
-  private sendToLoggingService(logEntry: LogEntry): void {
+  private sendToLoggingService(): void {
     // Implement integration with external logging service
     // Examples: Sentry, LogRocket, DataDog, etc.
     // fetch('/api/logs', {

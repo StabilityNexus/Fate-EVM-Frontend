@@ -10,7 +10,7 @@ export function getPredictionPoolContract() {
     const provider = new ethers.JsonRpcProvider(RPC_URL);
     return new ethers.Contract(CONTRACT_ADDRESS, PredictionPoolABI, provider);
   } catch (error) {
-    logger.error('Failed to create prediction pool contract:', error);
+    logger.error('Failed to create prediction pool contract:', error instanceof Error ? error : undefined);
     throw new Error('Unable to initialize prediction pool contract');
   }
 }
