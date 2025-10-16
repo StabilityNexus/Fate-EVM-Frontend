@@ -129,6 +129,10 @@ const Hero = () => {
           Decentralized perpetual prediction pools. <br />
           Buy and sell bullCoins and bearCoins to dynamically hedge against price risks.
         </p>
+        <div className="hidden">
+          <h2>DeFi Prediction Markets Platform</h2>
+          <p>Trade prediction markets on multiple blockchain networks including Ethereum, Polygon, BSC, and Base. Advanced DeFi trading with real-time price feeds and automated market making.</p>
+        </div>
 
         <ButtonGroup
           resolvedTheme={resolvedTheme}

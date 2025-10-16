@@ -28,7 +28,6 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { useAccount, useReadContracts } from "wagmi";
 import { formatUnits, Address, isAddress } from "viem";
 import { useRouter } from "next/navigation";
-import { Loading } from "@/components/ui/loading";
 import { PredictionPoolABI } from "@/utils/abi/PredictionPool";
 import { CoinABI } from "@/utils/abi/Coin";
 import { FatePoolFactories } from "@/utils/addresses";
@@ -38,7 +37,19 @@ import { PredictionPoolFactoryABI } from "@/utils/abi/PredictionPoolFactory";
 import { ChainlinkOracleABI } from "@/utils/abi/ChainlinkOracle";
 import { ERC20ABI } from "@/utils/abi/ERC20";
 import { createPublicClient, http } from "viem";
-import { logger } from "@/lib/logger";
+
+// Helper function to get chain name
+const getChainName = (chainId: number): string => {
+  switch (chainId) {
+    case 1: return 'Ethereum Mainnet';
+    case 137: return 'Polygon';
+    case 56: return 'BSC';
+    case 8453: return 'Base';
+    case 61: return 'Ethereum Classic';
+    case 11155111: return 'Sepolia Testnet';
+    default: return `Chain ${chainId}`;
+  }
+};
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as const;
 
@@ -121,7 +132,7 @@ const calculateTokenMetricsWithEvents = async (
       blockNumber: number;
     }> = [];
 
-    logger.debug(`Starting correct FIFO calculation for ${userTokens} current tokens`);
+    console.debug(`Starting correct FIFO calculation for ${userTokens} current tokens`);
 
     // Process transactions chronologically
     const sortedTxns = transactions.sort((a: any, b: any) => Number(a.blockNumber) - Number(b.blockNumber));
@@ -147,7 +158,7 @@ const calculateTokenMetricsWithEvents = async (
           blockNumber: Number(tx.blockNumber)
         });
         
-        logger.debug(`Buy: ${tx.amountCoin} tokens @ ${tx.price} WETH/token, Net invested: ${netInvestment} WETH (fees: ${feePaid} WETH)`, {
+        console.debug(`Buy: ${tx.amountCoin} tokens @ ${tx.price} WETH/token, Net invested: ${netInvestment} WETH (fees: ${feePaid} WETH)`, {
           amountCoin: tx.amountCoin,
           price: tx.price,
           netInvestment,
@@ -159,7 +170,7 @@ const calculateTokenMetricsWithEvents = async (
         let costOfSold = 0;
         const feesOnThisSale = (tx as any).feePaid || 0;
 
-        logger.debug(`Sell: ${tx.amountCoin} tokens for ${tx.amountAsset} WETH, Fees: ${feesOnThisSale} WETH`, {
+        console.debug(`Sell: ${tx.amountCoin} tokens for ${tx.amountAsset} WETH, Fees: ${feesOnThisSale} WETH`, {
           amountCoin: tx.amountCoin,
           amountAsset: tx.amountAsset,
           fees: feesOnThisSale
@@ -177,7 +188,7 @@ const calculateTokenMetricsWithEvents = async (
           remainingToSell -= amountFromThisBuy;
           oldestBuy.amount -= amountFromThisBuy;
           
-          logger.debug(`FIFO: Sold ${amountFromThisBuy} @ ${costPerToken} WETH/token (net) = ${amountFromThisBuy * costPerToken} WETH cost`, {
+          console.debug(`FIFO: Sold ${amountFromThisBuy} @ ${costPerToken} WETH/token (net) = ${amountFromThisBuy * costPerToken} WETH cost`, {
             amountFromThisBuy,
             costPerToken,
             totalCost: amountFromThisBuy * costPerToken
@@ -193,7 +204,7 @@ const calculateTokenMetricsWithEvents = async (
         realizedPnL += thisSaleRealizedPnL;
         totalFeesPaid += feesOnThisSale;
         
-        logger.debug(`Sale P&L: ${thisSaleRealizedPnL} WETH (${sellValue} received - ${costOfSold} net cost)`, {
+        console.debug(`Sale P&L: ${thisSaleRealizedPnL} WETH (${sellValue} received - ${costOfSold} net cost)`, {
           realizedPnL: thisSaleRealizedPnL,
           sellValue,
           costOfSold
@@ -219,7 +230,7 @@ const calculateTokenMetricsWithEvents = async (
     
     const returns = actualCostBasis > 0 ? (totalPnL / actualCostBasis) * 100 : 0;
 
-    logger.debug(`CORRECTED FIFO Results:`, {
+    console.debug(`CORRECTED FIFO Results:`, {
       hadSell,
       grossInvestment,
       totalFeesPaid,
@@ -234,11 +245,11 @@ const calculateTokenMetricsWithEvents = async (
       returns,
       buyQueueLength: buyQueue.length
     });
-    logger.debug(`User tokens: ${userTokens}`);
+    console.debug(`User tokens: ${userTokens}`);
 
     // For sold positions (userTokens = 0), return comprehensive data
     if (userTokens === 0) {
-      logger.debug(`Position fully sold - showing realized P&L only`);
+      console.debug(`Position fully sold - showing realized P&L only`);
       return {
         price: currentPrice,
         currentValue: 0,
@@ -263,7 +274,7 @@ const calculateTokenMetricsWithEvents = async (
     };
 
   } catch (error) {
-    logger.error('Error calculating enhanced metrics with events:', error instanceof Error ? error : new Error(String(error)));
+    console.error('Error calculating enhanced metrics with events:', error instanceof Error ? error : new Error(String(error)));
     // Fallback to simple calculation
     const costBasis = userTokens * currentPrice;
     return {
@@ -282,7 +293,7 @@ const calculateTokenMetricsWithEvents = async (
 // Fetch user transactions from blockchain events
 const fetchUserTransactions = async (tokenAddress: string, userAddress: string, chainId: number) => {
   try {
-    logger.debug(`Fetching transactions for token: ${tokenAddress}, user: ${userAddress}, chain: ${chainId}`, {
+    console.debug(`Fetching transactions for token: ${tokenAddress}, user: ${userAddress}, chain: ${chainId}`, {
       tokenAddress,
       userAddress,
       chainId
@@ -290,7 +301,7 @@ const fetchUserTransactions = async (tokenAddress: string, userAddress: string, 
     
     const chainConfig = getChainConfig(chainId);
     if (!chainConfig) {
-      logger.warn('No chain config found for chainId:', { chainId });
+      console.warn('No chain config found for chainId:', { chainId });
       return [];
     }
 
@@ -324,7 +335,7 @@ const fetchUserTransactions = async (tokenAddress: string, userAddress: string, 
       ]
     } as const;
 
-    logger.debug('Fetching buy and sell events...');
+    console.debug('Fetching buy and sell events...');
 
     // Helper function to fetch logs in chunks to avoid RPC limits
     const fetchLogsInChunks = async (eventABI: any, args: any) => {
@@ -334,7 +345,7 @@ const fetchUserTransactions = async (tokenAddress: string, userAddress: string, 
       const lookback = chainId === 11155111 ? BigInt(100000) : BigInt(50000);
       const startBlock = currentBlock > lookback ? currentBlock - lookback : BigInt(0);
       
-      logger.debug(`Scanning from block ${startBlock} to ${currentBlock} (${currentBlock - startBlock} blocks)`, {
+      console.debug(`Scanning from block ${startBlock} to ${currentBlock} (${currentBlock - startBlock} blocks)`, {
         startBlock,
         currentBlock,
         blockRange: currentBlock - startBlock
@@ -356,14 +367,14 @@ const fetchUserTransactions = async (tokenAddress: string, userAddress: string, 
           
           allLogs.push(...logs);
           if (logs.length > 0) {
-            logger.debug(`Fetched ${logs.length} logs from block ${fromBlock} to ${toBlock}`, {
+            console.debug(`Fetched ${logs.length} logs from block ${fromBlock} to ${toBlock}`, {
               logCount: logs.length,
               fromBlock,
               toBlock
             });
           }
         } catch (error: any) {
-          logger.warn(`Failed to fetch logs from block ${fromBlock} to ${toBlock}`, {
+          console.warn(`Failed to fetch logs from block ${fromBlock} to ${toBlock}`, {
             fromBlock,
             toBlock,
             error: error?.shortMessage || error?.message
@@ -371,7 +382,7 @@ const fetchUserTransactions = async (tokenAddress: string, userAddress: string, 
           
           // If we get a block range error, try with smaller chunks
           if (error?.message?.includes('range') || error?.message?.includes('blocks')) {
-            logger.debug('Retrying with smaller chunk size...');
+            console.debug('Retrying with smaller chunk size...');
             try {
               const smallerChunkSize = BigInt(1000);
               for (let smallFromBlock = fromBlock; smallFromBlock <= toBlock; smallFromBlock += smallerChunkSize) {
@@ -390,7 +401,7 @@ const fetchUserTransactions = async (tokenAddress: string, userAddress: string, 
                 allLogs.push(...smallLogs);
               }
             } catch {
-              logger.warn(`Retry also failed for block ${fromBlock} to ${toBlock}`, {
+              console.warn(`Retry also failed for block ${fromBlock} to ${toBlock}`, {
                 fromBlock,
                 toBlock
               });
@@ -408,7 +419,7 @@ const fetchUserTransactions = async (tokenAddress: string, userAddress: string, 
       fetchLogsInChunks(sellEventABI, { seller: userAddress as Address })
     ]);
 
-    logger.debug(`Found ${buyLogs.length} buy events and ${sellLogs.length} sell events`, {
+    console.debug(`Found ${buyLogs.length} buy events and ${sellLogs.length} sell events`, {
       buyEvents: buyLogs.length,
       sellEvents: sellLogs.length
     });
@@ -427,7 +438,7 @@ const fetchUserTransactions = async (tokenAddress: string, userAddress: string, 
       const amountCoin = Number(formatUnits(log.args.amountCoin!, 18));
       const price = amountCoin > 0 ? amountAsset / amountCoin : 0;
       
-      logger.debug(`BUY: ${amountCoin} tokens for ${amountAsset} WETH (price: ${price})`, {
+      console.debug(`BUY: ${amountCoin} tokens for ${amountAsset} WETH (price: ${price})`, {
         amountCoin,
         amountAsset,
         price
@@ -448,7 +459,7 @@ const fetchUserTransactions = async (tokenAddress: string, userAddress: string, 
       const amountCoin = Number(formatUnits(log.args.amountCoin!, 18));
       const price = amountCoin > 0 ? amountAsset / amountCoin : 0;
       
-      logger.debug(`SELL: ${amountCoin} tokens for ${amountAsset} WETH (price: ${price})`, {
+      console.debug(`SELL: ${amountCoin} tokens for ${amountAsset} WETH (price: ${price})`, {
         amountCoin,
         amountAsset,
         price
@@ -463,13 +474,13 @@ const fetchUserTransactions = async (tokenAddress: string, userAddress: string, 
       });
     }
 
-    logger.debug(`Total transactions processed: ${transactions.length}`, {
+    console.debug(`Total transactions processed: ${transactions.length}`, {
       transactionCount: transactions.length
     });
     return transactions;
 
   } catch (error) {
-    logger.error('Error fetching transactions:', error instanceof Error ? error : new Error(String(error)));
+    console.error('Error fetching transactions:', error instanceof Error ? error : new Error(String(error)));
     return [];
   }
 };
@@ -1375,7 +1386,7 @@ const EnhancedPoolDataLoader = ({
           chainId
         );
       } catch (error) {
-        logger.error('Error calculating metrics with events, using fallback:', error instanceof Error ? error : new Error(String(error)));
+        console.error('Error calculating metrics with events, using fallback:', error instanceof Error ? error : new Error(String(error)));
         // Fallback to legacy calculation
         const bullAvgPrice = bullSupply > 0 ? bullReserve / bullSupply : 0;
         const bearAvgPrice = bearSupply > 0 ? bearReserve / bearSupply : 0;
@@ -1442,7 +1453,7 @@ const EnhancedPoolDataLoader = ({
         isCreator: userAddress?.toLowerCase() === vaultCreator?.toLowerCase(),
       };
 
-      logger.debug("Enhanced EVM pool data with event-based P&L:", { poolData });
+      console.debug("Enhanced EVM pool data with event-based P&L:", { poolData });
       onDataLoad(poolData);
     };
 
@@ -1460,12 +1471,18 @@ export default function PortfolioPage() {
   const [showBearDistribution, setShowBearDistribution] = useState(false);
   const [poolsData, setPoolsData] = useState<PoolData[]>([]);
   const [loadedPoolsCount, setLoadedPoolsCount] = useState(0);
-  const [isLoadingPools, setIsLoadingPools] = useState(true); // Start with loading true
+  const [isLoadingPools, setIsLoadingPools] = useState(false); // Start with false to show empty state immediately
 
   // Get factory address for current chain
   const factoryAddress = useMemo(() => {
     if (!chainId) return null;
-    return FatePoolFactories[chainId as keyof typeof FatePoolFactories];
+    const address = FatePoolFactories[chainId as keyof typeof FatePoolFactories];
+    // Check if address is valid (not zero address)
+    if (!address || address === "0x0000000000000000000000000000000000000000") {
+      console.warn(`No valid factory address configured for chain ${chainId}`);
+      return null;
+    }
+    return address;
   }, [chainId]);
 
   // Get all pools from factory
@@ -1481,13 +1498,18 @@ export default function PortfolioPage() {
 
   const availablePools = useMemo(() => {
     const pools = allPoolsData?.[0]?.result as string[] || [];
-    logger.debug(`Found ${pools.length} pools from factory:`, { pools });
+    console.debug(`Found ${pools.length} pools from factory:`, { 
+      pools, 
+      factoryAddress, 
+      chainId,
+      chainName: getChainName(chainId || 1)
+    });
     return pools.filter(pool => pool && pool !== "0x0000000000000000000000000000000000000000");
-  }, [allPoolsData]);
+  }, [allPoolsData, factoryAddress, chainId]);
 
   // Handle pool data loading
   const handlePoolDataLoad = useCallback((data: PoolData) => {
-    logger.debug("Received EVM pool data:", { data });
+    console.debug("Received EVM pool data:", { data });
     setPoolsData((prev) => {
       const existingIndex = prev.findIndex((p) => p.id === data.id);
       if (existingIndex >= 0) {
@@ -1503,27 +1525,24 @@ export default function PortfolioPage() {
 
   // Initialize loading state based on connection
   useEffect(() => {
-  if (!isConnected) {
+    if (!isConnected) {
+      setIsLoadingPools(false);
+    } else if (!factoryAddress) {
+      // No valid factory address - stop loading immediately
+      console.warn("No valid factory address for current chain, stopping loading");
       setIsLoadingPools(false);
     } else {
-      setIsLoadingPools(true);
-      
-      // Fallback timeout to prevent infinite loading
-      const fallbackTimer = setTimeout(() => {
-        logger.debug("Portfolio: Fallback timeout triggered, stopping loading");
-        setIsLoadingPools(false);
-      }, 10000); // 10 seconds max loading time
-      
-      return () => clearTimeout(fallbackTimer);
+      // Start loading data in background but don't show loading screen
+      setIsLoadingPools(false);
     }
-  }, [isConnected]);
+  }, [isConnected, factoryAddress]);
 
   // Reset data when user changes
   useEffect(() => {
     if (address) {
       setPoolsData([]);
       setLoadedPoolsCount(0);
-      setIsLoadingPools(true);
+      setIsLoadingPools(false); // Don't show loading screen
     } else {
       setPoolsData([]);
       setLoadedPoolsCount(0);
@@ -1531,34 +1550,8 @@ export default function PortfolioPage() {
     }
   }, [address, chainId]);
 
-  // Enhanced loading logic - only stop loading when we have complete data
-  useEffect(() => {
-    if (!address || !isConnected) {
-      return; // Don't try to stop loading if user is not connected
-    }
-
-    // If we have factory data and user is connected
-    if (allPoolsData && address) {
-      if (availablePools.length > 0) {
-        // If we've checked all pools
-        if (loadedPoolsCount >= availablePools.length) {
-          // Add a small delay to ensure all data is processed
-          const timer = setTimeout(() => {
-            setIsLoadingPools(false);
-          }, 1000);
-          
-          return () => clearTimeout(timer);
-        }
-      } else {
-        // If no pools exist, stop loading after a short delay
-        const timer = setTimeout(() => {
-          setIsLoadingPools(false);
-        }, 1500);
-        
-        return () => clearTimeout(timer);
-      }
-    }
-  }, [loadedPoolsCount, availablePools.length, address, allPoolsData, isConnected]);
+  // Remove the complex loading logic - let data load in background
+  // The portfolio will show empty state (0 values) immediately and populate as data loads
 
   // Calculate portfolio statistics
   const {
@@ -1626,81 +1619,19 @@ export default function PortfolioPage() {
   }, [poolsData]);
 
   // Debug logging
-  logger.debug("Portfolio state:", {
+  console.debug("Portfolio state:", {
     isConnected,
     address,
     isLoadingPools,
     availablePoolsLength: availablePools.length,
     loadedPoolsCount,
     hasAllPoolsData: !!allPoolsData,
-    chainId
+    chainId,
+    factoryAddress,
+    hasValidFactory: !!factoryAddress && factoryAddress !== "0x0000000000000000000000000000000000000000"
   });
 
-  // Show full page loading while data is being fetched
-  if (isLoadingPools && isConnected) {
-    return (
-      <div className="fixed inset-0 bg-white dark:bg-black flex items-center justify-center z-50">
-        <Loading size="lg" />
-      </div>
-    );
-  }
-
-  // Show skeleton loading while portfolio calculations are in progress
-  if (isConnected && poolsData.length === 0 && !isLoadingPools) {
-    return (
-      <div className="min-h-screen bg-white dark:bg-black text-neutral-900 dark:text-white p-4 pt-28 min-[900px]:p-6 min-[900px]:pt-32">
-        <div className="max-w-7xl mx-auto space-y-8">
-          {/* Skeleton Summary Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="bg-white dark:bg-neutral-900 border border-gray-200 dark:border-neutral-700 rounded-xl p-6 shadow-sm">
-                <div className="flex items-center space-x-4">
-                  <div className="w-12 h-12 bg-gray-200 dark:bg-neutral-700 rounded-lg animate-pulse"></div>
-                  <div className="flex-1">
-                    <div className="h-4 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse mb-2"></div>
-                    <div className="h-6 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse w-3/4"></div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Skeleton Portfolio Content */}
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-              <div className="bg-white dark:bg-neutral-900 border border-gray-200 dark:border-neutral-700 rounded-xl p-6 shadow-sm">
-                <div className="space-y-4">
-                  <div className="h-6 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse w-1/3"></div>
-                  <div className="h-48 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse"></div>
-                </div>
-              </div>
-              <div className="xl:col-span-2 bg-white dark:bg-neutral-900 border border-gray-200 dark:border-neutral-700 rounded-xl p-6 shadow-sm">
-                <div className="space-y-4">
-                  <div className="h-6 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse w-1/2"></div>
-                  <div className="h-4 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse w-3/4"></div>
-                  <div className="space-y-3">
-                    {[1, 2, 3].map((i) => (
-                      <div key={i} className="flex items-center space-x-4 p-3 border border-gray-200 dark:border-neutral-700 rounded-lg">
-                        <div className="w-10 h-10 bg-gray-200 dark:bg-neutral-700 rounded-full animate-pulse"></div>
-                        <div className="flex-1 space-y-2">
-                          <div className="h-4 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse w-1/3"></div>
-                          <div className="h-3 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse w-1/2"></div>
-                        </div>
-                        <div className="text-right space-y-2">
-                          <div className="h-4 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse w-16"></div>
-                          <div className="h-3 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse w-12"></div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // Remove the loading screen - show portfolio immediately with 0 values
 
   if (!isConnected) {
     return (
@@ -1962,24 +1893,78 @@ export default function PortfolioPage() {
               />
             )}
             
-            {/* No active positions message */}
-            <Card className="border-neutral-200 dark:border-neutral-700 dark:bg-neutral-800 p-8 text-center">
-              <CardTitle className="text-neutral-900 dark:text-neutral-100 mb-2">
-                {historicalPoolsData.length > 0 ? 'No Active Positions' : 'No Positions Yet'}
-              </CardTitle>
-              <p className="text-neutral-600 dark:text-neutral-400 mb-6">
-                {historicalPoolsData.length > 0 
-                  ? 'You don\'t have any active positions, but you can see your trading history above.'
-                  : 'You don\'t have any positions in prediction pools yet.'
-                }
-              </p>
-              <Button 
-                onClick={() => router.push('/explorePools')}
-                className="bg-black hover:bg-gray-800 dark:bg-white dark:hover:bg-gray-200 text-white dark:text-black"
-              >
-                Explore Pools
-              </Button>
-            </Card>
+             {/* Contract deployment status message */}
+             {!factoryAddress && isConnected && (
+               <Card className="border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-900/20 p-8 text-center">
+                 <CardTitle className="text-yellow-800 dark:text-yellow-200 mb-2">
+                   Contracts Not Deployed
+                 </CardTitle>
+                 <p className="text-yellow-700 dark:text-yellow-300 mb-4">
+                   The Fate Protocol contracts are not yet deployed on {getChainName(chainId || 1)}.
+                 </p>
+                 <p className="text-yellow-600 dark:text-yellow-400 mb-6">
+                   You can test the protocol on Sepolia testnet (contracts are deployed there) or wait for mainnet deployment.
+                 </p>
+                 <div className="flex gap-4 justify-center flex-wrap">
+                   <Button 
+                     onClick={() => router.push('/explorePools')}
+                     className="bg-yellow-600 hover:bg-yellow-700 text-white"
+                   >
+                     Check Available Networks
+                   </Button>
+                   <Button 
+                     onClick={() => router.push('/createPool')}
+                     variant="outline"
+                     className="border-yellow-600 text-yellow-600 hover:bg-yellow-600 hover:text-white"
+                   >
+                     Create Pool (Testnet)
+                   </Button>
+                 </div>
+                 <div className="mt-4 p-4 bg-yellow-100 dark:bg-yellow-800/30 rounded-lg">
+                   <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                     <strong>Available Networks:</strong> Sepolia Testnet (Chain ID: 11155111)
+                   </p>
+                   <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-1">
+                     Switch to Sepolia testnet to interact with deployed contracts
+                   </p>
+                   <div className="mt-2 p-2 bg-yellow-200 dark:bg-yellow-700/50 rounded text-xs">
+                     <p className="text-yellow-800 dark:text-yellow-200">
+                       <strong>Debug Info:</strong> Current chain: {getChainName(chainId || 1)} (ID: {chainId})
+                     </p>
+                     <p className="text-yellow-700 dark:text-yellow-300">
+                       Factory address: {factoryAddress || 'Not configured'}
+                     </p>
+                   </div>
+                 </div>
+               </Card>
+             )}
+
+             {/* No active positions message */}
+             {factoryAddress && (
+               <Card className="border-neutral-200 dark:border-neutral-700 dark:bg-neutral-800 p-8 text-center">
+                 <CardTitle className="text-neutral-900 dark:text-neutral-100 mb-2">
+                   {poolsData.length === 0 ? 'No Pools Found' : (historicalPoolsData.length > 0 ? 'No Active Positions' : 'No Positions Yet')}
+                 </CardTitle>
+                 <p className="text-neutral-600 dark:text-neutral-400 mb-6">
+                   {poolsData.length === 0 
+                     ? (chainId === 11155111 
+                       ? 'No prediction pools have been created on Sepolia testnet yet. Be the first to create one!'
+                       : 'No prediction pools found on this network. Try switching to a different network or check back later.')
+                     : (historicalPoolsData.length > 0 
+                       ? 'You don\'t have any active positions, but you can see your trading history above.'
+                       : 'You don\'t have any positions in prediction pools yet.')
+                   }
+                 </p>
+                 <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                   <Button 
+                     onClick={() => router.push('/explorePools')}
+                     className="bg-black hover:bg-gray-800 dark:bg-white dark:hover:bg-gray-200 text-white dark:text-black"
+                   >
+                     Explore Pools
+                   </Button>
+               </div>
+               </Card>
+             )}
           </div>
         ) : null}
       </div>

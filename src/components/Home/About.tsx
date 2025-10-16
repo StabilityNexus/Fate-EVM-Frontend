@@ -89,6 +89,22 @@ export default function AboutSection() {
             *In a world of uncertainty, we provide clarity — empowering you to predict, protect, and prosper.*
           </p>
         </div>
+
+        {/* SEO-friendly hidden content */}
+        <div className="hidden">
+          <h3>Fate Protocol Features</h3>
+          <ul>
+            <li>Decentralized prediction markets on multiple blockchain networks</li>
+            <li>Perpetual prediction pools with continuous operation</li>
+            <li>Bull and Bear coin trading for price movement prediction</li>
+            <li>Real-time price feeds powered by Chainlink oracles</li>
+            <li>Automated market making for efficient trading</li>
+            <li>Multi-chain support: Ethereum, Polygon, BSC, Base, Ethereum Classic</li>
+            <li>Transparent smart contracts ensuring fairness and security</li>
+            <li>DeFi trading platform for cryptocurrency price prediction</li>
+          </ul>
+          <p>Fate Protocol is a decentralized finance (DeFi) platform that enables users to trade prediction markets through perpetual prediction pools. Users can buy bullCoins to bet on price increases or bearCoins to bet on price decreases, creating a dynamic hedging mechanism against price volatility risks.</p>
+        </div>
       </div>
     </section>
   );
