@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useAccount } from "wagmi";
 // import { useRouter } from "next/navigation";
 import CreateFatePoolForm from "@/components/Forms/CreateFatePool";
+import { logger } from "@/lib/logger";
 
 export default function CreateFatePoolPage() {
   const { isConnected } = useAccount();
@@ -16,7 +17,7 @@ export default function CreateFatePoolPage() {
       if (persistConnection && !isConnected) {
         // If we had a persistent connection but wallet is disconnected, 
         // try to restore it or redirect back
-        console.log('Wallet connection lost during navigation, attempting to restore...');
+        logger.debug('Wallet connection lost during navigation, attempting to restore...');
       }
     }
   }, [isConnected]);

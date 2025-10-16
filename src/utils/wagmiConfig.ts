@@ -21,7 +21,7 @@ export const config = (() => {
   
   memoizedConfig = getDefaultConfig({
     appName: "Fate Protocol",
-    projectId: PROJECT_ID,
+    projectId: process.env.NEXT_PUBLIC_PROJECT_ID ?? "DEFAULT_PROJECT_ID",
     chains: [
       mainnet,    // 1 - Ethereum Mainnet
       polygon,    // 137 - Polygon

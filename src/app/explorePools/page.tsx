@@ -22,6 +22,7 @@ import PoolSearch from "@/components/Explore/PoolSearch";
 import StatusMessages from "@/components/Explore/StatusMessages";
 import PoolList from "@/components/Explore/PoolList";
 import { Loading } from "@/components/ui/loading";
+import { logger } from "@/lib/logger";
 
 // Constants for configuration
 const DENOMINATOR = 100_000;
@@ -155,7 +156,7 @@ function ExploreFatePoolsClient() {
       }
       return token;
     } catch (error) {
-      console.error(`Error fetching coin data for ${coinAddr}:`, error);
+      logger.error(`Error fetching coin data for ${coinAddr}:`, error);
       return null;
     }
   }, [isInitialized, batchSaveTokens]);
@@ -169,7 +170,7 @@ function ExploreFatePoolsClient() {
     
     // If factory address is zero, show error and return empty
     if (!isAddress(factoryAddress) || factoryAddress === "0x0000000000000000000000000000000000000000") {
-      console.log(`Chain ${chainId} has no factory address configured`);
+      logger.debug(`Chain ${chainId} has no factory address configured`);
       updateChainState(chainId, { error: `No factory address configured for this chain`, loading: false });
       return [];
     }
@@ -186,18 +187,26 @@ function ExploreFatePoolsClient() {
         
         await publicClient.getBlockNumber();
         
-        console.log(`Fetching pools from chain ${chainId} (${chainConfig.name}) using factory: ${factoryAddress}`);
+        logger.debug(`Fetching pools from chain ${chainId} (${chainConfig.name}) using factory: ${factoryAddress}`, {
+          chainId,
+          chainName: chainConfig.name,
+          factoryAddress
+        });
         
         const poolAddresses = (await publicClient.readContract({
           address: factoryAddress as Address,
           abi: PredictionPoolFactoryABI,
           functionName: "getAllPools"
         }).catch((error) => {
-          console.error(`Failed to call getAllPools on chain ${chainId}:`, error);
+          logger.error(`Failed to call getAllPools on chain ${chainId}:`, error);
           return [];
         })) as Address[];
 
-        console.log(`Found ${poolAddresses.length} pools on chain ${chainId}:`, poolAddresses);
+        logger.debug(`Found ${poolAddresses.length} pools on chain ${chainId}:`, {
+          poolCount: poolAddresses.length,
+          chainId,
+          poolAddresses
+        });
         
         updateChainState(chainId, { poolCount: poolAddresses.length });
         if (poolAddresses.length === 0) {
@@ -209,7 +218,7 @@ function ExploreFatePoolsClient() {
         for (let i = 0; i < poolAddresses.length; i += BATCH_SIZE) {
           const batch = poolAddresses.slice(i, i + BATCH_SIZE);
           const batchPromises = batch.map(async (addr: Address): Promise<Pool | null> => {
-            if (!isAddress(addr)) { console.warn(`Invalid pool address: ${addr}`); return null; }
+            if (!isAddress(addr)) { logger.warn(`Invalid pool address: ${addr}`); return null; }
             const [name, baseToken, oracleAddress, bullAddr, bearAddr, vaultCreator, mintFee, burnFee, creatorFee, treasuryFee] = await Promise.all([
               publicClient.readContract({ address: addr, abi: PredictionPoolABI, functionName: "poolName" }).catch((): string => "Unknown Pool"),
               publicClient.readContract({ address: addr, abi: PredictionPoolABI, functionName: "baseToken" }).catch((): Address => "0x0000000000000000000000000000000000000000"),
@@ -235,20 +244,30 @@ function ExploreFatePoolsClient() {
                   functionName: "priceFeed"
                 });
                 underlyingPriceFeedAddress = priceFeedAddress as Address;
-                console.log(`Pool ${addr}: Oracle ${oracleAddress} -> Underlying Pricefeed ${underlyingPriceFeedAddress}`);
+                logger.debug(`Pool ${addr}: Oracle ${oracleAddress} -> Underlying Pricefeed ${underlyingPriceFeedAddress}`, {
+                  poolAddress: addr,
+                  oracleAddress,
+                  underlyingPriceFeedAddress
+                });
               } catch (oracleError) {
-                console.warn(`Failed to get underlying pricefeed from oracle ${oracleAddress}:`, oracleError);
+                logger.warn(`Failed to get underlying pricefeed from oracle ${oracleAddress}:`, {
+                  oracleAddress,
+                  error: oracleError
+                });
                 // Fallback to oracle address if we can't get the underlying pricefeed
-                console.log(`Pool ${addr}: Using oracle address as fallback: ${oracleAddress}`);
+                logger.debug(`Pool ${addr}: Using oracle address as fallback: ${oracleAddress}`, {
+                  poolAddress: addr,
+                  oracleAddress
+                });
               }
             } else {
-              console.log(`Pool ${addr}: No oracle address found, using fallback`);
+              logger.debug(`Pool ${addr}: No oracle address found, using fallback`);
             }
             const [bull, bear] = await Promise.all([
               fetchCoin(bullAddr as Address, bearAddr as Address, addr, publicClient, chainId as SupportedChainId),
               fetchCoin(bearAddr as Address, bullAddr as Address, addr, publicClient, chainId as SupportedChainId)
             ]);
-            if (!bull || !bear) { console.warn(`Failed to fetch token data for pool ${addr} on chain ${chainId}`); return null; }
+            if (!bull || !bear) { logger.warn(`Failed to fetch token data for pool ${addr} on chain ${chainId}`); return null; }
             const bullSupply = Number(formatUnits(bull.supply, 18));
             const bearSupply = Number(formatUnits(bear.supply, 18));
             const bullPriceBuy = bull.priceBuy ?? 0;
@@ -294,14 +313,14 @@ function ExploreFatePoolsClient() {
         updateChainState(chainId, { loading: false, error: null });
         return pools;
       } catch (error) {
-        console.error(`Failed to fetch pools from factory on chain ${chainId}:`, error);
+        logger.error(`Failed to fetch pools from factory on chain ${chainId}:`, error);
         // Fall back to cached data if factory fetch fails
       }
     }
     
     // Fallback to cached data when offline or factory fetch fails
     if (isInitialized) {
-      console.log(`Falling back to cached data for chain ${chainId}`);
+      logger.debug(`Falling back to cached data for chain ${chainId}`);
       try {
         const cachedPools = await getAllPools();
         const filteredPools = cachedPools.filter(p => p.chainId === chainId);
@@ -363,12 +382,12 @@ function ExploreFatePoolsClient() {
               }
             }
           } catch (tokenError) {
-            console.error(`Failed to load tokens for pool ${poolDetails.id} from cache:`, tokenError);
+            logger.error(`Failed to load tokens for pool ${poolDetails.id} from cache:`, tokenError);
           }
         }
         return convertedPools;
       } catch (cacheError) {
-        console.error(`Failed to load cached pools for chain ${chainId}:`, cacheError);
+        logger.error(`Failed to load cached pools for chain ${chainId}:`, cacheError);
         updateChainState(chainId, { loading: false, error: `Failed to load cached data` });
         return [];
       }
@@ -411,18 +430,24 @@ function ExploreFatePoolsClient() {
     }
 
     try {
-      console.log(`Fetching pools from ${chainsToFetch.length} chains:`, chainsToFetch);
+      logger.debug(`Fetching pools from ${chainsToFetch.length} chains:`, { chainsToFetch });
       const allPools: Pool[] = [];
       let successfulChains = 0;
       let totalErrors = 0;
 
       for (const chainId of chainsToFetch) {
         const factoryAddress = (FatePoolFactories as FactoryAddresses)[chainId.toString()];
-        console.log(`Processing chain ${chainId} with factory address: ${factoryAddress}`);
+        logger.debug(`Processing chain ${chainId} with factory address: ${factoryAddress}`, {
+          chainId,
+          factoryAddress
+        });
         
         try {
           const poolsFromChain = await fetchPoolsFromChain(chainId, factoryAddress);
-          console.log(`Chain ${chainId} returned ${poolsFromChain.length} pools`);
+          logger.debug(`Chain ${chainId} returned ${poolsFromChain.length} pools`, {
+            chainId,
+            poolCount: poolsFromChain.length
+          });
           allPools.push(...poolsFromChain);
           if (poolsFromChain.length > 0) {
             successfulChains++;
@@ -430,7 +455,7 @@ function ExploreFatePoolsClient() {
           updateChainState(chainId, { loading: false, error: null, poolCount: poolsFromChain.length });
         } catch (error) {
           totalErrors++;
-          console.error(`Chain ${chainId} failed:`, error);
+          logger.error(`Chain ${chainId} failed:`, error);
           updateChainState(chainId, { loading: false, error: (error as Error)?.message || 'Unknown error' });
         }
       }
@@ -444,9 +469,9 @@ function ExploreFatePoolsClient() {
         ? `Loaded ${uniquePools.length} pools from connected chain (${getChainConfig(currentChainId)?.name})`
         : `Loaded ${uniquePools.length} pools from ${successfulChains}/${chainCount} chains`;
       
-      console.log(isConnected && currentChainId && isConnectedChainSupported
-        ? `🚀 Pools from connected chain (${getChainConfig(currentChainId)?.name}):`
-        : "🚀 All fetched pools from all supported chains:", uniquePools);
+      logger.debug(isConnected && currentChainId && isConnectedChainSupported
+        ? `Pools from connected chain (${getChainConfig(currentChainId)?.name}):`
+        : "All fetched pools from all supported chains:", { uniquePools });
               if (showToast) {
           if (totalErrors > 0) { 
             toast.warning(`${message}. ${totalErrors} chains had errors.`); 
@@ -461,7 +486,7 @@ function ExploreFatePoolsClient() {
           }
         }
     } catch (error) {
-      console.error("Failed to fetch pools:", error);
+      logger.error("Failed to fetch pools:", error);
       if (showToast) { toast.error("Failed to fetch pools. Please try again."); }
     } finally {
       setLoading(false);

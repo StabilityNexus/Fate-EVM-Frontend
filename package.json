@@ -10,7 +10,6 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@lottiefiles/react-lottie-player": "^3.6.0",
     "@pythnetwork/client": "^2.22.1",
     "@pythnetwork/pyth-evm-js": "^1.83.0",
     "@pythnetwork/pyth-sdk-js": "^1.2.0",

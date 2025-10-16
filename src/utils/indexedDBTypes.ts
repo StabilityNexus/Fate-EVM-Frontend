@@ -62,3 +62,53 @@ export interface CacheMetadata {
   updatedAt: number;
   expiresAt: number;
 }
+
+// Portfolio-specific types for caching
+export interface PortfolioPosition {
+  id: string; // `${userAddress}-${tokenAddress}-${chainId}`
+  userAddress: string;
+  tokenAddress: string;
+  poolAddress: string;
+  chainId: SupportedChainId;
+  tokenType: 'bull' | 'bear';
+  currentBalance: number;
+  currentValue: number;
+  costBasis: number;
+  pnL: number;
+  returns: number;
+  totalFeesPaid: number;
+  netInvestment: number;
+  grossInvestment: number;
+  lastUpdated: number;
+  blockNumber: number; // Last block when data was fetched
+}
+
+export interface PortfolioTransaction {
+  id: string; // `${userAddress}-${tokenAddress}-${txHash}-${logIndex}`
+  userAddress: string;
+  tokenAddress: string;
+  chainId: SupportedChainId;
+  type: 'buy' | 'sell';
+  amountAsset: number;
+  amountCoin: number;
+  price: number;
+  feePaid: number;
+  blockNumber: number;
+  transactionHash: string;
+  logIndex: number;
+  timestamp: number;
+}
+
+export interface PortfolioCache {
+  userAddress: string;
+  chainId: SupportedChainId;
+  positions: PortfolioPosition[];
+  transactions: PortfolioTransaction[];
+  totalPortfolioValue: number;
+  totalPnL: number;
+  totalReturns: number;
+  lastUpdated: number;
+  blockNumber: number;
+  ttlMinutes: number;
+  expiresAt: number;
+}

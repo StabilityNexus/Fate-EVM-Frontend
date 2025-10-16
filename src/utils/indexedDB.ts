@@ -3,11 +3,16 @@
 // IndexedDB service for storing Fate Pools data
 // Following best practices with versioning, proper indexing, and error handling
 
+import { logger } from '@/lib/logger';
+
 import type { 
   PoolDetails, 
   TokenDetails, 
   ChainStatus, 
   CacheMetadata,
+  PortfolioPosition,
+  PortfolioTransaction,
+  PortfolioCache,
   SupportedChainId 
 } from './indexedDBTypes';
 
@@ -22,7 +27,10 @@ export class FatePoolsIndexedDBService {
     bullTokens: 'bullTokens',
     bearTokens: 'bearTokens',
     chainStatus: 'chainStatus',
-    cacheMetadata: 'cacheMetadata'
+    cacheMetadata: 'cacheMetadata',
+    portfolioPositions: 'portfolioPositions',
+    portfolioTransactions: 'portfolioTransactions',
+    portfolioCache: 'portfolioCache'
   } as const;
 
   async init(): Promise<void> {
@@ -40,14 +48,14 @@ export class FatePoolsIndexedDBService {
       const request = window.indexedDB.open(this.dbName, this.dbVersion);
 
       request.onerror = () => {
-        console.error('FatePoolsDB failed to open:', request.error);
+        logger.error('FatePoolsDB failed to open:', request.error);
         reject(new Error(`Failed to open IndexedDB: ${request.error?.message}`));
       };
 
       request.onsuccess = () => {
         this.db = request.result;
         this.db.onerror = (event) => {
-          console.error('Database error:', event);
+          logger.error('Database error:', event);
         };
         resolve();
       };
@@ -90,6 +98,35 @@ export class FatePoolsIndexedDBService {
           cacheStore.createIndex('chainId', 'chainId', { unique: false });
           cacheStore.createIndex('expiresAt', 'expiresAt', { unique: false });
           cacheStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+        }
+
+        // Portfolio-specific stores
+        if (!db.objectStoreNames.contains(this.stores.portfolioPositions)) {
+          const positionStore = db.createObjectStore(this.stores.portfolioPositions, { keyPath: 'id' });
+          positionStore.createIndex('userAddress', 'userAddress', { unique: false });
+          positionStore.createIndex('chainId', 'chainId', { unique: false });
+          positionStore.createIndex('tokenAddress', 'tokenAddress', { unique: false });
+          positionStore.createIndex('userAddress_chainId', ['userAddress', 'chainId'], { unique: false });
+          positionStore.createIndex('lastUpdated', 'lastUpdated', { unique: false });
+          positionStore.createIndex('blockNumber', 'blockNumber', { unique: false });
+        }
+
+        if (!db.objectStoreNames.contains(this.stores.portfolioTransactions)) {
+          const transactionStore = db.createObjectStore(this.stores.portfolioTransactions, { keyPath: 'id' });
+          transactionStore.createIndex('userAddress', 'userAddress', { unique: false });
+          transactionStore.createIndex('chainId', 'chainId', { unique: false });
+          transactionStore.createIndex('tokenAddress', 'tokenAddress', { unique: false });
+          transactionStore.createIndex('userAddress_chainId', ['userAddress', 'chainId'], { unique: false });
+          transactionStore.createIndex('blockNumber', 'blockNumber', { unique: false });
+          transactionStore.createIndex('timestamp', 'timestamp', { unique: false });
+        }
+
+        if (!db.objectStoreNames.contains(this.stores.portfolioCache)) {
+          const portfolioCacheStore = db.createObjectStore(this.stores.portfolioCache, { keyPath: 'userAddress' });
+          portfolioCacheStore.createIndex('chainId', 'chainId', { unique: false });
+          portfolioCacheStore.createIndex('lastUpdated', 'lastUpdated', { unique: false });
+          portfolioCacheStore.createIndex('expiresAt', 'expiresAt', { unique: false });
+          portfolioCacheStore.createIndex('blockNumber', 'blockNumber', { unique: false });
         }
       };
     });
@@ -316,7 +353,7 @@ export class FatePoolsIndexedDBService {
           return;
         }
         if (Date.now() > result.expiresAt) {
-          this.deleteCache(key).catch(console.error);
+          this.deleteCache(key).catch((err) => logger.error('Failed to delete cache:', err));
           resolve(null);
           return;
         }
@@ -440,10 +477,157 @@ export class FatePoolsIndexedDBService {
         totalPools = pools.length;
         totalTokens = tokenCount;
       } catch (error) {
-        console.error('Error getting database stats:', error);
+        logger.error('Error getting database stats:', error);
       }
     }
     return { name: this.dbName, version: this.dbVersion, stores: Object.values(this.stores), isConnected, totalPools, totalTokens };
+  }
+
+  // --- Portfolio-specific methods ---
+  
+  // Save portfolio position
+  async savePortfolioPosition(position: Omit<PortfolioPosition, 'id'>): Promise<void> {
+    const db = await this.ensureDB();
+    const transaction = db.transaction([this.stores.portfolioPositions], 'readwrite');
+    const store = transaction.objectStore(this.stores.portfolioPositions);
+    
+    const positionWithId: PortfolioPosition = {
+      ...position,
+      id: `${position.userAddress}-${position.tokenAddress}-${position.chainId}`
+    };
+    
+    await this.putInStore(store, positionWithId);
+  }
+
+  // Get portfolio positions for user and chain
+  async getPortfolioPositions(userAddress: string, chainId: SupportedChainId): Promise<PortfolioPosition[]> {
+    const db = await this.ensureDB();
+    const transaction = db.transaction([this.stores.portfolioPositions], 'readonly');
+    const store = transaction.objectStore(this.stores.portfolioPositions);
+    const index = store.index('userAddress_chainId');
+    
+    return new Promise((resolve, reject) => {
+      const request = index.getAll([userAddress, chainId]);
+      request.onsuccess = () => resolve(request.result || []);
+      request.onerror = () => reject(new Error(`Failed to get portfolio positions: ${request.error?.message}`));
+    });
+  }
+
+  // Save portfolio transaction
+  async savePortfolioTransaction(transaction: Omit<PortfolioTransaction, 'id'>): Promise<void> {
+    const db = await this.ensureDB();
+    const dbTransaction = db.transaction([this.stores.portfolioTransactions], 'readwrite');
+    const store = dbTransaction.objectStore(this.stores.portfolioTransactions);
+    
+    const transactionWithId: PortfolioTransaction = {
+      ...transaction,
+      id: `${transaction.userAddress}-${transaction.tokenAddress}-${transaction.transactionHash}-${transaction.logIndex}`
+    };
+    
+    await this.putInStore(store, transactionWithId);
+  }
+
+  // Get portfolio transactions for user and chain
+  async getPortfolioTransactions(userAddress: string, chainId: SupportedChainId): Promise<PortfolioTransaction[]> {
+    const db = await this.ensureDB();
+    const transaction = db.transaction([this.stores.portfolioTransactions], 'readonly');
+    const store = transaction.objectStore(this.stores.portfolioTransactions);
+    const index = store.index('userAddress_chainId');
+    
+    return new Promise((resolve, reject) => {
+      const request = index.getAll([userAddress, chainId]);
+      request.onsuccess = () => resolve(request.result || []);
+      request.onerror = () => reject(new Error(`Failed to get portfolio transactions: ${request.error?.message}`));
+    });
+  }
+
+  // Save complete portfolio cache
+  async savePortfolioCache(cache: Omit<PortfolioCache, 'userAddress'> & { userAddress: string }): Promise<void> {
+    const db = await this.ensureDB();
+    const transaction = db.transaction([this.stores.portfolioCache], 'readwrite');
+    const store = transaction.objectStore(this.stores.portfolioCache);
+    
+    const cacheWithExpiry: PortfolioCache = {
+      ...cache,
+      expiresAt: Date.now() + (cache.ttlMinutes * 60 * 1000)
+    };
+    
+    await this.putInStore(store, cacheWithExpiry);
+  }
+
+  // Get portfolio cache
+  async getPortfolioCache(userAddress: string, chainId: SupportedChainId): Promise<PortfolioCache | null> {
+    const db = await this.ensureDB();
+    const transaction = db.transaction([this.stores.portfolioCache], 'readonly');
+    const store = transaction.objectStore(this.stores.portfolioCache);
+    
+    return new Promise((resolve, reject) => {
+      const request = store.get(userAddress);
+      request.onsuccess = () => {
+        const result = request.result;
+        if (!result) {
+          resolve(null);
+          return;
+        }
+        
+        // Check if cache is expired
+        if (result.expiresAt && Date.now() > result.expiresAt) {
+          resolve(null);
+          return;
+        }
+        
+        // Check if it's for the right chain
+        if (result.chainId !== chainId) {
+          resolve(null);
+          return;
+        }
+        
+        resolve(result);
+      };
+      request.onerror = () => reject(new Error(`Failed to get portfolio cache: ${request.error?.message}`));
+    });
+  }
+
+  // Clear portfolio data for user
+  async clearPortfolioData(userAddress: string, chainId?: SupportedChainId): Promise<void> {
+    const db = await this.ensureDB();
+    
+    // Clear positions
+    const positionTransaction = db.transaction([this.stores.portfolioPositions], 'readwrite');
+    const positionStore = positionTransaction.objectStore(this.stores.portfolioPositions);
+    const positionIndex = positionStore.index('userAddress_chainId');
+    
+    const positionRequest = chainId 
+      ? positionIndex.getAll([userAddress, chainId])
+      : positionIndex.getAll(userAddress);
+    
+    positionRequest.onsuccess = () => {
+      const positions = positionRequest.result || [];
+      positions.forEach(position => {
+        positionStore.delete(position.id);
+      });
+    };
+    
+    // Clear transactions
+    const transactionTransaction = db.transaction([this.stores.portfolioTransactions], 'readwrite');
+    const transactionStore = transactionTransaction.objectStore(this.stores.portfolioTransactions);
+    const transactionIndex = transactionStore.index('userAddress_chainId');
+    
+    const transactionRequest = chainId 
+      ? transactionIndex.getAll([userAddress, chainId])
+      : transactionIndex.getAll(userAddress);
+    
+    transactionRequest.onsuccess = () => {
+      const transactions = transactionRequest.result || [];
+      transactions.forEach(transaction => {
+        transactionStore.delete(transaction.id);
+      });
+    };
+    
+    // Clear cache
+    const cacheTransaction = db.transaction([this.stores.portfolioCache], 'readwrite');
+    const cacheStore = cacheTransaction.objectStore(this.stores.portfolioCache);
+    cacheStore.delete(userAddress);
   }
 
   close(): void {

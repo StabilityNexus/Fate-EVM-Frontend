@@ -13,12 +13,36 @@ import FeeConfigurationStep from "./Steps/FeeConfigurationStep";
 import ReviewStep from "./Steps/ReviewStep";
 import type { FormData } from "./FormData";
 import { toast } from "sonner";
+import { logger } from "@/lib/logger";
 import { PredictionPoolFactoryABI } from "@/utils/abi/PredictionPoolFactory";
 import { ChainlinkAdapterFactoryABI } from "@/utils/abi/ChainlinkAdapterFactory";
-import { FatePoolFactories, ChainlinkAdapterFactories } from "@/utils/addresses";
+import { HebeswapAdapterFactoryABI } from "@/utils/abi/HebeswapAdapterFactory";
+import { FatePoolFactories, ChainlinkAdapterFactories, HebeswapAdapterFactories } from "@/utils/addresses";
 import { SUPPORTED_CHAINS, getPriceFeedOptions } from "@/utils/supportedChainFeed";
+import { parseUnits } from "viem";
 
 const DENOMINATOR = 100_000;
+
+// Minimal ERC20 ABI for approve and decimals functions
+const ERC20_ABI = [
+  {
+    "type": "function",
+    "name": "approve",
+    "inputs": [
+      { "name": "spender", "type": "address" },
+      { "name": "amount", "type": "uint256" }
+    ],
+    "outputs": [{ "name": "", "type": "bool" }],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "decimals",
+    "inputs": [],
+    "outputs": [{ "name": "", "type": "uint8" }],
+    "stateMutability": "view"
+  }
+] as const;
 
 export default function CreateFatePool() {
   const router = useRouter();
@@ -62,7 +86,8 @@ export default function CreateFatePool() {
     mintFee: "3.0",
     burnFee: "3.0",
     creatorFee: "2.0",
-    treasuryFee: "0.5"
+    treasuryFee: "0.5",
+    initialDeposit: "0"
   });
 
   const stepTitles = useMemo(() => [
@@ -73,12 +98,12 @@ export default function CreateFatePool() {
   ], []);
 
   const updateFormData = useCallback((updates: Partial<FormData>) => {
-    console.log('updateFormData called with:', updates);
+    logger.debug('updateFormData called with:', { updates });
     setFormData(prev => {
       const shouldUpdate = Object.keys(updates).some(
         key => prev[key as keyof FormData] !== updates[key as keyof FormData]
       );
-      console.log('Should update:', shouldUpdate, 'Previous:', prev, 'Updates:', updates);
+      logger.debug('Should update:', { shouldUpdate, previous: prev, updates });
       return shouldUpdate ? { ...prev, ...updates } : prev;
     });
   }, []);
@@ -119,7 +144,7 @@ export default function CreateFatePool() {
     const newErrors: Record<string, string> = {};
 
     if (currentStep === 1) {
-      console.log('Validating step 1 with formData:', formData);
+      logger.debug('Validating step 1 with formData:', { formData });
       
       if (!formData.poolName.trim()) newErrors.poolName = "Pool name is required";
       if (!formData.baseTokenAddress.trim()) {
@@ -128,13 +153,21 @@ export default function CreateFatePool() {
         newErrors.baseTokenAddress = "Invalid Ethereum address format";
       }
       
+      // Validate initial deposit
+      const initialDeposit = parseFloat(formData.initialDeposit);
+      if (isNaN(initialDeposit)) {
+        newErrors.initialDeposit = "Initial deposit must be a valid number";
+      } else if (initialDeposit < 0) {
+        newErrors.initialDeposit = "Initial deposit cannot be negative";
+      }
+      
       // Validate oracle configuration based on type
       if (formData.oracleType === 'chainlink') {
         if (!formData.priceFeedAddress) {
           newErrors.priceFeedAddress = "Please select a Chainlink price feed";
         }
       } else if (formData.oracleType === 'hebeswap') {
-        console.log('Validating Hebeswap configuration:', {
+        logger.debug('Validating Hebeswap configuration:', {
           hebeswapPairAddress: formData.hebeswapPairAddress,
           hebeswapQuoteToken: formData.hebeswapQuoteToken
         });
@@ -151,7 +184,7 @@ export default function CreateFatePool() {
         }
       }
       
-      console.log('Step 1 validation errors:', newErrors);
+      logger.debug('Step 1 validation errors:', { errors: newErrors });
     } else if (currentStep === 2) {
       if (!formData.bullCoinName.trim()) newErrors.bullCoinName = "Bull coin name is required";
       if (!formData.bullCoinSymbol.trim()) newErrors.bullCoinSymbol = "Bull coin symbol is required";
@@ -179,9 +212,9 @@ export default function CreateFatePool() {
   }, [currentStep, formData]);
 
   const nextStep = useCallback(() => {
-    console.log('nextStep called, currentStep:', currentStep);
+    logger.debug('nextStep called, currentStep:', { currentStep });
     const isValid = validateCurrentStep();
-    console.log('Validation result:', isValid);
+    logger.debug('Validation result:', { isValid });
     if (isValid) {
       setCurrentStep(prev => Math.min(prev + 1, stepTitles.length));
     }
@@ -225,84 +258,211 @@ export default function CreateFatePool() {
        const treasuryFeeUnits = Math.floor((parseFloat(formData.treasuryFee) / 100) * DENOMINATOR);
 
       const baseTokenAddress = formData.baseTokenAddress.trim();
-
-      // Get the adapter factory address for the current chain
-      const adapterFactoryAddress = ChainlinkAdapterFactories[currentChainId];
-      if (!adapterFactoryAddress || adapterFactoryAddress === "0x0000000000000000000000000000000000000000") {
-        throw new Error(`ChainlinkAdapterFactory not deployed on chain ${currentChainId}. Please deploy the adapter factory first.`);
-      }
-
-      // Check if we have a valid price feed address
-      if (!formData.priceFeedAddress || formData.priceFeedAddress === "0x0000000000000000000000000000000000000000") {
-        throw new Error("Price feed address is required.");
-      }
-
-      const priceFeedAddress = formData.priceFeedAddress as `0x${string}`;
       let oracleAddress: `0x${string}`;
 
-      // Step 1: Check if adapter already exists for this price feed
-      console.log("🔍 Checking if oracle adapter exists for price feed:", priceFeedAddress);
-      toast.info("Checking for existing oracle adapter...");
-      
-      try {
-        if (!publicClient) {
-          throw new Error("Public client not available");
+      // Handle oracle creation based on type
+      if (formData.oracleType === "chainlink") {
+        // Get the Chainlink adapter factory address
+        const adapterFactoryAddress = ChainlinkAdapterFactories[currentChainId];
+        if (!adapterFactoryAddress || adapterFactoryAddress === "0x0000000000000000000000000000000000000000") {
+          throw new Error(`ChainlinkAdapterFactory not deployed on chain ${currentChainId}. Please deploy the adapter factory first.`);
         }
 
-        const existingAdapter = await publicClient.readContract({
-          address: adapterFactoryAddress as `0x${string}`,
-          abi: ChainlinkAdapterFactoryABI,
-          functionName: "getAdapter",
-          args: [priceFeedAddress],
-        }) as `0x${string}`;
+        // Check if we have a valid price feed address
+        if (!formData.priceFeedAddress || formData.priceFeedAddress === "0x0000000000000000000000000000000000000000") {
+          throw new Error("Price feed address is required for Chainlink oracle.");
+        }
 
-        if (existingAdapter && existingAdapter !== "0x0000000000000000000000000000000000000000") {
-          console.log("✅ Found existing oracle adapter:", existingAdapter);
-          oracleAddress = existingAdapter;
-          toast.info("Using existing oracle adapter for this price feed.");
-        } else {
-          // Step 2: Deploy new adapter
-          console.log("🚀 Creating new oracle adapter for price feed:", priceFeedAddress);
-          toast.info("Creating new oracle adapter... This may take a moment.");
-          
-          const adapterTxHash = await deployPool({
-            address: adapterFactoryAddress as `0x${string}`,
-            abi: ChainlinkAdapterFactoryABI,
-            functionName: "createAdapter",
-            args: [priceFeedAddress],
-          }) as `0x${string}`;
+        const priceFeedAddress = formData.priceFeedAddress as `0x${string}`;
 
-          console.log("📝 Adapter creation transaction hash:", adapterTxHash);
-          
-          // Wait for the transaction to be mined
-          toast.info("Waiting for adapter creation transaction to be mined...");
-          
-          // Wait for the transaction receipt
-          const receipt = await publicClient.waitForTransactionReceipt({
-            hash: adapterTxHash,
-            timeout: 60_000, // 60 seconds timeout
-          });
+        // Step 1: Check if adapter already exists for this price feed
+        logger.debug("Checking if Chainlink oracle adapter exists for price feed:", { priceFeedAddress });
+        toast.info("Checking for existing oracle adapter...");
+        
+        try {
+          if (!publicClient) {
+            throw new Error("Public client not available");
+          }
 
-          console.log("✅ Adapter creation transaction confirmed:", receipt);
-          
-          // Query the adapter factory for the oracle address after transaction confirmation
-          oracleAddress = await publicClient.readContract({
+          const existingAdapter = await publicClient.readContract({
             address: adapterFactoryAddress as `0x${string}`,
             abi: ChainlinkAdapterFactoryABI,
             functionName: "getAdapter",
             args: [priceFeedAddress],
           }) as `0x${string}`;
-          
-          console.log("🎯 Retrieved oracle address from factory:", oracleAddress);
-          toast.success("Oracle adapter created successfully!");
+
+          if (existingAdapter && existingAdapter !== "0x0000000000000000000000000000000000000000") {
+            logger.debug("Found existing Chainlink oracle adapter:", { existingAdapter });
+            oracleAddress = existingAdapter;
+            toast.info("Using existing oracle adapter for this price feed.");
+          } else {
+            // Step 2: Deploy new Chainlink adapter
+            logger.debug("Creating new Chainlink oracle adapter for price feed:", { priceFeedAddress });
+            toast.info("Creating new oracle adapter... This may take a moment.");
+            
+            const adapterTxHash = await deployPool({
+              address: adapterFactoryAddress as `0x${string}`,
+              abi: ChainlinkAdapterFactoryABI,
+              functionName: "createAdapter",
+              args: [priceFeedAddress],
+            }) as `0x${string}`;
+
+            logger.transaction("Adapter creation transaction hash:", adapterTxHash);
+            
+            // Wait for the transaction to be mined
+            toast.info("Waiting for adapter creation transaction to be mined...");
+            
+            // Wait for the transaction receipt
+            const receipt = await publicClient.waitForTransactionReceipt({
+              hash: adapterTxHash,
+              timeout: 60_000, // 60 seconds timeout
+            });
+
+            logger.transaction("Adapter creation transaction confirmed:", undefined, { receipt });
+            
+            // Query the adapter factory for the oracle address after transaction confirmation
+            oracleAddress = await publicClient.readContract({
+              address: adapterFactoryAddress as `0x${string}`,
+              abi: ChainlinkAdapterFactoryABI,
+              functionName: "getAdapter",
+              args: [priceFeedAddress],
+            }) as `0x${string}`;
+            
+            logger.debug("Retrieved Chainlink oracle address from factory:", { oracleAddress });
+            toast.success("Oracle adapter created successfully!");
+          }
+        } catch (error) {
+          logger.error("Error checking/creating Chainlink oracle adapter:", error);
+          throw new Error(`Failed to get Chainlink oracle adapter: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
-      } catch (error) {
-        console.error("Error checking/creating oracle adapter:", error);
-        throw new Error(`Failed to get oracle adapter: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      } else if (formData.oracleType === "hebeswap") {
+        // Get the Hebeswap adapter factory address
+        const adapterFactoryAddress = HebeswapAdapterFactories[currentChainId];
+        if (!adapterFactoryAddress || adapterFactoryAddress === "0x0000000000000000000000000000000000000000") {
+          throw new Error(`HebeswapAdapterFactory not deployed on chain ${currentChainId}. Please deploy the adapter factory first.`);
+        }
+
+        // Validate Hebeswap parameters
+        if (!formData.hebeswapPairAddress || formData.hebeswapPairAddress === "0x0000000000000000000000000000000000000000") {
+          throw new Error("Hebeswap pair address is required.");
+        }
+        if (!formData.hebeswapQuoteToken || formData.hebeswapQuoteToken === "0x0000000000000000000000000000000000000000") {
+          throw new Error("Hebeswap quote token address is required.");
+        }
+
+        const pairAddress = formData.hebeswapPairAddress as `0x${string}`;
+        const quoteTokenAddress = formData.hebeswapQuoteToken as `0x${string}`;
+
+        // Step 1: Check if adapter already exists
+        logger.debug("Checking if Hebeswap oracle adapter exists for pair:", { pairAddress });
+        toast.info("Checking for existing Hebeswap oracle adapter...");
+        
+        try {
+          if (!publicClient) {
+            throw new Error("Public client not available");
+          }
+
+          const existingAdapter = await publicClient.readContract({
+            address: adapterFactoryAddress as `0x${string}`,
+            abi: HebeswapAdapterFactoryABI,
+            functionName: "getAdapter",
+            args: [pairAddress, baseTokenAddress as `0x${string}`, quoteTokenAddress],
+          }) as `0x${string}`;
+
+          if (existingAdapter && existingAdapter !== "0x0000000000000000000000000000000000000000") {
+            logger.debug("Found existing Hebeswap oracle adapter:", { existingAdapter });
+            oracleAddress = existingAdapter;
+            toast.info("Using existing Hebeswap oracle adapter.");
+          } else {
+            // Step 2: Deploy new Hebeswap adapter
+            logger.debug("Creating new Hebeswap oracle adapter");
+            toast.info("Creating new Hebeswap oracle adapter... This may take a moment.");
+            
+            const adapterTxHash = await deployPool({
+              address: adapterFactoryAddress as `0x${string}`,
+              abi: HebeswapAdapterFactoryABI,
+              functionName: "createAdapter",
+              args: [pairAddress, baseTokenAddress as `0x${string}`, quoteTokenAddress],
+            }) as `0x${string}`;
+
+            logger.transaction("Hebeswap adapter creation transaction hash:", adapterTxHash);
+            
+            // Wait for the transaction to be mined
+            toast.info("Waiting for Hebeswap adapter creation transaction to be mined...");
+            
+            // Wait for the transaction receipt
+            const receipt = await publicClient.waitForTransactionReceipt({
+              hash: adapterTxHash,
+              timeout: 60_000, // 60 seconds timeout
+            });
+
+            logger.transaction("Hebeswap adapter creation transaction confirmed:", undefined, { receipt });
+            
+            // Query the adapter factory for the oracle address
+            oracleAddress = await publicClient.readContract({
+              address: adapterFactoryAddress as `0x${string}`,
+              abi: HebeswapAdapterFactoryABI,
+              functionName: "getAdapter",
+              args: [pairAddress, baseTokenAddress as `0x${string}`, quoteTokenAddress],
+            }) as `0x${string}`;
+            
+            logger.debug("Retrieved Hebeswap oracle address from factory:", { oracleAddress });
+            toast.success("Hebeswap oracle adapter created successfully!");
+          }
+        } catch (error) {
+          logger.error("Error checking/creating Hebeswap oracle adapter:", error);
+          throw new Error(`Failed to get Hebeswap oracle adapter: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+      } else {
+        throw new Error("Invalid oracle type selected");
       }
 
-      // Step 3: Create the pool using the oracle address
-      console.log("🏗️ Creating prediction pool with oracle address:", oracleAddress);
+      // Step 3: Handle initial deposit approval if needed
+      const initialDepositValue = parseFloat(formData.initialDeposit);
+      let initialDepositAmount = BigInt(0);
+      
+      if (initialDepositValue > 0) {
+        try {
+          // Get token decimals
+          const decimals = await publicClient!.readContract({
+            address: baseTokenAddress as `0x${string}`,
+            abi: ERC20_ABI,
+            functionName: "decimals",
+          }) as number;
+
+          // Convert initial deposit to token units
+          initialDepositAmount = parseUnits(formData.initialDeposit, decimals);
+
+          logger.debug("Initial deposit:", { initialDeposit: formData.initialDeposit, tokens: initialDepositAmount.toString(), units: "units" });
+          
+          // Approve the factory to spend tokens
+          toast.info("Approving token spending for initial deposit...");
+          
+          const approveTxHash = await deployPool({
+            address: baseTokenAddress as `0x${string}`,
+            abi: ERC20_ABI,
+            functionName: "approve",
+            args: [FACTORY_ADDRESS as `0x${string}`, initialDepositAmount],
+          });
+
+          logger.transaction("Approve transaction hash:", approveTxHash);
+          
+          // Wait for approval transaction
+          toast.info("Waiting for approval transaction...");
+          await publicClient!.waitForTransactionReceipt({
+            hash: approveTxHash,
+            timeout: 60_000,
+          });
+          
+          toast.success("Token approval successful!");
+        } catch (error) {
+          logger.error("Error approving tokens:", error);
+          throw new Error(`Failed to approve tokens: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+      }
+
+      // Step 4: Create the pool using the oracle address
+      logger.debug("Creating prediction pool with oracle address:", { oracleAddress });
       toast.info("Creating prediction pool...");
       
       await deployPool({
@@ -321,13 +481,14 @@ export default function CreateFatePool() {
           BigInt(burnFeeUnits),
           BigInt(creatorFeeUnits),
           BigInt(treasuryFeeUnits),
+          initialDepositAmount,
         ],
       });
 
-      console.log("🚀 formData:", formData);
+      logger.debug("formData:", { formData });
       toast.info("Pool deployment transaction submitted. Waiting for confirmation...");
     } catch (error) {
-      console.error("Error deploying pool:", error);
+      logger.error("Error deploying pool:", error);
       let errorMessage = "Unknown error occurred";
       if (error instanceof Error) {
         errorMessage = error.message;

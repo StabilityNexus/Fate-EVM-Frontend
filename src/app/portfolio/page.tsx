@@ -38,6 +38,7 @@ import { PredictionPoolFactoryABI } from "@/utils/abi/PredictionPoolFactory";
 import { ChainlinkOracleABI } from "@/utils/abi/ChainlinkOracle";
 import { ERC20ABI } from "@/utils/abi/ERC20";
 import { createPublicClient, http } from "viem";
+import { logger } from "@/lib/logger";
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as const;
 
@@ -71,6 +72,7 @@ const safeNumber = (value: any, fallback = 0): number => {
   const num = Number(value);
   return isFinite(num) && !isNaN(num) ? num : fallback;
 };
+
 
 // Enhanced token metrics calculation with maximum accuracy using all available data
 const calculateTokenMetricsWithEvents = async (
@@ -114,22 +116,25 @@ const calculateTokenMetricsWithEvents = async (
       price: number;
       fees: number;
       grossAmount: number;         // investment incl. fees
+      netAmount: number;           // investment excl. fees
       timestamp: number;
       blockNumber: number;
     }> = [];
 
-    console.log(`🧮 Starting correct FIFO calculation for ${userTokens} current tokens`);
+    logger.debug(`Starting correct FIFO calculation for ${userTokens} current tokens`);
 
     // Process transactions chronologically
     const sortedTxns = transactions.sort((a: any, b: any) => Number(a.blockNumber) - Number(b.blockNumber));
     
     for (const tx of sortedTxns) {
       if (tx.type === 'buy') {
-        // Track gross investment (including fees) as the true cost basis
+        // CORRECTED: Track net investment (excluding fees) as cost basis
         const feePaid = (tx as any).feePaid || 0;
-        grossInvestment += tx.amountAsset;
+        const netInvestment = tx.amountAsset - feePaid; // Actual investment amount
+        
+        grossInvestment += tx.amountAsset; // Total paid (including fees)
         totalFeesPaid += feePaid;
-        totalCostBasis += tx.amountAsset; // Full investment amount
+        totalCostBasis += netInvestment; // Net investment (excluding fees)
         
         buyQueue.push({ 
           amount: tx.amountCoin,
@@ -137,32 +142,46 @@ const calculateTokenMetricsWithEvents = async (
           price: tx.price,
           fees: feePaid,
           grossAmount: tx.amountAsset,
+          netAmount: netInvestment, // Add net amount for correct cost basis
           timestamp: (tx as any).timestamp || 0,
           blockNumber: Number(tx.blockNumber)
         });
         
-        console.log(`📈 Buy: ${tx.amountCoin} tokens @ ${tx.price} WETH/token, Total invested: ${tx.amountAsset} WETH (fees: ${feePaid} WETH)`);
+        logger.debug(`Buy: ${tx.amountCoin} tokens @ ${tx.price} WETH/token, Net invested: ${netInvestment} WETH (fees: ${feePaid} WETH)`, {
+          amountCoin: tx.amountCoin,
+          price: tx.price,
+          netInvestment,
+          feePaid
+        });
       } else if (tx.type === 'sell') {
         let remainingToSell = tx.amountCoin;
         const sellValue = tx.amountAsset;
         let costOfSold = 0;
         const feesOnThisSale = (tx as any).feePaid || 0;
 
-        console.log(`📉 Sell: ${tx.amountCoin} tokens for ${tx.amountAsset} WETH, Fees: ${feesOnThisSale} WETH`);
+        logger.debug(`Sell: ${tx.amountCoin} tokens for ${tx.amountAsset} WETH, Fees: ${feesOnThisSale} WETH`, {
+          amountCoin: tx.amountCoin,
+          amountAsset: tx.amountAsset,
+          fees: feesOnThisSale
+        });
 
         // FIFO: Sell from oldest purchases first
         while (remainingToSell > 0 && buyQueue.length > 0) {
           const oldestBuy = buyQueue[0];
           const amountFromThisBuy = Math.min(remainingToSell, oldestBuy.amount);
           
-          // CORRECT: Use gross amount (including fees) for cost basis calculation
-          const costPerToken = oldestBuy.grossAmount / oldestBuy.initialAmount;
+          // CORRECTED: Use net amount (excluding fees) for cost basis calculation
+          const costPerToken = oldestBuy.netAmount / oldestBuy.initialAmount;
           costOfSold += amountFromThisBuy * costPerToken;
           
           remainingToSell -= amountFromThisBuy;
           oldestBuy.amount -= amountFromThisBuy;
           
-          console.log(`🔄 FIFO: Sold ${amountFromThisBuy} @ ${costPerToken} WETH/token (gross) = ${amountFromThisBuy * costPerToken} WETH cost`);
+          logger.debug(`FIFO: Sold ${amountFromThisBuy} @ ${costPerToken} WETH/token (net) = ${amountFromThisBuy * costPerToken} WETH cost`, {
+            amountFromThisBuy,
+            costPerToken,
+            totalCost: amountFromThisBuy * costPerToken
+          });
           
           if (oldestBuy.amount === 0) {
             buyQueue.shift();
@@ -174,13 +193,17 @@ const calculateTokenMetricsWithEvents = async (
         realizedPnL += thisSaleRealizedPnL;
         totalFeesPaid += feesOnThisSale;
         
-        console.log(`💰 Sale P&L: ${thisSaleRealizedPnL} WETH (${sellValue} received - ${costOfSold} gross cost)`);
+        logger.debug(`Sale P&L: ${thisSaleRealizedPnL} WETH (${sellValue} received - ${costOfSold} net cost)`, {
+          realizedPnL: thisSaleRealizedPnL,
+          sellValue,
+          costOfSold
+        });
       }
     }
 
-    // Calculate remaining cost basis for current holdings (using gross amounts)
+    // Calculate remaining cost basis for current holdings (using net amounts)
     const remainingCostBasis = buyQueue.reduce((sum, buy) => {
-      const costPerToken = buy.grossAmount / buy.initialAmount;
+      const costPerToken = buy.netAmount / buy.initialAmount;
       return sum + buy.amount * costPerToken;
     }, 0);
     
@@ -196,25 +219,26 @@ const calculateTokenMetricsWithEvents = async (
     
     const returns = actualCostBasis > 0 ? (totalPnL / actualCostBasis) * 100 : 0;
 
-    console.log(`📊 Correct FIFO Results:`);
-    console.log(`   - Had sell transactions: ${hadSell}`);
-    console.log(`   - Gross investment: ${grossInvestment} WETH (including fees)`);
-    console.log(`   - Total fees paid: ${totalFeesPaid} WETH (transaction costs)`);
-    console.log(`   - Net investment: ${netInvestment} WETH (after fees)`);
-    console.log(`   - Total cost basis: ${totalCostBasis} WETH (gross investment)`);
-    console.log(`   - Remaining cost basis: ${remainingCostBasis} WETH`);
-    console.log(`   - Actual cost basis used: ${actualCostBasis} WETH`);
-    console.log(`   - Current value: ${currentValue} WETH`);
-    console.log(`   - Realized P&L: ${realizedPnL} WETH`);
-    console.log(`   - Unrealized P&L: ${unrealizedPnL} WETH`);
-    console.log(`   - Total P&L: ${totalPnL} WETH`);
-    console.log(`   - Returns: ${returns}%`);
-    console.log(`   - Buy queue length: ${buyQueue.length}`);
-    console.log(`   - User tokens: ${userTokens}`);
+    logger.debug(`CORRECTED FIFO Results:`, {
+      hadSell,
+      grossInvestment,
+      totalFeesPaid,
+      netInvestment: grossInvestment - totalFeesPaid,
+      totalCostBasis,
+      remainingCostBasis,
+      actualCostBasis,
+      currentValue,
+      realizedPnL,
+      unrealizedPnL,
+      totalPnL,
+      returns,
+      buyQueueLength: buyQueue.length
+    });
+    logger.debug(`User tokens: ${userTokens}`);
 
     // For sold positions (userTokens = 0), return comprehensive data
     if (userTokens === 0) {
-      console.log(`🏁 Position fully sold - showing realized P&L only`);
+      logger.debug(`Position fully sold - showing realized P&L only`);
       return {
         price: currentPrice,
         currentValue: 0,
@@ -239,7 +263,7 @@ const calculateTokenMetricsWithEvents = async (
     };
 
   } catch (error) {
-    console.error('Error calculating enhanced metrics with events:', error);
+    logger.error('Error calculating enhanced metrics with events:', error instanceof Error ? error : new Error(String(error)));
     // Fallback to simple calculation
     const costBasis = userTokens * currentPrice;
     return {
@@ -258,11 +282,15 @@ const calculateTokenMetricsWithEvents = async (
 // Fetch user transactions from blockchain events
 const fetchUserTransactions = async (tokenAddress: string, userAddress: string, chainId: number) => {
   try {
-    console.log(`🔍 Fetching transactions for token: ${tokenAddress}, user: ${userAddress}, chain: ${chainId}`);
+    logger.debug(`Fetching transactions for token: ${tokenAddress}, user: ${userAddress}, chain: ${chainId}`, {
+      tokenAddress,
+      userAddress,
+      chainId
+    });
     
     const chainConfig = getChainConfig(chainId);
     if (!chainConfig) {
-      console.log('❌ No chain config found for chainId:', chainId);
+      logger.warn('No chain config found for chainId:', { chainId });
       return [];
     }
 
@@ -296,7 +324,7 @@ const fetchUserTransactions = async (tokenAddress: string, userAddress: string, 
       ]
     } as const;
 
-    console.log('📡 Fetching buy and sell events...');
+    logger.debug('Fetching buy and sell events...');
 
     // Helper function to fetch logs in chunks to avoid RPC limits
     const fetchLogsInChunks = async (eventABI: any, args: any) => {
@@ -306,7 +334,11 @@ const fetchUserTransactions = async (tokenAddress: string, userAddress: string, 
       const lookback = chainId === 11155111 ? BigInt(100000) : BigInt(50000);
       const startBlock = currentBlock > lookback ? currentBlock - lookback : BigInt(0);
       
-      console.log(`🔍 Scanning from block ${startBlock} to ${currentBlock} (${currentBlock - startBlock} blocks)`);
+      logger.debug(`Scanning from block ${startBlock} to ${currentBlock} (${currentBlock - startBlock} blocks)`, {
+        startBlock,
+        currentBlock,
+        blockRange: currentBlock - startBlock
+      });
       
       for (let fromBlock = startBlock; fromBlock <= currentBlock; fromBlock += chunkSize) {
         const toBlock = fromBlock + chunkSize - BigInt(1) > currentBlock 
@@ -324,14 +356,22 @@ const fetchUserTransactions = async (tokenAddress: string, userAddress: string, 
           
           allLogs.push(...logs);
           if (logs.length > 0) {
-            console.log(`📦 Fetched ${logs.length} logs from block ${fromBlock} to ${toBlock}`);
+            logger.debug(`Fetched ${logs.length} logs from block ${fromBlock} to ${toBlock}`, {
+              logCount: logs.length,
+              fromBlock,
+              toBlock
+            });
           }
         } catch (error: any) {
-          console.warn(`⚠️  Failed to fetch logs from block ${fromBlock} to ${toBlock}:`, error?.shortMessage || error?.message);
+          logger.warn(`Failed to fetch logs from block ${fromBlock} to ${toBlock}`, {
+            fromBlock,
+            toBlock,
+            error: error?.shortMessage || error?.message
+          });
           
           // If we get a block range error, try with smaller chunks
           if (error?.message?.includes('range') || error?.message?.includes('blocks')) {
-            console.log('🔄 Retrying with smaller chunk size...');
+            logger.debug('Retrying with smaller chunk size...');
             try {
               const smallerChunkSize = BigInt(1000);
               for (let smallFromBlock = fromBlock; smallFromBlock <= toBlock; smallFromBlock += smallerChunkSize) {
@@ -350,7 +390,10 @@ const fetchUserTransactions = async (tokenAddress: string, userAddress: string, 
                 allLogs.push(...smallLogs);
               }
             } catch {
-              console.warn(`❌ Retry also failed for block ${fromBlock} to ${toBlock}`);
+              logger.warn(`Retry also failed for block ${fromBlock} to ${toBlock}`, {
+                fromBlock,
+                toBlock
+              });
             }
           }
         }
@@ -365,7 +408,10 @@ const fetchUserTransactions = async (tokenAddress: string, userAddress: string, 
       fetchLogsInChunks(sellEventABI, { seller: userAddress as Address })
     ]);
 
-    console.log(`📊 Found ${buyLogs.length} buy events and ${sellLogs.length} sell events`);
+    logger.debug(`Found ${buyLogs.length} buy events and ${sellLogs.length} sell events`, {
+      buyEvents: buyLogs.length,
+      sellEvents: sellLogs.length
+    });
 
     const transactions: Array<{
       type: 'buy' | 'sell';
@@ -381,7 +427,11 @@ const fetchUserTransactions = async (tokenAddress: string, userAddress: string, 
       const amountCoin = Number(formatUnits(log.args.amountCoin!, 18));
       const price = amountCoin > 0 ? amountAsset / amountCoin : 0;
       
-      console.log(`💰 BUY: ${amountCoin} tokens for ${amountAsset} WETH (price: ${price})`);
+      logger.debug(`BUY: ${amountCoin} tokens for ${amountAsset} WETH (price: ${price})`, {
+        amountCoin,
+        amountAsset,
+        price
+      });
       
       transactions.push({
         type: 'buy',
@@ -398,7 +448,11 @@ const fetchUserTransactions = async (tokenAddress: string, userAddress: string, 
       const amountCoin = Number(formatUnits(log.args.amountCoin!, 18));
       const price = amountCoin > 0 ? amountAsset / amountCoin : 0;
       
-      console.log(`💸 SELL: ${amountCoin} tokens for ${amountAsset} WETH (price: ${price})`);
+      logger.debug(`SELL: ${amountCoin} tokens for ${amountAsset} WETH (price: ${price})`, {
+        amountCoin,
+        amountAsset,
+        price
+      });
       
       transactions.push({
         type: 'sell',
@@ -409,11 +463,13 @@ const fetchUserTransactions = async (tokenAddress: string, userAddress: string, 
       });
     }
 
-    console.log(`✅ Total transactions processed: ${transactions.length}`);
+    logger.debug(`Total transactions processed: ${transactions.length}`, {
+      transactionCount: transactions.length
+    });
     return transactions;
 
   } catch (error) {
-    console.error('❌ Error fetching transactions:', error);
+    logger.error('Error fetching transactions:', error instanceof Error ? error : new Error(String(error)));
     return [];
   }
 };
@@ -1319,7 +1375,7 @@ const EnhancedPoolDataLoader = ({
           chainId
         );
       } catch (error) {
-        console.error('Error calculating metrics with events, using fallback:', error);
+        logger.error('Error calculating metrics with events, using fallback:', error instanceof Error ? error : new Error(String(error)));
         // Fallback to legacy calculation
         const bullAvgPrice = bullSupply > 0 ? bullReserve / bullSupply : 0;
         const bearAvgPrice = bearSupply > 0 ? bearReserve / bearSupply : 0;
@@ -1386,7 +1442,7 @@ const EnhancedPoolDataLoader = ({
         isCreator: userAddress?.toLowerCase() === vaultCreator?.toLowerCase(),
       };
 
-      console.log("Enhanced EVM pool data with event-based P&L:", poolData);
+      logger.debug("Enhanced EVM pool data with event-based P&L:", { poolData });
       onDataLoad(poolData);
     };
 
@@ -1425,13 +1481,13 @@ export default function PortfolioPage() {
 
   const availablePools = useMemo(() => {
     const pools = allPoolsData?.[0]?.result as string[] || [];
-    console.log(`Found ${pools.length} pools from factory:`, pools);
+    logger.debug(`Found ${pools.length} pools from factory:`, { pools });
     return pools.filter(pool => pool && pool !== "0x0000000000000000000000000000000000000000");
   }, [allPoolsData]);
 
   // Handle pool data loading
   const handlePoolDataLoad = useCallback((data: PoolData) => {
-    console.log("Received EVM pool data:", data);
+    logger.debug("Received EVM pool data:", { data });
     setPoolsData((prev) => {
       const existingIndex = prev.findIndex((p) => p.id === data.id);
       if (existingIndex >= 0) {
@@ -1454,7 +1510,7 @@ export default function PortfolioPage() {
       
       // Fallback timeout to prevent infinite loading
       const fallbackTimer = setTimeout(() => {
-        console.log("Portfolio: Fallback timeout triggered, stopping loading");
+        logger.debug("Portfolio: Fallback timeout triggered, stopping loading");
         setIsLoadingPools(false);
       }, 10000); // 10 seconds max loading time
       
@@ -1570,7 +1626,7 @@ export default function PortfolioPage() {
   }, [poolsData]);
 
   // Debug logging
-  console.log("Portfolio state:", {
+  logger.debug("Portfolio state:", {
     isConnected,
     address,
     isLoadingPools,
@@ -1585,6 +1641,63 @@ export default function PortfolioPage() {
     return (
       <div className="fixed inset-0 bg-white dark:bg-black flex items-center justify-center z-50">
         <Loading size="lg" />
+      </div>
+    );
+  }
+
+  // Show skeleton loading while portfolio calculations are in progress
+  if (isConnected && poolsData.length === 0 && !isLoadingPools) {
+    return (
+      <div className="min-h-screen bg-white dark:bg-black text-neutral-900 dark:text-white p-4 pt-28 min-[900px]:p-6 min-[900px]:pt-32">
+        <div className="max-w-7xl mx-auto space-y-8">
+          {/* Skeleton Summary Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="bg-white dark:bg-neutral-900 border border-gray-200 dark:border-neutral-700 rounded-xl p-6 shadow-sm">
+                <div className="flex items-center space-x-4">
+                  <div className="w-12 h-12 bg-gray-200 dark:bg-neutral-700 rounded-lg animate-pulse"></div>
+                  <div className="flex-1">
+                    <div className="h-4 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse mb-2"></div>
+                    <div className="h-6 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse w-3/4"></div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Skeleton Portfolio Content */}
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+              <div className="bg-white dark:bg-neutral-900 border border-gray-200 dark:border-neutral-700 rounded-xl p-6 shadow-sm">
+                <div className="space-y-4">
+                  <div className="h-6 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse w-1/3"></div>
+                  <div className="h-48 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse"></div>
+                </div>
+              </div>
+              <div className="xl:col-span-2 bg-white dark:bg-neutral-900 border border-gray-200 dark:border-neutral-700 rounded-xl p-6 shadow-sm">
+                <div className="space-y-4">
+                  <div className="h-6 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse w-1/2"></div>
+                  <div className="h-4 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse w-3/4"></div>
+                  <div className="space-y-3">
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="flex items-center space-x-4 p-3 border border-gray-200 dark:border-neutral-700 rounded-lg">
+                        <div className="w-10 h-10 bg-gray-200 dark:bg-neutral-700 rounded-full animate-pulse"></div>
+                        <div className="flex-1 space-y-2">
+                          <div className="h-4 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse w-1/3"></div>
+                          <div className="h-3 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse w-1/2"></div>
+                        </div>
+                        <div className="text-right space-y-2">
+                          <div className="h-4 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse w-16"></div>
+                          <div className="h-3 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse w-12"></div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -1632,41 +1745,121 @@ export default function PortfolioPage() {
 
         {/* Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <SummaryCard
-            title="Total Portfolio Value"
-            value={`${totalPortfolioValue.toLocaleString(undefined, {
-              minimumFractionDigits: 0,
-              maximumFractionDigits: 4,
-            })} WETH`}
-            icon={DollarSign}
-            trend="neutral"
-          />
-          <SummaryCard
-            title="Total P&L"
-            value={`${totalPnL >= 0 ? "+" : ""}${totalPnL.toLocaleString(
-              undefined,
-              {
-                minimumFractionDigits: 0,
-                maximumFractionDigits: 4,
-              }
-            )} WETH`}
-            icon={totalPnL >= 0 ? TrendingUp : TrendingDown}
-            trend={totalPnL >= 0 ? "up" : "down"}
-          />
-          <SummaryCard
-            title="Total Return %"
-            value={`${
-              totalReturnPercentage >= 0 ? "+" : ""
-            }${totalReturnPercentage.toLocaleString(undefined, {
-              minimumFractionDigits: 0,
-              maximumFractionDigits: 2,
-            })}%`}
-            icon={Activity}
-            trend={totalReturnPercentage >= 0 ? "up" : "down"}
-          />
+          {poolsData.length === 0 ? (
+            // Show skeleton loading cards while data is being calculated
+            <>
+              <div className="bg-white dark:bg-neutral-900 border border-gray-200 dark:border-neutral-700 rounded-xl p-6 shadow-sm">
+                <div className="flex items-center space-x-4">
+                  <div className="w-12 h-12 bg-gray-200 dark:bg-neutral-700 rounded-lg animate-pulse"></div>
+                  <div className="flex-1">
+                    <div className="h-4 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse mb-2"></div>
+                    <div className="h-6 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse w-3/4"></div>
+                  </div>
+                </div>
+              </div>
+              <div className="bg-white dark:bg-neutral-900 border border-gray-200 dark:border-neutral-700 rounded-xl p-6 shadow-sm">
+                <div className="flex items-center space-x-4">
+                  <div className="w-12 h-12 bg-gray-200 dark:bg-neutral-700 rounded-lg animate-pulse"></div>
+                  <div className="flex-1">
+                    <div className="h-4 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse mb-2"></div>
+                    <div className="h-6 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse w-3/4"></div>
+                  </div>
+                </div>
+              </div>
+              <div className="bg-white dark:bg-neutral-900 border border-gray-200 dark:border-neutral-700 rounded-xl p-6 shadow-sm">
+                <div className="flex items-center space-x-4">
+                  <div className="w-12 h-12 bg-gray-200 dark:bg-neutral-700 rounded-lg animate-pulse"></div>
+                  <div className="flex-1">
+                    <div className="h-4 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse mb-2"></div>
+                    <div className="h-6 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse w-3/4"></div>
+                  </div>
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <SummaryCard
+                title="Total Portfolio Value"
+                value={`${totalPortfolioValue.toLocaleString(undefined, {
+                  minimumFractionDigits: 0,
+                  maximumFractionDigits: 4,
+                })} WETH`}
+                icon={DollarSign}
+                trend="neutral"
+              />
+              <SummaryCard
+                title="Total P&L"
+                value={`${totalPnL >= 0 ? "+" : ""}${totalPnL.toLocaleString(
+                  undefined,
+                  {
+                    minimumFractionDigits: 0,
+                    maximumFractionDigits: 4,
+                  }
+                )} WETH`}
+                icon={totalPnL >= 0 ? TrendingUp : TrendingDown}
+                trend={totalPnL >= 0 ? "up" : "down"}
+              />
+              <SummaryCard
+                title="Total Return %"
+                value={`${
+                  totalReturnPercentage >= 0 ? "+" : ""
+                }${totalReturnPercentage.toLocaleString(undefined, {
+                  minimumFractionDigits: 0,
+                  maximumFractionDigits: 2,
+                })}%`}
+                icon={Activity}
+                trend={totalReturnPercentage >= 0 ? "up" : "down"}
+              />
+            </>
+          )}
         </div>
 
-        {activePoolsData.length > 0 ? (
+        {poolsData.length === 0 ? (
+          // Show skeleton loading while portfolio data is being calculated
+          <div className="space-y-6">
+            {/* Skeleton for Bull and Bear Position Charts */}
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+              {/* Bull Positions Chart Skeleton */}
+              <div className="bg-white dark:bg-neutral-900 border border-gray-200 dark:border-neutral-700 rounded-xl p-6 shadow-sm">
+                <div className="space-y-4">
+                  <div className="h-6 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse w-1/3"></div>
+                  <div className="h-48 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse"></div>
+                </div>
+              </div>
+              
+              {/* Positions List Skeleton */}
+              <div className="xl:col-span-2 bg-white dark:bg-neutral-900 border border-gray-200 dark:border-neutral-700 rounded-xl p-6 shadow-sm">
+                <div className="space-y-4">
+                  <div className="h-6 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse w-1/2"></div>
+                  <div className="h-4 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse w-3/4"></div>
+                  <div className="space-y-3">
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="flex items-center space-x-4 p-3 border border-gray-200 dark:border-neutral-700 rounded-lg">
+                        <div className="w-10 h-10 bg-gray-200 dark:bg-neutral-700 rounded-full animate-pulse"></div>
+                        <div className="flex-1 space-y-2">
+                          <div className="h-4 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse w-1/3"></div>
+                          <div className="h-3 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse w-1/2"></div>
+                        </div>
+                        <div className="text-right space-y-2">
+                          <div className="h-4 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse w-16"></div>
+                          <div className="h-3 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse w-12"></div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Bear Positions Chart Skeleton */}
+            <div className="bg-white dark:bg-neutral-900 border border-gray-200 dark:border-neutral-700 rounded-xl p-6 shadow-sm">
+              <div className="space-y-4">
+                <div className="h-6 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse w-1/3"></div>
+                <div className="h-48 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse"></div>
+              </div>
+            </div>
+          </div>
+        ) : activePoolsData.length > 0 ? (
           <div className="space-y-6">
             {/* Bull and Bear Position Charts */}
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">

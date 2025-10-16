@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, memo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
+import { logger } from '@/lib/logger';
 
 interface CoinGeckoWidgetProps {
   assetId: string;
@@ -45,8 +46,8 @@ function TradingViewWidget({
   useEffect(() => {
     if (!slotRef.current || !assetId) return;
 
-    console.log('TradingViewWidget - AssetId:', assetId);
-    console.log('TradingViewWidget - CoinId:', coinId);
+    logger.debug('TradingViewWidget - AssetId:', { assetId });
+    logger.debug('TradingViewWidget - CoinId:', { coinId });
 
     const currentSlot = slotRef.current;
     const script = document.createElement("script");
@@ -54,7 +55,7 @@ function TradingViewWidget({
       "https://widgets.coingecko.com/gecko-coin-price-chart-widget.js";
     script.async = true;
     script.onload = () => {
-      console.log('CoinGecko script loaded');
+      logger.debug('CoinGecko script loaded');
       if (currentSlot) {
         currentSlot.innerHTML = `
           <gecko-coin-price-chart-widget
@@ -68,11 +69,11 @@ function TradingViewWidget({
             initial-currency="usd"
           ></gecko-coin-price-chart-widget>
         `;
-        console.log('Widget HTML inserted with coinId:', coinId);
+        logger.debug('Widget HTML inserted with coinId:', { coinId });
       }
     };
     script.onerror = (error) => {
-      console.error('Failed to load CoinGecko script:', error);
+      logger.error('Failed to load CoinGecko script:', error);
     };
     currentSlot.innerHTML = "";
     currentSlot.appendChild(script);

@@ -3,7 +3,7 @@ export const FatePoolFactories = {
   137: "0x0000000000000000000000000000000000000000", // Polygon - Update with actual address
   56: "0x0000000000000000000000000000000000000000", // BSC - Update with actual address
   8453: "0x0000000000000000000000000000000000000000", // Base - Update with actual address
-  11155111: "0x8D9f162e6A30de0B072E5b33a6D5B387A1C6B736", // Sepolia Testnet - Updated with deployed address
+  11155111: "0x5fae23ab9c0b36f30bb4c6ab1d7b9c8cdbef8d18", // Sepolia Testnet - Updated with initialDeposit support
   61: "0x0000000000000000000000000000000000000000", // Ethereum Classic - Update with actual address
 } as {
   [key: number]: `0x${string}`;
@@ -14,7 +14,12 @@ export const ChainlinkAdapterFactories = {
   137: "0x0000000000000000000000000000000000000000", // Polygon - Update with actual address
   56: "0x0000000000000000000000000000000000000000", // BSC - Update with actual address
   8453: "0x0000000000000000000000000000000000000000", // Base - Update with actual address
-  11155111: "0x02Ae9b13Cec748cE006Aa4489040246e5BbB6932", // Sepolia Testnet - Updated with deployed address
+  11155111: "0x2cbd9e1ec213f5ef2c8f0703514254ff7288723e", // Sepolia Testnet - Updated with initialDeposit support
+} as {
+  [key: number]: `0x${string}`;
+};
+
+export const HebeswapAdapterFactories = {
   61: "0x0000000000000000000000000000000000000000", // Ethereum Classic - Update with actual address
 } as {
   [key: number]: `0x${string}`;
