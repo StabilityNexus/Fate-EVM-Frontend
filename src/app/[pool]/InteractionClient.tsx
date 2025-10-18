@@ -307,14 +307,21 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
       toast.dismiss(loadingToast);
       
       // Update portfolio cache on successful buy
-      if (hash && (window as unknown as { updatePortfolioCache?: (action: string, poolId: string, amount: number, tokenType: string, hash: string) => Promise<void> }).updatePortfolioCache) {
+      if (hash && (window as unknown as { updatePortfolioCache?: (action: string, poolId: string, amount: number, tokenType: string, hash: string, tokenAddress: string) => Promise<void> }).updatePortfolioCache) {
         try {
-          await (window as unknown as { updatePortfolioCache: (action: string, poolId: string, amount: number, tokenType: string, hash: string) => Promise<void> }).updatePortfolioCache(
+          // Calculate estimated token units based on current pool state
+          const baseAmount = Number(amount);
+          
+          // Estimate token amount using constant product formula: tokens = (baseAmount * supply) / (reserve + baseAmount)
+          const estimatedTokens = reserve > 0 && supply > 0 ? (baseAmount * supply) / (reserve + baseAmount) : 0;
+          
+          await (window as unknown as { updatePortfolioCache: (action: string, poolId: string, amount: number, tokenType: string, hash: string, tokenAddress: string) => Promise<void> }).updatePortfolioCache(
             'buy',
             currentPoolId,
-            Number(amount),
+            estimatedTokens,
             isBull ? 'bull' : 'bear',
-            hash
+            hash,
+            isBull ? poolData.bull_token.id : poolData.bear_token.id
           );
           toast.success("Transaction successful! Portfolio updated.");
         } catch (cacheError) {
@@ -411,14 +418,18 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
       setSellAmount('');
       
       // Update portfolio cache on successful sell
-      if (hash && (window as unknown as { updatePortfolioCache?: (action: string, poolId: string, amount: number, tokenType: string, hash: string) => Promise<void> }).updatePortfolioCache) {
+      if (hash && (window as unknown as { updatePortfolioCache?: (action: string, poolId: string, amount: number, tokenType: string, hash: string, tokenAddress: string) => Promise<void> }).updatePortfolioCache) {
         try {
-          await (window as unknown as { updatePortfolioCache: (action: string, poolId: string, amount: number, tokenType: string, hash: string) => Promise<void> }).updatePortfolioCache(
+          // For sell transactions, the amount is already in token units
+          const tokenAmount = Number(sellAmount);
+          
+          await (window as unknown as { updatePortfolioCache: (action: string, poolId: string, amount: number, tokenType: string, hash: string, tokenAddress: string) => Promise<void> }).updatePortfolioCache(
             'sell',
             currentPoolId,
-            Number(sellAmount),
+            tokenAmount,
             isBull ? 'bull' : 'bear',
-            hash
+            hash,
+            isBull ? poolData.bull_token.id : poolData.bear_token.id
           );
           toast.success("Transaction successful! Portfolio updated.");
         } catch (cacheError) {

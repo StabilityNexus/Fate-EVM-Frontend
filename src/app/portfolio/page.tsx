@@ -1728,7 +1728,7 @@ export default function PortfolioPage() {
    * - RPC only used for first-time users or manual refresh
    * - Cache stays fresh through user actions
    */
-  const updateCacheOnAction = useCallback(async (action: 'buy' | 'sell', poolAddress: string, amount: number, tokenType: 'bull' | 'bear', transactionHash: string) => {
+  const updateCacheOnAction = useCallback(async (action: 'buy' | 'sell', poolAddress: string, amount: number, tokenType: 'bull' | 'bear', transactionHash: string, tokenAddress: string) => {
     if (!address || !chainId || !isDBInitialized) return;
 
     try {
@@ -1791,7 +1791,7 @@ export default function PortfolioPage() {
       const newTransaction = {
         id: `${address}-${poolAddress}-${transactionHash}-0`,
         userAddress: address,
-        tokenAddress: poolAddress,
+        tokenAddress: tokenAddress,
         chainId: chainId as SupportedChainId,
         type: action,
         amountAsset: amount,
