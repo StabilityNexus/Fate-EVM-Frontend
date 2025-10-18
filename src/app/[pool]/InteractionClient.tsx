@@ -343,7 +343,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
     const validatedInput = validateTransactionInput({
       amount: buyAmount,
       poolId: currentPoolId,
-      chainId: 1, // Default to mainnet for now
+      chainId: poolData?.chainId || 1, // Use pool chain or fallback to mainnet
       userAddress: address
     });
 

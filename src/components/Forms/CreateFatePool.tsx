@@ -440,6 +440,14 @@ export default function CreateFatePool() {
             functionName: "decimals",
           }) as number;
 
+          // Pre-check decimal places to avoid parseUnits error
+          const decimalParts = formData.initialDeposit.split('.');
+          const fractionalDigits = decimalParts.length > 1 ? decimalParts[1].length : 0;
+          
+          if (fractionalDigits > decimals) {
+            throw new Error(`Amount has too many decimal places. Maximum allowed: ${decimals} decimal places, but got ${fractionalDigits}.`);
+          }
+
           // Convert initial deposit to token units
           initialDepositAmount = parseUnits(formData.initialDeposit, decimals);
 

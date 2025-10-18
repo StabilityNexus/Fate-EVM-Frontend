@@ -29,7 +29,7 @@ import { useAccount, useReadContracts } from "wagmi";
 import { formatUnits, Address, isAddress } from "viem";
 import { useRouter } from "next/navigation";
 import { useFatePoolsStorage } from "@/lib/fatePoolHook";
-import { SupportedChainId, PortfolioCache } from "@/utils/indexedDBTypes";
+import { SupportedChainId, PortfolioCache, PortfolioPosition } from "@/utils/indexedDBTypes";
 import { PredictionPoolABI } from "@/utils/abi/PredictionPool";
 import { CoinABI } from "@/utils/abi/Coin";
 import { FatePoolFactories } from "@/utils/addresses";
@@ -1559,7 +1559,7 @@ export default function PortfolioPage() {
 
         // Immediately show cached data (this should be very fast since it's local)
         const mappedData = cachedData.positions.map(pos => ({
-          id: pos.id,
+          id: pos.poolAddress, // Use actual pool address instead of cache key
           name: `Pool ${pos.poolAddress.slice(0, 6)}...`,
           bullBalance: pos.tokenType === 'bull' ? pos.currentBalance : 0,
           bearBalance: pos.tokenType === 'bear' ? pos.currentBalance : 0,
@@ -1591,8 +1591,8 @@ export default function PortfolioPage() {
           priceFeed: 'Cached',
           baseToken: '',
           baseTokenSymbol: 'WETH', // Default for cached data
-          bullTokenAddress: pos.tokenAddress,
-          bearTokenAddress: '',
+          bullTokenAddress: pos.tokenType === 'bull' ? pos.tokenAddress : '',
+          bearTokenAddress: pos.tokenType === 'bear' ? pos.tokenAddress : '',
           bullTokenName: 'Bull Token',
           bearTokenName: 'Bear Token',
           bullTokenSymbol: 'BULL',
@@ -1654,24 +1654,53 @@ export default function PortfolioPage() {
       const cacheData = {
         userAddress: address,
         chainId: chainId as SupportedChainId,
-        positions: data.map(pool => ({
-          id: pool.id,
-          userAddress: address,
-          tokenAddress: pool.bullTokenAddress,
-          poolAddress: pool.id,
-          chainId: chainId as SupportedChainId,
-          tokenType: 'bull' as const, // Simplified for now
-          currentBalance: pool.bullBalance,
-          currentValue: pool.bullCurrentValue,
-          costBasis: pool.totalCostBasis,
-          pnL: pool.bullPnL,
-          returns: pool.bullReturns,
-          totalFeesPaid: 0,
-          netInvestment: pool.totalCostBasis,
-          grossInvestment: pool.totalCostBasis,
-          lastUpdated: Date.now(),
-          blockNumber: 0
-        })),
+        positions: data.flatMap(pool => {
+          const entries: PortfolioPosition[] = [];
+
+          if (pool.bullBalance > 0 || pool.bullPnL !== 0) {
+            entries.push({
+              id: `${address}-${pool.bullTokenAddress}-${chainId}`,
+              userAddress: address,
+              tokenAddress: pool.bullTokenAddress,
+              poolAddress: pool.id,
+              chainId: chainId as SupportedChainId,
+              tokenType: 'bull',
+              currentBalance: pool.bullBalance,
+              currentValue: pool.bullCurrentValue,
+              costBasis: pool.bullCurrentValue - pool.bullPnL,
+              pnL: pool.bullPnL,
+              returns: pool.bullReturns,
+              totalFeesPaid: 0,
+              netInvestment: pool.bullCurrentValue - pool.bullPnL,
+              grossInvestment: pool.bullCurrentValue - pool.bullPnL,
+              lastUpdated: Date.now(),
+              blockNumber: 0,
+            });
+          }
+
+          if (pool.bearBalance > 0 || pool.bearPnL !== 0) {
+            entries.push({
+              id: `${address}-${pool.bearTokenAddress}-${chainId}`,
+              userAddress: address,
+              tokenAddress: pool.bearTokenAddress,
+              poolAddress: pool.id,
+              chainId: chainId as SupportedChainId,
+              tokenType: 'bear',
+              currentBalance: pool.bearBalance,
+              currentValue: pool.bearCurrentValue,
+              costBasis: pool.bearCurrentValue - pool.bearPnL,
+              pnL: pool.bearPnL,
+              returns: pool.bearReturns,
+              totalFeesPaid: 0,
+              netInvestment: pool.bearCurrentValue - pool.bearPnL,
+              grossInvestment: pool.bearCurrentValue - pool.bearPnL,
+              lastUpdated: Date.now(),
+              blockNumber: 0,
+            });
+          }
+
+          return entries;
+        }),
         transactions: [],
         totalPortfolioValue: data.reduce((sum, pool) => sum + pool.totalValue, 0),
         totalPnL: data.reduce((sum, pool) => sum + pool.totalPnL, 0),

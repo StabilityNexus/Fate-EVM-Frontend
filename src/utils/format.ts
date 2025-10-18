@@ -7,7 +7,7 @@ export const formatNumber = (n: number, decimals = 9): string => {
   const rounded = Number(n.toFixed(decimals));
   const s = rounded.toString();
   if (s.indexOf('e') !== -1) {
-    return n.toExponential(3);
+    return rounded.toExponential(decimals);
   }
   return s;
 };
@@ -18,7 +18,7 @@ export const formatNumberDown = (n: number, decimals = 9): string => {
   const floored = Math.floor(n * factor) / factor;
   const s = floored.toString();
   if (s.indexOf('e') !== -1) {
-    return n.toExponential(3);
+    return floored.toExponential(decimals);
   }
   return s;
 };

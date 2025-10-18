@@ -57,7 +57,7 @@ export const useOptimizedData = <T>(
   }, [lastFetched, staleTime]);
 
   // Check cache first
-  const getCachedData = useCallback((): T | null => {
+  const getCachedEntry = useCallback((): { data: T; timestamp: number } | null => {
     const cached = dataCache.get(key);
     if (!cached) return null;
     
@@ -69,9 +69,7 @@ export const useOptimizedData = <T>(
       return null;
     }
     
-    // Use cached timestamp for lastFetched when returning cached data
-    setLastFetched(cached.timestamp);
-    return cached.data as T;
+    return { data: cached.data as T, timestamp: cached.timestamp };
   }, [key, cacheTime]);
 
   // Fetch data with retry logic
@@ -152,10 +150,14 @@ export const useOptimizedData = <T>(
     if (!enabled) return;
     
     // Check cache first
-    const cachedData = getCachedData();
-    if (cachedData) {
-      setData(cachedData);
-      // lastFetched is already set by getCachedData using cached timestamp
+    const cachedEntry = getCachedEntry();
+    if (cachedEntry) {
+      setData(cachedEntry.data);
+      setLastFetched(cachedEntry.timestamp);
+
+      if (Date.now() - cachedEntry.timestamp > staleTime) {
+        fetchData(true).catch(() => {});
+      }
       return;
     }
     
@@ -173,7 +175,7 @@ export const useOptimizedData = <T>(
         abortControllerRef.current.abort();
       }
     };
-  }, [enabled, getCachedData, fetchData]);
+  }, [enabled, getCachedEntry, fetchData, staleTime]);
 
   // Refetch function
   const refetch = useCallback(async () => {
