@@ -100,6 +100,7 @@ export interface PortfolioTransaction {
 }
 
 export interface PortfolioCache {
+  id: string;
   userAddress: string;
   chainId: SupportedChainId;
   positions: PortfolioPosition[];

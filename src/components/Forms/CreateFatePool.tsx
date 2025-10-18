@@ -23,7 +23,7 @@ import { parseUnits } from "viem";
 
 const DENOMINATOR = 100_000;
 
-// Minimal ERC20 ABI for approve and decimals functions
+// Minimal ERC20 ABI for approve, allowance, and decimals functions
 const ERC20_ABI = [
   {
     "type": "function",
@@ -34,6 +34,16 @@ const ERC20_ABI = [
     ],
     "outputs": [{ "name": "", "type": "bool" }],
     "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "allowance",
+    "inputs": [
+      { "name": "owner", "type": "address" },
+      { "name": "spender", "type": "address" }
+    ],
+    "outputs": [{ "name": "", "type": "uint256" }],
+    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -435,26 +445,41 @@ export default function CreateFatePool() {
 
           logger.debug("Initial deposit:", { initialDeposit: formData.initialDeposit, tokens: initialDepositAmount.toString(), units: "units" });
           
-          // Approve the factory to spend tokens
-          toast.info("Approving token spending for initial deposit...");
-          
-          const approveTxHash = await deployPool({
+          // Check current allowance before approving
+          const currentAllowance = await publicClient!.readContract({
             address: baseTokenAddress as `0x${string}`,
             abi: ERC20_ABI,
-            functionName: "approve",
-            args: [FACTORY_ADDRESS as `0x${string}`, initialDepositAmount],
-          });
+            functionName: "allowance",
+            args: [address as `0x${string}`, FACTORY_ADDRESS as `0x${string}`],
+          }) as bigint;
 
-          logger.transaction("Approve transaction hash:", approveTxHash);
+          logger.debug("Current allowance:", { allowance: currentAllowance.toString(), required: initialDepositAmount.toString() });
           
-          // Wait for approval transaction
-          toast.info("Waiting for approval transaction...");
-          await publicClient!.waitForTransactionReceipt({
-            hash: approveTxHash,
-            timeout: 60_000,
-          });
-          
-          toast.success("Token approval successful!");
+          // Only approve if current allowance is insufficient
+          if (currentAllowance < initialDepositAmount) {
+            toast.info("Approving token spending for initial deposit...");
+            
+            const approveTxHash = await deployPool({
+              address: baseTokenAddress as `0x${string}`,
+              abi: ERC20_ABI,
+              functionName: "approve",
+              args: [FACTORY_ADDRESS as `0x${string}`, initialDepositAmount],
+            });
+
+            logger.transaction("Approve transaction hash:", approveTxHash);
+            
+            // Wait for approval transaction
+            toast.info("Waiting for approval transaction...");
+            await publicClient!.waitForTransactionReceipt({
+              hash: approveTxHash,
+              timeout: 60_000,
+            });
+            
+            toast.success("Token approval successful!");
+          } else {
+            logger.debug("Sufficient allowance already exists, skipping approval");
+            toast.success("Token allowance already sufficient!");
+          }
         } catch (error) {
           logger.error("Error approving tokens:", error instanceof Error ? error : undefined);
           throw new Error(`Failed to approve tokens: ${error instanceof Error ? error.message : 'Unknown error'}`);

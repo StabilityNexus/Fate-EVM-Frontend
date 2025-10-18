@@ -1,4 +1,5 @@
 // src/utils/format.ts
+import { getChainConfig } from './chainConfig';
 
 // Number formatting utilities
 export const formatNumber = (n: number, decimals = 9): string => {
@@ -24,15 +25,5 @@ export const formatNumberDown = (n: number, decimals = 9): string => {
 
 // Chain name formatting utility
 export const formatChainName = (chainId: number): string => {
-  // Dynamic import to avoid require() style import
-  const getChainConfig = (id: number) => {
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { getChainConfig: config } = require('./chainConfig');
-      return config(id);
-    } catch {
-      return null;
-    }
-  };
   return getChainConfig(chainId)?.name || `Chain ${chainId}`;
 };

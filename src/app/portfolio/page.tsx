@@ -29,7 +29,7 @@ import { useAccount, useReadContracts } from "wagmi";
 import { formatUnits, Address, isAddress } from "viem";
 import { useRouter } from "next/navigation";
 import { useFatePoolsStorage } from "@/lib/fatePoolHook";
-import { SupportedChainId } from "@/utils/indexedDBTypes";
+import { SupportedChainId, PortfolioCache } from "@/utils/indexedDBTypes";
 import { PredictionPoolABI } from "@/utils/abi/PredictionPool";
 import { CoinABI } from "@/utils/abi/Coin";
 import { FatePoolFactories } from "@/utils/addresses";
@@ -1679,8 +1679,9 @@ export default function PortfolioPage() {
         lastUpdated: Date.now(),
         blockNumber: 0,
         ttlMinutes: 2,
-        expiresAt: Date.now() + (2 * 60 * 1000)
-      };
+        expiresAt: Date.now() + (2 * 60 * 1000), // Temporary value, will be overridden by savePortfolioCache
+        id: `${address}_${chainId}` // Temporary value, will be overridden by savePortfolioCache
+      } as Omit<PortfolioCache, 'userAddress'> & { userAddress: string };
       
       await savePortfolioCache(cacheData);
       console.log("Portfolio data cached successfully");
@@ -1705,19 +1706,11 @@ export default function PortfolioPage() {
       console.log(`Real-time cache update for ${action}:`, { poolAddress, amount, tokenType, transactionHash });
 
       // Get current cache or create new one
-      const currentCache = await getPortfolioCache(address, chainId as SupportedChainId) || {
-        userAddress: address,
-        chainId: chainId as SupportedChainId,
-        positions: [],
-        transactions: [],
-        totalPortfolioValue: 0,
-        totalPnL: 0,
-        totalReturns: 0,
-        lastUpdated: Date.now(),
-        blockNumber: 0,
-        ttlMinutes: 2,
-        expiresAt: Date.now() + (2 * 60 * 1000)
-      };
+      const currentCache = await getPortfolioCache(address, chainId as SupportedChainId);
+      if (!currentCache) {
+        console.log("No existing cache found, cannot update");
+        return;
+      }
 
       // Update positions efficiently
       const existingPositionIndex = currentCache.positions.findIndex(pos =>
@@ -1766,7 +1759,7 @@ export default function PortfolioPage() {
       }
 
       // Add transaction record with proper PortfolioTransaction structure
-      currentCache.transactions.push({
+      const newTransaction = {
         id: `${address}-${poolAddress}-${transactionHash}-0`,
         userAddress: address,
         tokenAddress: poolAddress,
@@ -1780,11 +1773,12 @@ export default function PortfolioPage() {
         transactionHash: transactionHash,
         logIndex: 0,
         timestamp: Date.now()
-      });
+      };
+      currentCache.transactions.push(newTransaction);
 
       // Update cache metadata (minimal updates)
       currentCache.lastUpdated = Date.now();
-      currentCache.expiresAt = Date.now() + (2 * 60 * 1000);
+      // Note: expiresAt will be set automatically by savePortfolioCache
 
       // Save updated cache efficiently
       await savePortfolioCache(currentCache);
@@ -1897,17 +1891,19 @@ export default function PortfolioPage() {
 
     // Clear cache to force fresh data from blockchain
     try {
+      // Clear cache for current chain only
       await clearPortfolioData(address, chainId as SupportedChainId);
-      console.log("✅ Cache cleared, will reload from blockchain");
+      console.log("✅ Cache cleared for current chain, will reload from blockchain");
+      
+      // Reload data from blockchain after cache is cleared
+      await loadCachedData();
+      console.log("✅ Fresh data loaded from blockchain");
     } catch (error) {
-      console.error("❌ Failed to clear cache:", error);
-    }
-
-    // Trigger fresh data load from blockchain
-    setTimeout(() => {
+      console.error("❌ Failed to clear cache or reload data:", error);
+    } finally {
       setIsLoadingPools(false);
-    }, 1000);
-  }, [address, chainId, clearPortfolioData]);
+    }
+  }, [address, chainId, clearPortfolioData, loadCachedData]);
 
   // Remove the complex loading logic - let data load in background
   // The portfolio will show empty state (0 values) immediately and populate as data loads

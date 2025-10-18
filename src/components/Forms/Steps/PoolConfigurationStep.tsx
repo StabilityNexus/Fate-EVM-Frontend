@@ -9,7 +9,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { InfoIcon, Coins, Wallet } from "lucide-react";
+import { Info, Coins, Wallet } from "lucide-react";
 import { logger } from "@/lib/logger";
 import type { FormData } from "../FormData";
 import { useAccount, useChainId } from "wagmi";
@@ -92,7 +92,7 @@ const PoolConfigurationStep: React.FC<PoolConfigurationStepProps> = ({
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <InfoIcon className="h-4 w-4 text-gray-600/70 dark:text-gray-400/70 cursor-help" />
+                  <Info className="h-4 w-4 text-gray-600/70 dark:text-gray-400/70 cursor-help" />
                 </TooltipTrigger>
                 <TooltipContent className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400">
                   <p className="w-64 text-sm">
@@ -126,7 +126,7 @@ const PoolConfigurationStep: React.FC<PoolConfigurationStepProps> = ({
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <InfoIcon className="h-4 w-4 text-gray-600/70 dark:text-gray-400/70 cursor-help" />
+                  <Info className="h-4 w-4 text-gray-600/70 dark:text-gray-400/70 cursor-help" />
                 </TooltipTrigger>
                 <TooltipContent className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400">
                   <p className="w-64 text-sm">
@@ -160,7 +160,7 @@ const PoolConfigurationStep: React.FC<PoolConfigurationStepProps> = ({
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <InfoIcon className="h-4 w-4 text-gray-600/70 dark:text-gray-400/70 cursor-help" />
+                  <Info className="h-4 w-4 text-gray-600/70 dark:text-gray-400/70 cursor-help" />
                 </TooltipTrigger>
                 <TooltipContent className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400">
                   <p className="w-64 text-sm">
@@ -192,7 +192,7 @@ const PoolConfigurationStep: React.FC<PoolConfigurationStepProps> = ({
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <InfoIcon className="h-4 w-4 text-gray-600/70 dark:text-gray-400/70 cursor-help" />
+                  <Info className="h-4 w-4 text-gray-600/70 dark:text-gray-400/70 cursor-help" />
                 </TooltipTrigger>
                 <TooltipContent className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400">
                   <p className="w-64 text-sm">
@@ -231,7 +231,7 @@ const PoolConfigurationStep: React.FC<PoolConfigurationStepProps> = ({
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <InfoIcon className="h-4 w-4 text-gray-600/70 dark:text-gray-400/70 cursor-help" />
+                  <Info className="h-4 w-4 text-gray-600/70 dark:text-gray-400/70 cursor-help" />
                 </TooltipTrigger>
                 <TooltipContent className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400">
                   <p className="w-64 text-sm">
@@ -283,7 +283,7 @@ const PoolConfigurationStep: React.FC<PoolConfigurationStepProps> = ({
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <InfoIcon className="h-4 w-4 text-gray-600/70 dark:text-gray-400/70 cursor-help" />
+                    <Info className="h-4 w-4 text-gray-600/70 dark:text-gray-400/70 cursor-help" />
                   </TooltipTrigger>
                   <TooltipContent className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400">
                     <p className="w-80 text-sm">
@@ -330,7 +330,7 @@ const PoolConfigurationStep: React.FC<PoolConfigurationStepProps> = ({
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <InfoIcon className="h-4 w-4 text-gray-600/70 dark:text-gray-400/70 cursor-help" />
+                      <Info className="h-4 w-4 text-gray-600/70 dark:text-gray-400/70 cursor-help" />
                     </TooltipTrigger>
                     <TooltipContent className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400">
                       <p className="w-64 text-sm">

@@ -4,7 +4,6 @@ import "./globals.css";
 import { ClientProviders } from "@/components/layout/Layout";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
-import { ThemeProvider } from "@/components/themeProvider";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 
@@ -160,20 +159,18 @@ export default function RootLayout({
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         <ErrorBoundary>
-          <ThemeProvider>
-            <ClientProviders>
-            {/* Absolute positioned navbar to avoid affecting hero positioning */}
-            <Navbar className="fixed top-0 left-0 right-0 z-50 bg-white/80 dark:bg-black/80 backdrop-blur-md" />
-            
-            <main>
-              <ErrorBoundary>
-                {children}
-              </ErrorBoundary>
-            </main>
-            
-            <Footer className="pb-20 lg:pb-4" />
-            </ClientProviders>
-          </ThemeProvider>
+          <ClientProviders>
+          {/* Absolute positioned navbar to avoid affecting hero positioning */}
+          <Navbar className="fixed top-0 left-0 right-0 z-50 bg-white/80 dark:bg-black/80 backdrop-blur-md" />
+          
+          <main>
+            <ErrorBoundary>
+              {children}
+            </ErrorBoundary>
+          </main>
+          
+          <Footer className="pb-20 lg:pb-4" />
+          </ClientProviders>
         </ErrorBoundary>
       </body>
     </html>

@@ -9,7 +9,7 @@ import {
   useWriteContract,
   useWaitForTransactionReceipt
 } from 'wagmi';
-import { formatUnits, parseUnits, type Address, createPublicClient, http } from 'viem';
+import { formatUnits, parseUnits, type Address, createPublicClient, http, isAddress } from 'viem';
 import { PredictionPoolABI } from '@/utils/abi/PredictionPool';
 import { CoinABI } from '@/utils/abi/Coin';
 import { ERC20ABI } from '@/utils/abi/ERC20';
@@ -17,7 +17,6 @@ import { ChainlinkOracleABI } from '@/utils/abi/ChainlinkOracle';
 import { toast } from 'sonner';
 import { updateOracle } from '@/lib/vaultUtils';
 import { useSearchParams } from 'next/navigation';
-import { FatePoolFactories } from '@/utils/addresses';
 import { getPriceFeedName, CHAIN_PRICE_FEED_OPTIONS } from '@/utils/supportedChainFeed';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Button } from '@/components/ui/button';
@@ -31,7 +30,7 @@ import { withErrorHandling, createTransactionError } from '@/lib/errorHandler';
 import TradingViewWidget from '@/components/ui/TradingViewWidget';
 import Navbar from '@/components/layout/Navbar';
 import { useTheme } from "next-themes";
-import { InfoIcon } from 'lucide-react';
+import { Info } from 'lucide-react';
 import { logger } from "@/lib/logger";
 
 // Utility function for safe BigInt subtraction to prevent underflow
@@ -588,7 +587,9 @@ export default function InteractionClient() {
   const { theme } = useTheme();
   const params = useSearchParams();
   const { address, isConnected, chain } = useAccount(); // eslint-disable-line @typescript-eslint/no-unused-vars
-  const poolId = (params.get("id") || FatePoolFactories[1]) as Address;
+  // Validate poolId from query params - don't default to zero address
+  const poolIdParam = params.get("id");
+  const poolId = poolIdParam && isAddress(poolIdParam) ? (poolIdParam as Address) : undefined;
 
   const { pool, userBalances, loading, error, refetch } = usePool(poolId, isConnected);
   const { data: walletClient } = useWalletClient();
@@ -1154,7 +1155,7 @@ export default function InteractionClient() {
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                          <InfoIcon className="w-4 h-4 text-neutral-400 dark:text-neutral-600 hover:text-neutral-600 dark:hover:text-neutral-400 cursor-pointer transition-colors" />
+                          <Info className="w-4 h-4 text-neutral-400 dark:text-neutral-600 hover:text-neutral-600 dark:hover:text-neutral-400 cursor-pointer transition-colors" />
                   </TooltipTrigger>
                         <TooltipContent side="right" align="center">
                           <div className="bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 px-3 py-2 rounded-xl shadow-lg text-sm space-y-1">

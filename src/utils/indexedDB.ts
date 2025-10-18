@@ -142,7 +142,8 @@ export class FatePoolsIndexedDBService {
         }
 
         if (!db.objectStoreNames.contains(this.stores.portfolioCache)) {
-          const portfolioCacheStore = db.createObjectStore(this.stores.portfolioCache, { keyPath: 'userAddress' });
+          const portfolioCacheStore = db.createObjectStore(this.stores.portfolioCache, { keyPath: 'id' });
+          portfolioCacheStore.createIndex('userAddress', 'userAddress', { unique: false });
           portfolioCacheStore.createIndex('chainId', 'chainId', { unique: false });
           portfolioCacheStore.createIndex('lastUpdated', 'lastUpdated', { unique: false });
           portfolioCacheStore.createIndex('expiresAt', 'expiresAt', { unique: false });
@@ -597,13 +598,17 @@ export class FatePoolsIndexedDBService {
   }
 
   // Save complete portfolio cache
-  async savePortfolioCache(cache: Omit<PortfolioCache, 'userAddress'> & { userAddress: string }): Promise<void> {
+  async savePortfolioCache(cache: Omit<PortfolioCache, 'userAddress' | 'id'> & { userAddress: string }): Promise<void> {
     const db = await this.ensureDB();
     const transaction = db.transaction([this.stores.portfolioCache], 'readwrite');
     const store = transaction.objectStore(this.stores.portfolioCache);
     
+    // Generate stable deterministic cache id from userAddress and chainId
+    const cacheId = `${cache.userAddress}_${cache.chainId}`;
+    
     const cacheWithExpiry: PortfolioCache = {
       ...cache,
+      id: cacheId,
       expiresAt: Date.now() + (cache.ttlMinutes * 60 * 1000)
     };
     
@@ -616,8 +621,11 @@ export class FatePoolsIndexedDBService {
     const transaction = db.transaction([this.stores.portfolioCache], 'readonly');
     const store = transaction.objectStore(this.stores.portfolioCache);
     
+    // Use the same deterministic id for retrieval
+    const cacheId = `${userAddress}_${chainId}`;
+    
     return new Promise((resolve, reject) => {
-      const request = store.get(userAddress);
+      const request = store.get(cacheId);
       request.onsuccess = () => {
         const result = request.result;
         if (!result) {
@@ -631,12 +639,7 @@ export class FatePoolsIndexedDBService {
           return;
         }
         
-        // Check if it's for the right chain
-        if (result.chainId !== chainId) {
-          resolve(null);
-          return;
-        }
-        
+        // No need to check chainId since the cacheId already includes it
         resolve(result);
       };
       request.onerror = () => reject(new Error(`Failed to get portfolio cache: ${request.error?.message}`));
@@ -644,7 +647,7 @@ export class FatePoolsIndexedDBService {
   }
 
   // Clear portfolio data for user
-  async clearPortfolioData(userAddress: string, chainId?: SupportedChainId): Promise<void> {
+  async clearPortfolioData(userAddress: string, chainId?: SupportedChainId | null | 'ALL'): Promise<void> {
     const db = await this.ensureDB();
     
     // Helper function to wrap IndexedDB operations in Promises
@@ -676,11 +679,10 @@ export class FatePoolsIndexedDBService {
       // Clear positions
       const positionTransaction = db.transaction([this.stores.portfolioPositions], 'readwrite');
       const positionStore = positionTransaction.objectStore(this.stores.portfolioPositions);
-      const positionIndex = positionStore.index('userAddress_chainId');
       
       const positionRequest = chainId 
-        ? positionIndex.getAll([userAddress, chainId])
-        : positionIndex.getAll(userAddress);
+        ? positionStore.index('userAddress_chainId').getAll([userAddress, chainId])
+        : positionStore.index('userAddress').getAll(userAddress);
       
       const positions = await wrapRequest(positionRequest);
       
@@ -696,11 +698,10 @@ export class FatePoolsIndexedDBService {
       // Clear transactions
       const transactionTransaction = db.transaction([this.stores.portfolioTransactions], 'readwrite');
       const transactionStore = transactionTransaction.objectStore(this.stores.portfolioTransactions);
-      const transactionIndex = transactionStore.index('userAddress_chainId');
       
       const transactionRequest = chainId 
-        ? transactionIndex.getAll([userAddress, chainId])
-        : transactionIndex.getAll(userAddress);
+        ? transactionStore.index('userAddress_chainId').getAll([userAddress, chainId])
+        : transactionStore.index('userAddress').getAll(userAddress);
       
       const transactions = await wrapRequest(transactionRequest);
       
@@ -716,7 +717,29 @@ export class FatePoolsIndexedDBService {
       // Clear cache
       const cacheTransaction = db.transaction([this.stores.portfolioCache], 'readwrite');
       const cacheStore = cacheTransaction.objectStore(this.stores.portfolioCache);
-      await wrapDelete(cacheStore, userAddress);
+      
+      if (chainId === null || chainId === 'ALL') {
+        // Clear all cache entries for this user across all chains
+        const cacheIndex = cacheStore.index('userAddress');
+        const cacheRequest = cacheIndex.openCursor(IDBKeyRange.only(userAddress));
+        
+        await new Promise<void>((resolve, reject) => {
+          cacheRequest.onsuccess = () => {
+            const cursor = cacheRequest.result;
+            if (cursor) {
+              cursor.delete();
+              cursor.continue();
+            } else {
+              resolve();
+            }
+          };
+          cacheRequest.onerror = () => reject(new Error(`Cache clear failed: ${cacheRequest.error?.message}`));
+        });
+      } else {
+        // Clear specific cache entry using the deterministic ID
+        const cacheId = `${userAddress}_${chainId}`;
+        await wrapDelete(cacheStore, cacheId);
+      }
       
       // Wait for cache transaction to complete
       await wrapTransaction(cacheTransaction);

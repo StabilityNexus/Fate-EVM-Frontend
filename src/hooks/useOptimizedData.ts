@@ -48,6 +48,7 @@ export const useOptimizedData = <T>(
   
   const retryCountRef = useRef(0);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const retryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Check if data is stale
   const isStale = useMemo(() => {
@@ -68,6 +69,8 @@ export const useOptimizedData = <T>(
       return null;
     }
     
+    // Use cached timestamp for lastFetched when returning cached data
+    setLastFetched(cached.timestamp);
     return cached.data as T;
   }, [key, cacheTime]);
 
@@ -75,12 +78,19 @@ export const useOptimizedData = <T>(
   const fetchData = useCallback(async (isRetry = false): Promise<void> => {
     if (!enabled) return;
     
+    // Clear any existing retry timeout
+    if (retryTimeoutRef.current) {
+      clearTimeout(retryTimeoutRef.current);
+      retryTimeoutRef.current = null;
+    }
+    
     // Cancel previous request
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
     
     abortControllerRef.current = new AbortController();
+    const signal = abortControllerRef.current.signal;
     
     try {
       if (!isRetry) {
@@ -88,9 +98,10 @@ export const useOptimizedData = <T>(
         setError(null);
       }
       
+      // Call fetchFn (it may or may not accept AbortSignal)
       const result = await fetchFn();
       
-      if (abortControllerRef.current?.signal.aborted) {
+      if (signal.aborted) {
         return;
       }
       
@@ -109,7 +120,7 @@ export const useOptimizedData = <T>(
       onSuccess?.(result);
       
     } catch (err) {
-      if (abortControllerRef.current?.signal.aborted) {
+      if (signal.aborted) {
         return;
       }
       
@@ -119,7 +130,7 @@ export const useOptimizedData = <T>(
         retryCountRef.current++;
         logger.warn(`Retry ${retryCountRef.current}/${retryCount} for ${key}:`, { error: error.message });
         
-        setTimeout(() => {
+        retryTimeoutRef.current = setTimeout(() => {
           fetchData(true);
         }, retryDelay * retryCountRef.current);
         
@@ -131,9 +142,8 @@ export const useOptimizedData = <T>(
       logger.error(`Failed to fetch data for ${key}:`, error);
       
     } finally {
-      if (!isRetry) {
-        setLoading(false);
-      }
+      // Always clear loading state when done (success or final retry failure)
+      setLoading(false);
     }
   }, [key, fetchFn, enabled, staleTime, retryCount, retryDelay, onSuccess, onError]);
 
@@ -145,13 +155,20 @@ export const useOptimizedData = <T>(
     const cachedData = getCachedData();
     if (cachedData) {
       setData(cachedData);
-      setLastFetched(Date.now());
+      // lastFetched is already set by getCachedData using cached timestamp
       return;
     }
     
     fetchData();
     
     return () => {
+      // Clear retry timeout on unmount
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current);
+        retryTimeoutRef.current = null;
+      }
+      
+      // Abort ongoing request on unmount
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }

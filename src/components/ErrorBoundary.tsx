@@ -198,7 +198,11 @@ URL: ${window.location.href}
       );
     }
 
-    return this.props.children;
+    return (
+      <ErrorProvider>
+        {this.props.children}
+      </ErrorProvider>
+    );
   }
 }
 
@@ -218,8 +222,32 @@ export const withErrorBoundary = <P extends object>(
   return WrappedComponent;
 };
 
+// Error context for sharing error state
+const ErrorContext = React.createContext<{
+  error: Error | null;
+  captureError: (error: Error) => void;
+  resetError: () => void;
+} | null>(null);
+
+// ErrorThrower component that throws errors during render (caught by error boundaries)
+const ErrorThrower: React.FC<{ error: Error | null }> = ({ error }) => {
+  if (error) {
+    throw error;
+  }
+  return null;
+};
+
 // Hook for error boundary context
 export const useErrorHandler = () => {
+  const context = React.useContext(ErrorContext);
+  if (!context) {
+    throw new Error('useErrorHandler must be used within an ErrorBoundary');
+  }
+  return context;
+};
+
+// Error context provider
+export const ErrorProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [error, setError] = React.useState<Error | null>(null);
 
   const resetError = React.useCallback(() => {
@@ -231,11 +259,10 @@ export const useErrorHandler = () => {
     logger.error('Captured error:', error);
   }, []);
 
-  React.useEffect(() => {
-    if (error) {
-      throw error;
-    }
-  }, [error]);
-
-  return { captureError, resetError };
+  return (
+    <ErrorContext.Provider value={{ error, captureError, resetError }}>
+      <ErrorThrower error={error} />
+      {children}
+    </ErrorContext.Provider>
+  );
 };
