@@ -1,6 +1,30 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
+// Module-scoped cache queue to prevent race conditions
+const cacheUpdateQueue: Array<() => Promise<void>> = [];
+let isProcessingQueue = false;
+
+// Process cache update queue serially
+const processCacheQueue = async (): Promise<void> => {
+  if (isProcessingQueue || cacheUpdateQueue.length === 0) return;
+  
+  isProcessingQueue = true;
+  
+  while (cacheUpdateQueue.length > 0) {
+    const updateFn = cacheUpdateQueue.shift();
+    if (updateFn) {
+      try {
+        await updateFn();
+      } catch (error) {
+        console.error("❌ Cache update failed:", error);
+      }
+    }
+  }
+  
+  isProcessingQueue = false;
+};
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -1635,8 +1659,22 @@ export default function PortfolioPage() {
 
       // If it's a missing store error, try to reinitialize the database
       if (error instanceof Error && error.message.includes('Missing required object stores')) {
+        // Check reload guard to prevent infinite reload loops
+        const reloadKey = 'portfolio-reload-guard';
+        const lastReload = sessionStorage.getItem(reloadKey);
+        const now = Date.now();
+        const RELOAD_COOLDOWN = 5 * 60 * 1000; // 5 minutes
+        
+        if (lastReload && (now - parseInt(lastReload)) < RELOAD_COOLDOWN) {
+          console.warn("🚫 Reload guard active - preventing infinite reload loop");
+          console.error("❌ Database corruption persists. Please clear browser data manually.");
+          return;
+        }
+        
         console.log("🔄 Attempting to reinitialize database...");
         try {
+          // Set reload guard before reloading
+          sessionStorage.setItem(reloadKey, now.toString());
           // Force a page refresh to reinitialize the database
           window.location.reload();
         } catch (reloadError) {
@@ -1733,96 +1771,113 @@ export default function PortfolioPage() {
   const updateCacheOnAction = useCallback(async (action: 'buy' | 'sell', poolAddress: string, amount: number, tokenType: 'bull' | 'bear', transactionHash: string, tokenAddress: string) => {
     if (!address || !chainId || !isDBInitialized) return;
 
-    try {
-      console.log(`Real-time cache update for ${action}:`, { poolAddress, amount, tokenType, transactionHash });
+    // Create a promise that resolves when the queued update completes
+    return new Promise<void>((resolve, reject) => {
+      const updateFn = async () => {
+        try {
+          console.log(`Real-time cache update for ${action}:`, { poolAddress, amount, tokenType, transactionHash });
 
-      // Get current cache or create new one
-      const currentCache = await getPortfolioCache(address, chainId as SupportedChainId);
-      if (!currentCache) {
-        console.log("No existing cache found, cannot update");
-        return;
-      }
-
-      // Update positions efficiently
-      const existingPositionIndex = currentCache.positions.findIndex(pos =>
-        pos.poolAddress === poolAddress && pos.tokenType === tokenType
-      );
-
-      if (action === 'buy') {
-        if (existingPositionIndex >= 0) {
-          // Update existing position balance
-          currentCache.positions[existingPositionIndex].currentBalance += amount;
-          currentCache.positions[existingPositionIndex].lastUpdated = Date.now();
-        } else {
-          // Add new position with minimal data (will be filled by RPC when needed)
-          currentCache.positions.push({
-            id: `${poolAddress}-${tokenType}-${Date.now()}`,
-            userAddress: address,
-            tokenAddress: tokenAddress, // Will be updated when RPC data is available
-            poolAddress: poolAddress,
-            chainId: chainId as SupportedChainId,
-            tokenType: tokenType,
-            currentBalance: amount,
-            currentValue: 0, // Will be calculated
-            costBasis: 0, // Will be calculated
-            pnL: 0,
-            returns: 0,
-            totalFeesPaid: 0,
-            netInvestment: 0,
-            grossInvestment: 0,
-            lastUpdated: Date.now(),
-            blockNumber: 0
-          });
-        }
-      } else if (action === 'sell') {
-        if (existingPositionIndex >= 0) {
-          // Update existing position balance
-          currentCache.positions[existingPositionIndex].currentBalance = Math.max(0,
-            currentCache.positions[existingPositionIndex].currentBalance - amount
-          );
-          currentCache.positions[existingPositionIndex].lastUpdated = Date.now();
-
-          // Remove position if balance is 0
-          if (currentCache.positions[existingPositionIndex].currentBalance === 0) {
-            currentCache.positions.splice(existingPositionIndex, 1);
+          // Get current cache or create new one
+          const currentCache = await getPortfolioCache(address, chainId as SupportedChainId);
+          if (!currentCache) {
+            console.log("No existing cache found, cannot update");
+            resolve();
+            return;
           }
+
+          // Update positions efficiently
+          const existingPositionIndex = currentCache.positions.findIndex(pos =>
+            pos.poolAddress === poolAddress && pos.tokenType === tokenType
+          );
+
+          if (action === 'buy') {
+            if (existingPositionIndex >= 0) {
+              // Update existing position balance
+              currentCache.positions[existingPositionIndex].currentBalance += amount;
+              currentCache.positions[existingPositionIndex].lastUpdated = Date.now();
+            } else {
+              // Add new position with minimal data (will be filled by RPC when needed)
+              currentCache.positions.push({
+                id: `${poolAddress}-${tokenType}-${Date.now()}`,
+                userAddress: address,
+                tokenAddress: tokenAddress, // Will be updated when RPC data is available
+                poolAddress: poolAddress,
+                chainId: chainId as SupportedChainId,
+                tokenType: tokenType,
+                currentBalance: amount,
+                currentValue: 0, // Will be calculated
+                costBasis: 0, // Will be calculated
+                pnL: 0,
+                returns: 0,
+                totalFeesPaid: 0,
+                netInvestment: 0,
+                grossInvestment: 0,
+                lastUpdated: Date.now(),
+                blockNumber: 0
+              });
+            }
+          } else if (action === 'sell') {
+            if (existingPositionIndex >= 0) {
+              // Update existing position balance
+              currentCache.positions[existingPositionIndex].currentBalance = Math.max(0,
+                currentCache.positions[existingPositionIndex].currentBalance - amount
+              );
+              currentCache.positions[existingPositionIndex].lastUpdated = Date.now();
+
+              // Remove position if balance is 0
+              if (currentCache.positions[existingPositionIndex].currentBalance === 0) {
+                currentCache.positions.splice(existingPositionIndex, 1);
+              }
+            }
+          }
+
+          // Add transaction record with proper PortfolioTransaction structure
+          const newTransaction = {
+            id: `${address}-${poolAddress}-${transactionHash}-0`,
+            userAddress: address,
+            tokenAddress: tokenAddress,
+            chainId: chainId as SupportedChainId,
+            type: action,
+            amountAsset: amount,
+            amountCoin: amount,
+            price: 0,
+            feePaid: 0,
+            blockNumber: 0,
+            transactionHash: transactionHash,
+            logIndex: 0,
+            timestamp: Date.now()
+          };
+          currentCache.transactions.push(newTransaction);
+
+          // Update cache metadata (minimal updates)
+          currentCache.lastUpdated = Date.now();
+          // Note: expiresAt will be set automatically by savePortfolioCache
+
+          // Save updated cache efficiently
+          await savePortfolioCache(currentCache);
+          console.log("✅ Cache updated successfully for", action, "action");
+
+          resolve();
+        } catch (error) {
+          console.error("❌ Failed to update cache on action:", error);
+          reject(error);
         }
-      }
-
-      // Add transaction record with proper PortfolioTransaction structure
-      const newTransaction = {
-        id: `${address}-${poolAddress}-${transactionHash}-0`,
-        userAddress: address,
-        tokenAddress: tokenAddress,
-        chainId: chainId as SupportedChainId,
-        type: action,
-        amountAsset: amount,
-        amountCoin: amount,
-        price: 0,
-        feePaid: 0,
-        blockNumber: 0,
-        transactionHash: transactionHash,
-        logIndex: 0,
-        timestamp: Date.now()
       };
-      currentCache.transactions.push(newTransaction);
 
-      // Update cache metadata (minimal updates)
-      currentCache.lastUpdated = Date.now();
-      // Note: expiresAt will be set automatically by savePortfolioCache
-
-      // Save updated cache efficiently
-      await savePortfolioCache(currentCache);
-      console.log("✅ Cache updated successfully for", action, "action");
-
-      // Trigger minimal UI refresh (don't clear all data, just mark for refresh)
-
-      // Force a re-render by updating a state that doesn't affect display
-
-    } catch (error) {
-      console.error("❌ Failed to update cache on action:", error);
-    }
+      // Add to queue and start processing
+      cacheUpdateQueue.push(updateFn);
+      processCacheQueue().catch(reject);
+    });
   }, [address, chainId, isDBInitialized, getPortfolioCache, savePortfolioCache]);
+
+  // Clear reload guard on successful database initialization
+  useEffect(() => {
+    if (isDBInitialized) {
+      const reloadKey = 'portfolio-reload-guard';
+      sessionStorage.removeItem(reloadKey);
+      console.log("✅ Database initialized successfully - cleared reload guard");
+    }
+  }, [isDBInitialized]);
 
   // Expose cache update function globally for buy/sell actions
   useEffect(() => {
