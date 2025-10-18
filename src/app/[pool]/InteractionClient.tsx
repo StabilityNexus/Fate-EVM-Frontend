@@ -23,7 +23,9 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Loading } from '@/components/ui/loading';
-// import { getChainConfig } from '@/utils/chainConfig';
+import { formatNumber, formatNumberDown } from '@/utils/format';
+import { validateTransactionInput } from '@/lib/validation';
+import { withErrorHandling, createTransactionError } from '@/lib/errorHandler';
 
 // Note: ChainlinkAdapterFactories is imported but can be used for future oracle management features
 import TradingViewWidget from '@/components/ui/TradingViewWidget';
@@ -31,6 +33,11 @@ import Navbar from '@/components/layout/Navbar';
 import { useTheme } from "next-themes";
 import { InfoIcon } from 'lucide-react';
 import { logger } from "@/lib/logger";
+
+// Utility function for safe BigInt subtraction to prevent underflow
+const safeBigIntSubtract = (a: bigint, b: bigint): bigint => {
+  return a > b ? a - b : BigInt(0);
+};
 
 // EVM-based pool hook
 const usePool = (poolId: Address | undefined, isConnected: boolean) => {
@@ -206,24 +213,6 @@ const usePool = (poolId: Address | undefined, isConnected: boolean) => {
   return { pool, userBalances, userAvgPrices, loading, error, refetch: refetchPool };
 };
 
-const formatNumber = (n: number, decimals = 9) => {
-  if (!isFinite(n) || isNaN(n)) return "0";
-  const rounded = Number(n.toFixed(decimals));
-  let s = rounded.toString();
-  if (s.indexOf("e") !== -1) s = rounded.toFixed(decimals);
-  if (s.indexOf(".") >= 0) s = s.replace(/\.?0+$/, "");
-  return s;
-};
-
-const formatNumberDown = (n: number, decimals = 9) => {
-  if (!isFinite(n) || isNaN(n)) return "0";
-  const factor = Math.pow(10, decimals);
-  const floored = Math.floor(n * factor) / factor;
-  let s = floored.toString();
-  if (s.indexOf("e") !== -1) s = floored.toFixed(decimals);
-  if (s.indexOf(".") >= 0) s = s.replace(/\.?0+$/, "");
-  return s;
-};
 
 const formatValue = (value: number) => `${formatNumber(value, 3)} WETH`;
 
@@ -305,74 +294,89 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
 
 
 
-  const handleBuyTransaction = useCallback(async (amount: string) => {
+  const handleBuyTransaction = useCallback(async (amount: string, currentPoolId: Address) => {
     try {
       const amountWei = parseUnits(amount, 18);
       
       const loadingToast = toast.loading("Processing buy transaction...");
-      await writeContract({
+      const hash = await writeContract({
         address: tokenAddress! as `0x${string}`,
         abi: CoinABI,
         functionName: 'buy',
         args: [address!, amountWei],
-      });
+      }) as unknown as string;
       toast.dismiss(loadingToast);
+      
+      // Update portfolio cache on successful buy
+      if (hash && (window as unknown as { updatePortfolioCache?: (action: string, poolId: string, amount: number, tokenType: string, hash: string) => Promise<void> }).updatePortfolioCache) {
+        try {
+          await (window as unknown as { updatePortfolioCache: (action: string, poolId: string, amount: number, tokenType: string, hash: string) => Promise<void> }).updatePortfolioCache(
+            'buy',
+            currentPoolId,
+            Number(amount),
+            isBull ? 'bull' : 'bear',
+            hash
+          );
+          toast.success("Transaction successful! Portfolio updated.");
+        } catch (cacheError) {
+          console.error("Failed to update portfolio cache:", cacheError);
+          toast.success("Transaction successful!");
+        }
+      } else {
+        toast.success("Transaction successful!");
+      }
     } catch (err: unknown) {
       logger.error("Buy transaction error:", err instanceof Error ? err : undefined);
       toast.error((err as Error).message || "Failed to buy tokens");
     }
-  }, [tokenAddress, address, writeContract]);
+  }, [tokenAddress, address, writeContract, isBull]);
 
-  const handleBuy = async () => {
+  const handleBuy = withErrorHandling(async (currentPoolId: Address) => {
     if (!address || !connected) {
-      toast.error("Please connect your wallet");
-      return;
-    }
-
-    if (!buyAmount || isNaN(Number(buyAmount)) || Number(buyAmount) <= 0) {
-      toast.error("Please enter a valid amount greater than zero");
-      return;
+      throw createTransactionError("Please connect your wallet");
     }
 
     if (!tokenAddress || !poolData?.asset_address) {
-      toast.error("Token information not available");
+      throw createTransactionError("Token information not available");
+    }
+
+    // Validate input with new validation system
+    const validatedInput = validateTransactionInput({
+      amount: buyAmount,
+      poolId: currentPoolId,
+      chainId: 1, // Default to mainnet for now
+      userAddress: address
+    });
+
+    const amountWei = parseUnits(validatedInput.amount.toString(), 18);
+    
+    // Check user's base token balance
+    const userBaseTokenBalance = baseTokenBalance || BigInt(0);
+    if (userBaseTokenBalance < amountWei) {
+      throw createTransactionError(
+        `Insufficient balance. You have ${formatUnits(userBaseTokenBalance, 18)} base tokens available.`
+      );
+    }
+
+    // Check allowance
+    const currentAllowance = allowance || BigInt(0);
+    if (currentAllowance < amountWei) {
+      const approvalToast = toast.loading("Approving tokens...");
+      setPendingApproval({ amount: buyAmount, type: 'buy' });
+      await writeContract({
+        address: poolData.asset_address as `0x${string}`,
+        abi: ERC20ABI,
+        functionName: 'approve',
+        args: [tokenAddress, amountWei],
+      });
+      toast.dismiss(approvalToast);
       return;
     }
 
-    try {
-      const amountWei = parseUnits(buyAmount, 18);
-      
-      // Check user's base token balance
-      const userBaseTokenBalance = baseTokenBalance || BigInt(0);
-      if (userBaseTokenBalance < amountWei) {
-        toast.error(`Insufficient balance. You have ${formatUnits(userBaseTokenBalance, 18)} base tokens available.`);
-        return;
-      }
+    await handleBuyTransaction(buyAmount, currentPoolId);
+  }, { functionName: 'handleBuy' });
 
-      // Check allowance
-      const currentAllowance = allowance || BigInt(0);
-      if (currentAllowance < amountWei) {
-        const approvalToast = toast.loading("Approving tokens...");
-        setPendingApproval({ amount: buyAmount, type: 'buy' });
-        await writeContract({
-          address: poolData.asset_address as `0x${string}`,
-          abi: ERC20ABI,
-          functionName: 'approve',
-          args: [tokenAddress, amountWei],
-        });
-        toast.dismiss(approvalToast);
-        return;
-      }
-
-      await handleBuyTransaction(buyAmount);
-      setBuyAmount('');
-    } catch (err: unknown) {
-      logger.error("Buy error:", err instanceof Error ? err : undefined);
-      toast.error((err as Error).message || "Failed to buy tokens");
-    }
-  };
-
-  const handleSell = async () => {
+  const handleSell = async (currentPoolId: Address) => {
     if (!address || !connected) {
       toast.error('Please connect your wallet');
       return;
@@ -398,14 +402,33 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
       }
 
       const loadingToast = toast.loading("Processing sell transaction...");
-      await writeContract({
+      const hash = await writeContract({
         address: tokenAddress as `0x${string}`,
         abi: CoinABI,
         functionName: 'sell',
         args: [amountWei],
-      });
+      }) as unknown as string;
       toast.dismiss(loadingToast);
       setSellAmount('');
+      
+      // Update portfolio cache on successful sell
+      if (hash && (window as unknown as { updatePortfolioCache?: (action: string, poolId: string, amount: number, tokenType: string, hash: string) => Promise<void> }).updatePortfolioCache) {
+        try {
+          await (window as unknown as { updatePortfolioCache: (action: string, poolId: string, amount: number, tokenType: string, hash: string) => Promise<void> }).updatePortfolioCache(
+            'sell',
+            currentPoolId,
+            Number(sellAmount),
+            isBull ? 'bull' : 'bear',
+            hash
+          );
+          toast.success("Transaction successful! Portfolio updated.");
+        } catch (cacheError) {
+          console.error("Failed to update portfolio cache:", cacheError);
+          toast.success("Transaction successful!");
+        }
+      } else {
+        toast.success("Transaction successful!");
+      }
     } catch (err: unknown) {
       logger.error('Sell error:', err instanceof Error ? err : undefined);
       toast.error((err as Error).message || 'Failed to sell tokens');
@@ -416,13 +439,12 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
     if (isConfirmed && !isTransactionPending) {
       if (pendingApproval && pendingApproval.type === 'buy') {
         setPendingApproval(null);
-        handleBuyTransaction(pendingApproval.amount);
-        setBuyAmount('');
+        handleBuyTransaction(pendingApproval.amount, poolData.id.id as Address);
       } else {
         handlePoll();
       }
     }
-  }, [isConfirmed, isTransactionPending, pendingApproval, handlePoll, handleBuyTransaction]);
+  }, [isConfirmed, isTransactionPending, pendingApproval, handlePoll, handleBuyTransaction, poolData.id.id]);
 
   const vaultTitle = isBull ? 'Bull Vault' : 'Bear Vault';
   const vaultIcon = isBull ? (
@@ -509,7 +531,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
                 </div>
               </div>
               <Button 
-                onClick={handleBuy} 
+                onClick={() => handleBuy(poolData.id.id as Address)} 
                 className={`w-full ${buttonColor} text-white`} 
                 disabled={!buyAmount || !connected || isTransacting}
               >
@@ -539,7 +561,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
                 </div>
               </div>
               <Button 
-                onClick={handleSell} 
+                onClick={() => handleSell(poolData.id.id as Address)} 
                 className="w-full bg-gray-100 hover:bg-gray-200 text-black border border-gray-300" 
                 disabled={!sellAmount || !connected || isTransacting}
               >
@@ -565,7 +587,7 @@ export default function InteractionClient() {
   // const stickyRef = useRef<HTMLElement | null>(null);
   const { theme } = useTheme();
   const params = useSearchParams();
-  const { address, isConnected } = useAccount();
+  const { address, isConnected, chain } = useAccount(); // eslint-disable-line @typescript-eslint/no-unused-vars
   const poolId = (params.get("id") || FatePoolFactories[1]) as Address;
 
   const { pool, userBalances, loading, error, refetch } = usePool(poolId, isConnected);
@@ -725,7 +747,7 @@ export default function InteractionClient() {
       try {
         logger.debug('Approach 3: Checking recent pool activity...');
         const latestBlock = await publicClient.getBlockNumber();
-        const startBlock = latestBlock - BigInt(10000); // Check last 10000 blocks
+        const startBlock = safeBigIntSubtract(latestBlock, BigInt(10000)); // Check last 10000 blocks, but never go below 0
         
         const recentLogs = await publicClient.getLogs({
           address: poolId as Address,

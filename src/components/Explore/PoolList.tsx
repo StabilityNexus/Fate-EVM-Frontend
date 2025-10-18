@@ -3,7 +3,7 @@ import { PredictionCard } from "@/components/FatePoolCard/FatePoolCard";
 import PoolTableView from "./PoolTableView";
 import type { Pool } from "@/lib/types";
 import { getPriceFeedName as getPriceFeedNameUtil } from "@/utils/supportedChainFeed";
-import { getChainConfig as getChainConfigUtil } from "@/utils/chainConfig";
+import { getChainConfig } from "@/utils/chainConfig";
 import { getHebeswapPairByAddress } from "@/utils/hebeswapConfig";
 
 // Helper function to get oracle name/description
@@ -107,7 +107,7 @@ const PoolList: React.FC<PoolListProps> = ({
             : !isConnectedChainSupported
             ? "Please switch to a supported chain to view pools."
             : currentChainId
-            ? `No prediction pools have been created yet on ${getChainConfigUtil(currentChainId)?.name || `Chain ${currentChainId}`}.`
+            ? `No prediction pools have been created yet on ${getChainConfig(currentChainId)?.name || `Chain ${currentChainId}`}.`
             : "No prediction pools have been created yet on the connected chain."}
         </p>
         {searchQuery && (
@@ -129,7 +129,7 @@ const PoolList: React.FC<PoolListProps> = ({
         {sortedChainIds.map((chainId) => (
           <div key={chainId}>
             <h2 className="text-2xl font-bold text-black dark:text-white mb-6">
-              Pools on {getChainConfigUtil(chainId)?.name || `Chain ${chainId}`}
+              Pools on {getChainConfig(chainId)?.name || `Chain ${chainId}`}
             </h2>
             <PoolTableView
               pools={groupedPools[chainId]}
@@ -148,7 +148,7 @@ const PoolList: React.FC<PoolListProps> = ({
         
         <div key={chainId}>
           <h2 className="text-2xl font-bold text-black dark:text-white mb-6">
-            Pools on {getChainConfigUtil(chainId)?.name || `Chain ${chainId}`}
+            Pools on {getChainConfig(chainId)?.name || `Chain ${chainId}`}
           </h2>
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {groupedPools[chainId].map((pool) => (

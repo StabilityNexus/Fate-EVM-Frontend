@@ -33,10 +33,60 @@ class Logger {
     return level >= this.logLevel;
   }
 
+  // Safe JSON serializer that handles BigInt and circular references
+  private safeStringify(value: unknown): string {
+    const seen = new WeakSet();
+
+    const replacer = (key: string, val: unknown): unknown => {
+      // Handle BigInt values
+      if (typeof val === 'bigint') {
+        return val.toString();
+      }
+
+      // Handle circular references
+      if (val !== null && typeof val === 'object') {
+        if (seen.has(val)) {
+          return '[Circular]';
+        }
+        seen.add(val);
+      }
+
+      return val;
+    };
+
+    try {
+      return JSON.stringify(value, replacer, 2);
+    } catch {
+      // Fallback for any other serialization errors
+      try {
+        return String(value);
+      } catch {
+        return '[Unserializable value]';
+      }
+    }
+  }
+
+  // Standardized error logging utility
+  logError(message: string, error: unknown, context?: Record<string, unknown>): void {
+    const errorInstance = error instanceof Error ? error : undefined;
+    this.error(message, errorInstance, context);
+  }
+
+  // Standardized contract error logging utility
+  logContractError(functionName: string, contractError: unknown, context?: Record<string, unknown>): void {
+    const error = contractError as { message?: string; [key: string]: unknown };
+    const errorInstance = contractError instanceof Error ? contractError : undefined;
+    this.error(`Error in ${functionName}:`, errorInstance, {
+      ...context,
+      message: error.message || 'Unknown contract error',
+      contractError: error
+    });
+  }
+
   private formatMessage(level: LogLevel, message: string, context?: Record<string, unknown>): string {
     const timestamp = new Date().toISOString();
     const levelName = LogLevel[level];
-    const contextStr = context ? ` ${JSON.stringify(context)}` : '';
+    const contextStr = context ? ` ${this.safeStringify(context)}` : '';
     return `[${timestamp}] ${levelName}: ${message}${contextStr}`;
   }
 
@@ -117,13 +167,22 @@ class Logger {
     // fetch('/api/logs', {
     //   method: 'POST',
     //   headers: { 'Content-Type': 'application/json' },
-    //   body: JSON.stringify(logEntry)
+    //   body: this.safeStringify(logEntry)
     // }).catch(err => console.error('Failed to send log:', err));
   }
 
   // Method to set log level dynamically
   setLogLevel(level: LogLevel): void {
     this.logLevel = level;
+  }
+
+  // Static utility methods for external use
+  static logError(message: string, error: unknown, context?: Record<string, unknown>): void {
+    logger.logError(message, error, context);
+  }
+
+  static logContractError(functionName: string, contractError: unknown, context?: Record<string, unknown>): void {
+    logger.logContractError(functionName, contractError, context);
   }
 }
 

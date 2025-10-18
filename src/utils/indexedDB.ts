@@ -18,7 +18,7 @@ import type {
 
 export class FatePoolsIndexedDBService {
   private dbName = 'FatePoolsDB';
-  private dbVersion = 1;
+  private dbVersion = 3;
   private db: IDBDatabase | null = null;
 
   private readonly stores = {
@@ -84,6 +84,26 @@ export class FatePoolsIndexedDBService {
           tokenStore.createIndex('chainId_pool', ['chainId', 'prediction_pool'], { unique: false });
         }
 
+        if (!db.objectStoreNames.contains(this.stores.bullTokens)) {
+          const bullTokenStore = db.createObjectStore(this.stores.bullTokens, { keyPath: 'id' });
+          bullTokenStore.createIndex('chainId', 'chainId', { unique: false });
+          bullTokenStore.createIndex('prediction_pool', 'prediction_pool', { unique: false });
+          bullTokenStore.createIndex('symbol', 'symbol', { unique: false });
+          bullTokenStore.createIndex('vault_creator', 'vault_creator', { unique: false });
+          bullTokenStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+          bullTokenStore.createIndex('chainId_pool', ['chainId', 'prediction_pool'], { unique: false });
+        }
+
+        if (!db.objectStoreNames.contains(this.stores.bearTokens)) {
+          const bearTokenStore = db.createObjectStore(this.stores.bearTokens, { keyPath: 'id' });
+          bearTokenStore.createIndex('chainId', 'chainId', { unique: false });
+          bearTokenStore.createIndex('prediction_pool', 'prediction_pool', { unique: false });
+          bearTokenStore.createIndex('symbol', 'symbol', { unique: false });
+          bearTokenStore.createIndex('vault_creator', 'vault_creator', { unique: false });
+          bearTokenStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+          bearTokenStore.createIndex('chainId_pool', ['chainId', 'prediction_pool'], { unique: false });
+        }
+
         if (!db.objectStoreNames.contains(this.stores.chainStatus)) {
           const chainStore = db.createObjectStore(this.stores.chainStatus, { keyPath: 'chainId' });
           chainStore.createIndex('chainName', 'chainName', { unique: false });
@@ -139,6 +159,33 @@ export class FatePoolsIndexedDBService {
     if (!this.db) {
       throw new Error('Failed to initialize database');
     }
+    
+    // Verify all required stores exist
+    const requiredStores = Object.values(this.stores);
+    const existingStores = Array.from(this.db.objectStoreNames);
+    const missingStores = requiredStores.filter(store => !existingStores.includes(store));
+    
+    if (missingStores.length > 0) {
+      logger.error('Missing object stores:', new Error(missingStores.join(', ')));
+      logger.info('Attempting to reinitialize database...');
+      
+      try {
+        await this.forceReinit();
+        // Verify stores exist after reinit
+        const newExistingStores = Array.from(this.db!.objectStoreNames);
+        const stillMissing = requiredStores.filter(store => !newExistingStores.includes(store));
+        
+        if (stillMissing.length > 0) {
+          throw new Error(`Still missing stores after reinit: ${stillMissing.join(', ')}`);
+        }
+        
+        logger.info('Database successfully reinitialized with all required stores');
+      } catch (error) {
+        logger.error('Failed to reinitialize database:', error instanceof Error ? error : undefined);
+        throw new Error(`Missing required object stores: ${missingStores.join(', ')}. Failed to reinitialize database. Please refresh the page.`);
+      }
+    }
+    
     return this.db;
   }
 
@@ -600,48 +647,116 @@ export class FatePoolsIndexedDBService {
   async clearPortfolioData(userAddress: string, chainId?: SupportedChainId): Promise<void> {
     const db = await this.ensureDB();
     
-    // Clear positions
-    const positionTransaction = db.transaction([this.stores.portfolioPositions], 'readwrite');
-    const positionStore = positionTransaction.objectStore(this.stores.portfolioPositions);
-    const positionIndex = positionStore.index('userAddress_chainId');
-    
-    const positionRequest = chainId 
-      ? positionIndex.getAll([userAddress, chainId])
-      : positionIndex.getAll(userAddress);
-    
-    positionRequest.onsuccess = () => {
-      const positions = positionRequest.result || [];
-      positions.forEach(position => {
-        positionStore.delete(position.id);
+    // Helper function to wrap IndexedDB operations in Promises
+    const wrapRequest = <T>(request: IDBRequest<T>): Promise<T> => {
+      return new Promise((resolve, reject) => {
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(new Error(`Request failed: ${request.error?.message}`));
       });
     };
-    
-    // Clear transactions
-    const transactionTransaction = db.transaction([this.stores.portfolioTransactions], 'readwrite');
-    const transactionStore = transactionTransaction.objectStore(this.stores.portfolioTransactions);
-    const transactionIndex = transactionStore.index('userAddress_chainId');
-    
-    const transactionRequest = chainId 
-      ? transactionIndex.getAll([userAddress, chainId])
-      : transactionIndex.getAll(userAddress);
-    
-    transactionRequest.onsuccess = () => {
-      const transactions = transactionRequest.result || [];
-      transactions.forEach(transaction => {
-        transactionStore.delete(transaction.id);
+
+    // Helper function to wrap transaction completion in Promise
+    const wrapTransaction = (transaction: IDBTransaction): Promise<void> => {
+      return new Promise((resolve, reject) => {
+        transaction.oncomplete = () => resolve();
+        transaction.onerror = () => reject(new Error(`Transaction failed: ${transaction.error?.message}`));
       });
     };
-    
-    // Clear cache
-    const cacheTransaction = db.transaction([this.stores.portfolioCache], 'readwrite');
-    const cacheStore = cacheTransaction.objectStore(this.stores.portfolioCache);
-    cacheStore.delete(userAddress);
+
+    // Helper function to wrap store.delete in Promise
+    const wrapDelete = (store: IDBObjectStore, key: string): Promise<void> => {
+      return new Promise((resolve, reject) => {
+        const deleteRequest = store.delete(key);
+        deleteRequest.onsuccess = () => resolve();
+        deleteRequest.onerror = () => reject(new Error(`Delete failed: ${deleteRequest.error?.message}`));
+      });
+    };
+
+    try {
+      // Clear positions
+      const positionTransaction = db.transaction([this.stores.portfolioPositions], 'readwrite');
+      const positionStore = positionTransaction.objectStore(this.stores.portfolioPositions);
+      const positionIndex = positionStore.index('userAddress_chainId');
+      
+      const positionRequest = chainId 
+        ? positionIndex.getAll([userAddress, chainId])
+        : positionIndex.getAll(userAddress);
+      
+      const positions = await wrapRequest(positionRequest);
+      
+      // Delete all positions
+      const positionDeletePromises = positions.map(position => 
+        wrapDelete(positionStore, position.id)
+      );
+      await Promise.all(positionDeletePromises);
+      
+      // Wait for position transaction to complete
+      await wrapTransaction(positionTransaction);
+      
+      // Clear transactions
+      const transactionTransaction = db.transaction([this.stores.portfolioTransactions], 'readwrite');
+      const transactionStore = transactionTransaction.objectStore(this.stores.portfolioTransactions);
+      const transactionIndex = transactionStore.index('userAddress_chainId');
+      
+      const transactionRequest = chainId 
+        ? transactionIndex.getAll([userAddress, chainId])
+        : transactionIndex.getAll(userAddress);
+      
+      const transactions = await wrapRequest(transactionRequest);
+      
+      // Delete all transactions
+      const transactionDeletePromises = transactions.map(transaction => 
+        wrapDelete(transactionStore, transaction.id)
+      );
+      await Promise.all(transactionDeletePromises);
+      
+      // Wait for transaction transaction to complete
+      await wrapTransaction(transactionTransaction);
+      
+      // Clear cache
+      const cacheTransaction = db.transaction([this.stores.portfolioCache], 'readwrite');
+      const cacheStore = cacheTransaction.objectStore(this.stores.portfolioCache);
+      await wrapDelete(cacheStore, userAddress);
+      
+      // Wait for cache transaction to complete
+      await wrapTransaction(cacheTransaction);
+      
+    } catch (error) {
+      logger.error('Failed to clear portfolio data:', error instanceof Error ? error : undefined);
+      throw error;
+    }
   }
 
   close(): void {
     if (this.db) {
       this.db.close();
       this.db = null;
+    }
+  }
+
+  // Force database recreation when stores are missing
+  async forceReinit(): Promise<void> {
+    logger.info('Forcing database reinitialization...');
+    
+    // Close existing connection
+    await this.close();
+    
+    // Delete the database to force recreation
+    if (typeof window !== 'undefined' && window.indexedDB) {
+      return new Promise((resolve, reject) => {
+        const deleteRequest = window.indexedDB.deleteDatabase(this.dbName);
+        deleteRequest.onsuccess = async () => {
+          try {
+            await this.init();
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        };
+        deleteRequest.onerror = () => {
+          reject(new Error('Failed to delete database'));
+        };
+      });
     }
   }
 }
