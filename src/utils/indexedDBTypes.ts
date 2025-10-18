@@ -81,6 +81,7 @@ export interface PortfolioPosition {
   grossInvestment: number;
   lastUpdated: number;
   blockNumber: number; // Last block when data was fetched
+  baseTokenSymbol?: string; // Base token symbol (e.g., 'WETH', 'USDC')
 }
 
 export interface PortfolioTransaction {

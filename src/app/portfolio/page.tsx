@@ -1590,7 +1590,7 @@ export default function PortfolioPage() {
           chainId: pos.chainId,
           priceFeed: 'Cached',
           baseToken: '',
-          baseTokenSymbol: 'WETH', // Default for cached data
+          baseTokenSymbol: pos.baseTokenSymbol || 'UNKNOWN', // Use cached symbol or fallback
           bullTokenAddress: pos.tokenType === 'bull' ? pos.tokenAddress : '',
           bearTokenAddress: pos.tokenType === 'bear' ? pos.tokenAddress : '',
           bullTokenName: 'Bull Token',
@@ -1675,6 +1675,7 @@ export default function PortfolioPage() {
               grossInvestment: pool.bullCurrentValue - pool.bullPnL,
               lastUpdated: Date.now(),
               blockNumber: 0,
+              baseTokenSymbol: pool.baseTokenSymbol,
             });
           }
 
@@ -1696,6 +1697,7 @@ export default function PortfolioPage() {
               grossInvestment: pool.bearCurrentValue - pool.bearPnL,
               lastUpdated: Date.now(),
               blockNumber: 0,
+              baseTokenSymbol: pool.baseTokenSymbol,
             });
           }
 
@@ -1756,7 +1758,7 @@ export default function PortfolioPage() {
           currentCache.positions.push({
             id: `${poolAddress}-${tokenType}-${Date.now()}`,
             userAddress: address,
-            tokenAddress: '', // Will be updated when RPC data is available
+            tokenAddress: tokenAddress, // Will be updated when RPC data is available
             poolAddress: poolAddress,
             chainId: chainId as SupportedChainId,
             tokenType: tokenType,
