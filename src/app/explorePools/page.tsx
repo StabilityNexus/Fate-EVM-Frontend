@@ -14,7 +14,7 @@ import { getPriceFeedName } from "@/utils/supportedChainFeed";
 import { getChainConfig } from "@/utils/chainConfig";
 import type { Token, Pool, ChainLoadingState } from "@/lib/types";
 import { useFatePoolsStorage } from "@/lib/fatePoolHook";
-import type { SupportedChainId } from "@/utils/indexedDBTypes";
+import type { SupportedChainId } from "@/lib/indexeddb/config";
 
 // Import the reusable sub-components
 import ExploreHeader from "@/components/Explore/ExploreHeader";
@@ -136,21 +136,14 @@ function ExploreFatePoolsClient() {
         // Convert Token to TokenDetails format for storage
         const tokenDetails = {
           id: token.id,
-          chainId: sourceChainId,
-          prediction_pool: token.prediction_pool,
-          other_token: token.other_token,
-          asset: token.asset,
-          name: token.name,
+          poolAddress: token.prediction_pool,
+          tokenType: token.symbol.includes('Bull') ? 'bull' as const : 'bear' as const,
           symbol: token.symbol,
-          vault_creator: token.vault_creator,
-          mint_fee: token.mint_fee,
-          burn_fee: token.burn_fee,
-          creator_fee: token.creator_fee,
-          treasury_fee: token.treasury_fee,
-          asset_balance: token.asset_balance,
-          supply: token.supply,
-          priceBuy: token.priceBuy || 0,
-          priceSell: token.priceSell || 0
+          name: token.name,
+          totalSupply: token.supply.toString(),
+          reserve: token.asset_balance.toString(),
+          price: token.priceBuy || 0,
+          chainId: sourceChainId
         };
         await batchSaveTokens([tokenDetails]);
       }
@@ -287,26 +280,41 @@ function ExploreFatePoolsClient() {
           // Convert Pool to PoolDetails format for storage
           const poolDetails = pools.map(pool => ({
             id: pool.id,
-            chainId: pool.chainId as SupportedChainId,
             name: pool.name,
-            baseToken: pool.baseToken,
-            priceFeedAddress: pool.priceFeedAddress,
-            creator: pool.creator,
+            description: `Prediction pool for ${pool.name}`,
+            assetAddress: pool.baseToken,
+            oracleAddress: pool.priceFeedAddress,
+            currentPrice: 0, // Will be updated with real price data
+            bullReserve: "0",
+            bearReserve: "0",
+            bullToken: {
+              id: `${pool.id}-bull`,
+              symbol: `${pool.name}Bull`,
+              name: `${pool.name} Bull Token`,
+              totalSupply: "0"
+            },
+            bearToken: {
+              id: `${pool.id}-bear`,
+              symbol: `${pool.name}Bear`,
+              name: `${pool.name} Bear Token`,
+              totalSupply: "0"
+            },
+            vaultCreator: pool.creator,
+            creatorFee: pool.vaultCreatorFee,
+            mintFee: pool.vaultFee,
+            burnFee: pool.vaultFee,
+            treasuryFee: pool.treasuryFee,
             bullPercentage: pool.bullPercentage,
             bearPercentage: pool.bearPercentage,
-            vaultFee: pool.vaultFee,
-            vaultCreatorFee: pool.vaultCreatorFee,
-            treasuryFee: pool.treasuryFee,
-            chainName: pool.chainName
+            chainId: pool.chainId as SupportedChainId
           }));
           await batchSavePools(poolDetails);
           await saveChainStatus({
             chainId: chainId as SupportedChainId,
-            chainName: chainConfig.name,
-            poolCount: pools.length,
-            lastSyncTime: Date.now(),
-            isLoading: false,
-            error: null
+            isActive: true,
+            lastBlockNumber: 0, // Will be updated with real block number
+            lastUpdateTime: Date.now(),
+            poolCount: pools.length
           });
         }
 
@@ -338,40 +346,44 @@ function ExploreFatePoolsClient() {
                 const bull: Token = {
                   ...bullDetails,
                   id: bullDetails.id as Address,
-                  prediction_pool: bullDetails.prediction_pool as Address,
-                  other_token: bullDetails.other_token as Address,
-                  asset: bullDetails.asset as Address,
+                  prediction_pool: bullDetails.poolAddress as Address,
+                  other_token: bearDetails.id as Address,
+                  asset: poolDetails.assetAddress as Address,
                   vault_creator: bullDetails.vault_creator as Address,
                   mint_fee: bullDetails.mint_fee as bigint,
                   burn_fee: bullDetails.burn_fee as bigint,
                   creator_fee: bullDetails.creator_fee as bigint,
                   treasury_fee: bullDetails.treasury_fee as bigint,
+                  asset_balance: BigInt(bullDetails.reserve || '0'),
+                  supply: BigInt(bullDetails.totalSupply || '0'),
                 };
                 const bear: Token = {
                   ...bearDetails,
                   id: bearDetails.id as Address,
-                  prediction_pool: bearDetails.prediction_pool as Address,
-                  other_token: bearDetails.other_token as Address,
-                  asset: bearDetails.asset as Address,
+                  prediction_pool: bearDetails.poolAddress as Address,
+                  other_token: bullDetails.id as Address,
+                  asset: poolDetails.assetAddress as Address,
                   vault_creator: bearDetails.vault_creator as Address,
                   mint_fee: bearDetails.mint_fee as bigint,
                   burn_fee: bearDetails.burn_fee as bigint,
                   creator_fee: bearDetails.creator_fee as bigint,
                   treasury_fee: bearDetails.treasury_fee as bigint,
+                  asset_balance: BigInt(bearDetails.reserve || '0'),
+                  supply: BigInt(bearDetails.totalSupply || '0'),
                 };
                 
                 convertedPools.push({
                   id: poolDetails.id as Address,
                   name: poolDetails.name,
-                  baseToken: poolDetails.baseToken as Address,
-                  priceFeedAddress: poolDetails.priceFeedAddress as Address,
-                  creator: poolDetails.creator as Address,
+                  baseToken: poolDetails.assetAddress as Address,
+                  priceFeedAddress: poolDetails.oracleAddress as Address,
+                  creator: poolDetails.vaultCreator as Address,
                   chainId: poolDetails.chainId,
-                  chainName: poolDetails.chainName,
-                  vaultFee: poolDetails.vaultFee,
-                  vaultCreatorFee: poolDetails.vaultCreatorFee,
-                  treasuryFee: poolDetails.treasuryFee,
-                  mintFee: poolDetails.vaultFee ?? 0, // Use vaultFee as mintFee for cached data
+                  chainName: poolDetails.chainName || 'Unknown',
+                  vaultFee: poolDetails.mintFee ?? 0,
+                  vaultCreatorFee: poolDetails.creatorFee ?? 0,
+                  treasuryFee: poolDetails.treasuryFee ?? 0,
+                  mintFee: poolDetails.mintFee ?? 0,
                   burnFee: 0, // Default burnFee for cached data
                   bullPercentage: poolDetails.bullPercentage,
                   bearPercentage: poolDetails.bearPercentage,

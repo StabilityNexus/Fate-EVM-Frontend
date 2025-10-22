@@ -53,7 +53,7 @@ import { useAccount, useReadContracts } from "wagmi";
 import { formatUnits, Address, isAddress } from "viem";
 import { useRouter } from "next/navigation";
 import { useFatePoolsStorage } from "@/lib/fatePoolHook";
-import { SupportedChainId, PortfolioCache, PortfolioPosition } from "@/utils/indexedDBTypes";
+import { SupportedChainId, PortfolioCache, PortfolioPosition } from "@/lib/indexeddb/config";
 import { PredictionPoolABI } from "@/utils/abi/PredictionPool";
 import { CoinABI } from "@/utils/abi/Coin";
 import { FatePoolFactories } from "@/utils/addresses";
@@ -1575,7 +1575,7 @@ export default function PortfolioPage() {
     if (!address || !chainId || !isDBInitialized) return;
 
     try {
-      const cachedData = await getPortfolioCache(address, chainId as SupportedChainId);
+      const cachedData = await getPortfolioCache(address);
 
       // If we have fresh cached data, use it immediately
       if (cachedData && cachedData.positions.length > 0) {
@@ -1678,7 +1678,7 @@ export default function PortfolioPage() {
           // Force a page refresh to reinitialize the database
           window.location.reload();
         } catch (reloadError) {
-          console.error("❌ Failed to reload page:", reloadError);
+          console.error("Failed to reload page:", reloadError);
         }
       }
     }
@@ -1713,7 +1713,7 @@ export default function PortfolioPage() {
               grossInvestment: pool.bullCurrentValue - pool.bullPnL,
               lastUpdated: Date.now(),
               blockNumber: 0,
-              baseTokenSymbol: pool.baseTokenSymbol,
+              baseTokenSymbol: pool.baseTokenSymbol || 'UNKNOWN',
             });
           }
 
@@ -1742,6 +1742,7 @@ export default function PortfolioPage() {
           return entries;
         }),
         transactions: [],
+        totalValue: data.reduce((sum, pool) => sum + pool.totalValue, 0),
         totalPortfolioValue: data.reduce((sum, pool) => sum + pool.totalValue, 0),
         totalPnL: data.reduce((sum, pool) => sum + pool.totalPnL, 0),
         totalReturns: 0,
@@ -1778,7 +1779,7 @@ export default function PortfolioPage() {
           console.log(`Real-time cache update for ${action}:`, { poolAddress, amount, tokenType, transactionHash });
 
           // Get current cache or create new one
-          const currentCache = await getPortfolioCache(address, chainId as SupportedChainId);
+          const currentCache = await getPortfolioCache(address);
           if (!currentCache) {
             console.log("No existing cache found, cannot update");
             resolve();
@@ -1835,16 +1836,16 @@ export default function PortfolioPage() {
           const newTransaction = {
             id: `${address}-${poolAddress}-${transactionHash}-0`,
             userAddress: address,
-            tokenAddress: tokenAddress,
+            poolAddress: poolAddress,
             chainId: chainId as SupportedChainId,
-            type: action,
-            amountAsset: amount,
-            amountCoin: amount,
+            tokenType: tokenType,
+            action: action,
+            amount: amount,
             price: 0,
-            feePaid: 0,
-            blockNumber: 0,
+            value: 0,
+            fees: 0,
             transactionHash: transactionHash,
-            logIndex: 0,
+            blockNumber: 0,
             timestamp: Date.now()
           };
           currentCache.transactions.push(newTransaction);
