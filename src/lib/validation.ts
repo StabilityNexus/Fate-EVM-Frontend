@@ -238,7 +238,12 @@ export const validateTransactionInput = (input: {
   poolId: string;
   chainId: number;
   userAddress: string;
-}) => {
+}): {
+  amount: string;
+  poolId: string;
+  chainId: number;
+  userAddress: string;
+} => {
   // Rate limiting
   checkRateLimit(`tx_${input.userAddress}`, 5, 60000); // 5 transactions per minute
   
@@ -260,7 +265,16 @@ export const validatePoolCreation = (input: {
   burnFee: string;
   creatorFee: string;
   treasuryFee: string;
-}) => {
+}): {
+  name: string;
+  baseTokenAddress: string;
+  bullCoinSymbol: string;
+  bearCoinSymbol: string;
+  mintFee: number;
+  burnFee: number;
+  creatorFee: number;
+  treasuryFee: number;
+} => {
   const mintFee = validateFee(input.mintFee);
   const burnFee = validateFee(input.burnFee);
   const creatorFee = validateFee(input.creatorFee);
