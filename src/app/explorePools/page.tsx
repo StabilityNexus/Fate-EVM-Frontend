@@ -384,7 +384,7 @@ function ExploreFatePoolsClient() {
                   vaultCreatorFee: poolDetails.creatorFee ?? 0,
                   treasuryFee: poolDetails.treasuryFee ?? 0,
                   mintFee: poolDetails.mintFee ?? 0,
-                  burnFee: 0, // Default burnFee for cached data
+                  burnFee: poolDetails.burnFee ?? 0, // Use saved burnFee or default to 0
                   bullPercentage: poolDetails.bullPercentage,
                   bearPercentage: poolDetails.bearPercentage,
                   bullToken: bull,

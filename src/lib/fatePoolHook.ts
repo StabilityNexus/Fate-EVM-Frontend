@@ -14,6 +14,7 @@ import type {
   PortfolioCache,
   SupportedChainId
 } from '@/lib/indexeddb/config';
+import { SUPPORTED_CHAIN_IDS } from '@/lib/indexeddb/config';
 
 // Legacy interface for backward compatibility
 export interface UseFatePoolsStorageReturn {
@@ -114,12 +115,16 @@ export const useFatePoolsStorage = (): UseFatePoolsStorageReturn => {
       await indexedDB.deletePortfolioPositions(userAddress, chainId);
       await indexedDB.deletePortfolioTransactions(userAddress, chainId);
     } else {
-      // Clear all portfolio data for user across all chains
-      // This would require iterating through all supported chains
-      // For now, we'll clear the cache without chainId (legacy behavior)
-      await indexedDB.deletePortfolioCache(userAddress, 1 as SupportedChainId); // Fallback
-      await indexedDB.deletePortfolioPositions(userAddress, 1 as SupportedChainId); // Fallback
-      await indexedDB.deletePortfolioTransactions(userAddress, 1 as SupportedChainId); // Fallback
+      // Clear all portfolio data for user across all supported chains
+      await Promise.all(
+        SUPPORTED_CHAIN_IDS.map(async (chainId) => {
+          await Promise.all([
+            indexedDB.deletePortfolioCache(userAddress, chainId),
+            indexedDB.deletePortfolioPositions(userAddress, chainId),
+            indexedDB.deletePortfolioTransactions(userAddress, chainId)
+          ]);
+        })
+      );
     }
   }, [indexedDB]);
 

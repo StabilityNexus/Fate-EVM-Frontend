@@ -47,18 +47,34 @@ export class IndexedDBDatabase {
   private createStores(db: IDBDatabase): void {
     this.config.stores.forEach(storeConfig => {
       if (!db.objectStoreNames.contains(storeConfig.name)) {
+        // Create new object store
         const store = db.createObjectStore(storeConfig.name, {
           keyPath: storeConfig.keyPath,
           autoIncrement: storeConfig.autoIncrement
         });
 
-        // Create indexes
+        // Create indexes for new store
         storeConfig.indexes?.forEach(indexConfig => {
           store.createIndex(
             indexConfig.name,
             indexConfig.keyPath,
             { unique: indexConfig.unique || false }
           );
+        });
+      } else {
+        // Store exists, check for missing indexes
+        const transaction = db.transaction(storeConfig.name, 'versionchange');
+        const store = transaction.objectStore(storeConfig.name);
+        
+        // Check and create missing indexes
+        storeConfig.indexes?.forEach(indexConfig => {
+          if (!store.indexNames.contains(indexConfig.name)) {
+            store.createIndex(
+              indexConfig.name,
+              indexConfig.keyPath,
+              { unique: indexConfig.unique || false }
+            );
+          }
         });
       }
     });
@@ -229,6 +245,15 @@ export class IndexedDBDatabase {
     return new Promise((resolve, reject) => {
       const transaction = this.db!.transaction([storeName], 'readonly');
       const store = transaction.objectStore(storeName);
+      
+      // Check if index exists before using it
+      if (!store.indexNames.contains(indexName)) {
+        const error = new Error(`Index '${indexName}' does not exist in store '${storeName}'`);
+        logger.error('Database getByIndex failed:', error);
+        reject(error);
+        return;
+      }
+      
       const index = store.index(indexName);
       const request = index.get(key);
 

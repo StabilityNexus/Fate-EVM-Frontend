@@ -323,29 +323,40 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
 
   const handleBuy = withErrorHandling(async () => {
     if (!address || !connected) {
-      throw createTransactionError("Please connect your wallet");
+      const errorMessage = "Please connect your wallet";
+      toast.error(errorMessage);
+      throw createTransactionError(errorMessage);
     }
 
     if (!tokenAddress || !poolData?.asset_address) {
-      throw createTransactionError("Token information not available");
+      const errorMessage = "Token information not available";
+      toast.error(errorMessage);
+      throw createTransactionError(errorMessage);
     }
 
     // Validate input with new validation system
-    const validatedInput = validateTransactionInput({
-      amount: buyAmount,
-      poolId: poolData?.asset_address as Address,
-      chainId: poolData?.chainId || 1, // Use pool chain or fallback to mainnet
-      userAddress: address
-    });
+    let validatedInput;
+    try {
+      validatedInput = validateTransactionInput({
+        amount: buyAmount,
+        poolId: poolData?.asset_address as Address,
+        chainId: poolData?.chainId || 1, // Use pool chain or fallback to mainnet
+        userAddress: address
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Invalid transaction input";
+      toast.error(errorMessage);
+      throw createTransactionError(errorMessage);
+    }
 
     const amountWei = parseUnits(validatedInput.amount.toString(), 18);
     
     // Check user's base token balance
     const userBaseTokenBalance = baseTokenBalance || BigInt(0);
     if (userBaseTokenBalance < amountWei) {
-      throw createTransactionError(
-        `Insufficient balance. You have ${formatUnits(userBaseTokenBalance, 18)} base tokens available.`
-      );
+      const errorMessage = `Insufficient balance. You have ${formatUnits(userBaseTokenBalance, 18)} base tokens available.`;
+      toast.error(errorMessage);
+      throw createTransactionError(errorMessage);
     }
 
     // Check allowance

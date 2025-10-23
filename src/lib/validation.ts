@@ -39,7 +39,7 @@ export const checkRateLimit = (
   return true;
 };
 
-// Amount validation with overflow protection
+// Amount validation with string-based checks
 export const validateAmount = (amount: string, maxDecimals: number = 18): string => {
   if (!amount || typeof amount !== 'string') {
     throw new ValidationError('Amount is required', 'amount');
@@ -55,22 +55,11 @@ export const validateAmount = (amount: string, maxDecimals: number = 18): string
     throw new ValidationError('Amount must be a valid number', 'amount');
   }
   
-  // Check for valid number using Number conversion for validation only
-  const num = Number(trimmed);
-  if (isNaN(num) || !isFinite(num)) {
-    throw new ValidationError('Amount must be a valid number', 'amount');
-  }
-  
-  if (num <= 0) {
+  // Check for non-zero amount using string-based validation
+  // Reject strings that are all zeros like "0", "0.0", "00.000"
+  const nonZeroPattern = /^0*\.?0*$/;
+  if (nonZeroPattern.test(trimmed)) {
     throw new ValidationError('Amount must be positive', 'amount');
-  }
-  
-  // Check for overflow protection using string length comparison
-  // Compare against MAX_SAFE_INTEGER as a string to avoid precision loss
-  const maxSafeAmountStr = (Number.MAX_SAFE_INTEGER / Math.pow(10, maxDecimals)).toString();
-  if (trimmed.length > maxSafeAmountStr.length || 
-      (trimmed.length === maxSafeAmountStr.length && trimmed > maxSafeAmountStr)) {
-    throw new ValidationError('Amount too large', 'amount');
   }
   
   // Check decimal places
