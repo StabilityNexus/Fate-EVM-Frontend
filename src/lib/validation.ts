@@ -14,6 +14,34 @@ export class ValidationError extends Error {
 // Rate limiting for API calls and user actions
 const rateLimiter = new Map<string, { count: number; resetTime: number }>();
 
+// Cleanup interval for expired rate limit entries
+let cleanupInterval: NodeJS.Timeout | null = null;
+
+// Start periodic cleanup of expired rate limit entries
+const startRateLimitCleanup = (): void => {
+  if (cleanupInterval) return; // Already running
+  
+  cleanupInterval = setInterval(() => {
+    const now = Date.now();
+    for (const [key, entry] of rateLimiter.entries()) {
+      if (now > entry.resetTime) {
+        rateLimiter.delete(key);
+      }
+    }
+  }, 30000); // Clean up every 30 seconds
+};
+
+// Stop cleanup interval (for testing or shutdown)
+export const stopRateLimitCleanup = (): void => {
+  if (cleanupInterval) {
+    clearInterval(cleanupInterval);
+    cleanupInterval = null;
+  }
+};
+
+// Initialize cleanup on module load
+startRateLimitCleanup();
+
 export const checkRateLimit = (
   key: string, 
   maxRequests: number = 10, 
@@ -37,6 +65,31 @@ export const checkRateLimit = (
   
   userLimit.count++;
   return true;
+};
+
+// Test function to verify rate limit cleanup behavior
+export const testRateLimitCleanup = (): { 
+  mapSize: number; 
+  expiredEntries: number; 
+  activeEntries: number 
+} => {
+  const now = Date.now();
+  let expiredEntries = 0;
+  let activeEntries = 0;
+  
+  for (const [, entry] of rateLimiter.entries()) {
+    if (now > entry.resetTime) {
+      expiredEntries++;
+    } else {
+      activeEntries++;
+    }
+  }
+  
+  return {
+    mapSize: rateLimiter.size,
+    expiredEntries,
+    activeEntries
+  };
 };
 
 // Amount validation with string-based checks
