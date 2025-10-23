@@ -79,7 +79,7 @@ export const useFatePoolsStorage = (): UseFatePoolsStorageReturn => {
   const savePortfolioPosition = useCallback(async (position: Omit<PortfolioPosition, 'id'>) => {
     const positionWithId: Omit<PortfolioPosition, 'lastUpdated'> = {
       ...position,
-      id: `${position.userAddress}-${position.poolAddress}-${position.tokenType}-${Date.now()}`
+      id: `${position.userAddress}-${position.poolAddress}-${position.tokenType}`
     };
     return indexedDB.savePortfolioPosition(positionWithId);
   }, [indexedDB]);

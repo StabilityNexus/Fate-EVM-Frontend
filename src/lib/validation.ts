@@ -51,7 +51,9 @@ export const validateAmount = (amount: string, maxDecimals: number = 18): string
   }
   
   // Check for valid number format
-  if (!/^\d*\.?\d*$/.test(trimmed)) {
+  // Require at least one digit, and if decimal point exists, require digit after it
+  // This prevents parseUnits errors from inputs like "." or "1."
+  if (!/^\d+(\.\d+)?$/.test(trimmed)) {
     throw new ValidationError('Amount must be a valid number', 'amount');
   }
   
