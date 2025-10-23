@@ -51,8 +51,10 @@ interface UseIndexedDBReturn {
   savePortfolioTransaction: (transaction: Omit<PortfolioTransaction, 'timestamp'>) => Promise<void>;
   getPortfolioTransactions: (userAddress: string, chainId?: SupportedChainId) => Promise<PortfolioTransaction[]>;
   savePortfolioCache: (cache: Omit<PortfolioCache, 'lastUpdated'>) => Promise<void>;
-  getPortfolioCache: (userAddress: string) => Promise<PortfolioCache | null>;
-  deletePortfolioCache: (userAddress: string) => Promise<void>;
+  getPortfolioCache: (userAddress: string, chainId: SupportedChainId) => Promise<PortfolioCache | null>;
+  deletePortfolioCache: (userAddress: string, chainId: SupportedChainId) => Promise<void>;
+  deletePortfolioPositions: (userAddress: string, chainId: SupportedChainId) => Promise<void>;
+  deletePortfolioTransactions: (userAddress: string, chainId: SupportedChainId) => Promise<void>;
   
   // Utility operations
   clearAllData: () => Promise<void>;
@@ -236,12 +238,20 @@ export const useIndexedDB = (): UseIndexedDBReturn => {
     return safeOperation(() => managerRef.current!.savePortfolioCache(cache));
   }, [safeOperation]);
 
-  const getPortfolioCache = useCallback(async (userAddress: string) => {
-    return safeOperation(() => managerRef.current!.getPortfolioCache(userAddress));
+  const getPortfolioCache = useCallback(async (userAddress: string, chainId: SupportedChainId) => {
+    return safeOperation(() => managerRef.current!.getPortfolioCache(userAddress, chainId));
   }, [safeOperation]);
 
-  const deletePortfolioCache = useCallback(async (userAddress: string) => {
-    return safeOperation(() => managerRef.current!.deletePortfolioCache(userAddress));
+  const deletePortfolioCache = useCallback(async (userAddress: string, chainId: SupportedChainId) => {
+    return safeOperation(() => managerRef.current!.deletePortfolioCache(userAddress, chainId));
+  }, [safeOperation]);
+
+  const deletePortfolioPositions = useCallback(async (userAddress: string, chainId: SupportedChainId) => {
+    return safeOperation(() => managerRef.current!.deletePortfolioPositions(userAddress, chainId));
+  }, [safeOperation]);
+
+  const deletePortfolioTransactions = useCallback(async (userAddress: string, chainId: SupportedChainId) => {
+    return safeOperation(() => managerRef.current!.deletePortfolioTransactions(userAddress, chainId));
   }, [safeOperation]);
 
   // Utility operations
@@ -296,6 +306,8 @@ export const useIndexedDB = (): UseIndexedDBReturn => {
     savePortfolioCache,
     getPortfolioCache,
     deletePortfolioCache,
+    deletePortfolioPositions,
+    deletePortfolioTransactions,
     
     // Utility operations
     clearAllData,

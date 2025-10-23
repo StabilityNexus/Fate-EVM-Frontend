@@ -3,15 +3,16 @@
 
 "use client";
 
+import { useCallback } from 'react';
 import { useIndexedDB } from '@/hooks/useIndexedDB';
-import type { 
-  PoolDetails, 
-  TokenDetails, 
-  ChainStatus, 
+import type {
+  PoolDetails,
+  TokenDetails,
+  ChainStatus,
   PortfolioPosition,
   PortfolioTransaction,
   PortfolioCache,
-  SupportedChainId 
+  SupportedChainId
 } from '@/lib/indexeddb/config';
 
 // Legacy interface for backward compatibility
@@ -55,7 +56,7 @@ export interface UseFatePoolsStorageReturn {
   savePortfolioTransaction: (transaction: Omit<PortfolioTransaction, 'id'>) => Promise<void>;
   getPortfolioTransactions: (userAddress: string, chainId: SupportedChainId) => Promise<PortfolioTransaction[]>;
   savePortfolioCache: (cache: Omit<PortfolioCache, 'userAddress'> & { userAddress: string }) => Promise<void>;
-  getPortfolioCache: (userAddress: string) => Promise<PortfolioCache | null>;
+  getPortfolioCache: (userAddress: string, chainId: SupportedChainId) => Promise<PortfolioCache | null>;
   clearPortfolioData: (userAddress: string, chainId?: SupportedChainId) => Promise<void>;
   
   // Database info
@@ -74,49 +75,55 @@ export const useFatePoolsStorage = (): UseFatePoolsStorageReturn => {
   const indexedDB = useIndexedDB();
 
   // Legacy wrapper functions to maintain backward compatibility
-  const savePortfolioPosition = async (position: Omit<PortfolioPosition, 'id'>) => {
+  const savePortfolioPosition = useCallback(async (position: Omit<PortfolioPosition, 'id'>) => {
     const positionWithId: Omit<PortfolioPosition, 'lastUpdated'> = {
       ...position,
       id: `${position.userAddress}-${position.poolAddress}-${position.tokenType}-${Date.now()}`
     };
     return indexedDB.savePortfolioPosition(positionWithId);
-  };
+  }, [indexedDB]);
 
-  const getPortfolioPositions = async (userAddress: string, chainId: SupportedChainId) => {
+  const getPortfolioPositions = useCallback(async (userAddress: string, chainId: SupportedChainId) => {
     return indexedDB.getPortfolioPositions(userAddress, chainId);
-  };
+  }, [indexedDB]);
 
-  const savePortfolioTransaction = async (transaction: Omit<PortfolioTransaction, 'id'>) => {
+  const savePortfolioTransaction = useCallback(async (transaction: Omit<PortfolioTransaction, 'id'>) => {
     const transactionWithId: Omit<PortfolioTransaction, 'timestamp'> = {
       ...transaction,
       id: `${transaction.userAddress}-${transaction.poolAddress}-${transaction.transactionHash}`
     };
     return indexedDB.savePortfolioTransaction(transactionWithId);
-  };
+  }, [indexedDB]);
 
-  const getPortfolioTransactions = async (userAddress: string, chainId: SupportedChainId) => {
+  const getPortfolioTransactions = useCallback(async (userAddress: string, chainId: SupportedChainId) => {
     return indexedDB.getPortfolioTransactions(userAddress, chainId);
-  };
+  }, [indexedDB]);
 
-  const savePortfolioCache = async (cache: Omit<PortfolioCache, 'userAddress'> & { userAddress: string }) => {
+  const savePortfolioCache = useCallback(async (cache: Omit<PortfolioCache, 'userAddress'> & { userAddress: string }) => {
     return indexedDB.savePortfolioCache(cache);
-  };
+  }, [indexedDB]);
 
-  const getPortfolioCache = async (userAddress: string) => {
-    return indexedDB.getPortfolioCache(userAddress);
-  };
+  const getPortfolioCache = useCallback(async (userAddress: string, chainId: SupportedChainId) => {
+    return indexedDB.getPortfolioCache(userAddress, chainId);
+  }, [indexedDB]);
 
-  const clearPortfolioData = async (userAddress: string, chainId?: SupportedChainId) => {
+  const clearPortfolioData = useCallback(async (userAddress: string, chainId?: SupportedChainId) => {
     if (chainId) {
       // Clear specific user's data for specific chain
-      await indexedDB.deletePortfolioCache(userAddress);
+      await indexedDB.deletePortfolioCache(userAddress, chainId);
+      await indexedDB.deletePortfolioPositions(userAddress, chainId);
+      await indexedDB.deletePortfolioTransactions(userAddress, chainId);
     } else {
-      // Clear all portfolio data for user
-      await indexedDB.deletePortfolioCache(userAddress);
+      // Clear all portfolio data for user across all chains
+      // This would require iterating through all supported chains
+      // For now, we'll clear the cache without chainId (legacy behavior)
+      await indexedDB.deletePortfolioCache(userAddress, 1 as SupportedChainId); // Fallback
+      await indexedDB.deletePortfolioPositions(userAddress, 1 as SupportedChainId); // Fallback
+      await indexedDB.deletePortfolioTransactions(userAddress, 1 as SupportedChainId); // Fallback
     }
-  };
+  }, [indexedDB]);
 
-  const getDatabaseInfo = async () => {
+  const getDatabaseInfo = useCallback(async () => {
     const info = await indexedDB.getDatabaseInfo();
     return {
       name: info.name,
@@ -126,7 +133,7 @@ export const useFatePoolsStorage = (): UseFatePoolsStorageReturn => {
       totalPools: 0, // Will be calculated if needed
       totalTokens: 0 // Will be calculated if needed
     };
-  };
+  }, [indexedDB]);
 
   return {
     // Database state

@@ -31,7 +31,7 @@ export const DATABASE_CONFIG: DatabaseConfig = {
       indexes: [
         { name: 'chainId', keyPath: 'chainId' },
         { name: 'creator', keyPath: 'creator' },
-        { name: 'lastUpdated', keyPath: 'lastUpdated' }
+        { name: 'updatedAt', keyPath: 'updatedAt' }
       ]
     },
     {
@@ -40,7 +40,7 @@ export const DATABASE_CONFIG: DatabaseConfig = {
       indexes: [
         { name: 'poolAddress', keyPath: 'poolAddress' },
         { name: 'tokenType', keyPath: 'tokenType' },
-        { name: 'lastUpdated', keyPath: 'lastUpdated' }
+        { name: 'updatedAt', keyPath: 'updatedAt' }
       ]
     },
     {
@@ -124,6 +124,8 @@ export interface PoolDetails {
   name: string;
   description: string;
   assetAddress: string;
+  baseTokenSymbol?: string;
+  baseTokenName?: string;
   oracleAddress: string;
   currentPrice: number;
   bullReserve: string;

@@ -2,6 +2,7 @@
 // Comprehensive validation layer for production security
 
 import { SUPPORTED_CHAIN_IDS } from './indexeddb/config';
+import { isAddress, getAddress } from 'viem';
 
 export class ValidationError extends Error {
   constructor(message: string, public field: string, public code: string = 'VALIDATION_ERROR') {
@@ -39,7 +40,7 @@ export const checkRateLimit = (
 };
 
 // Amount validation with overflow protection
-export const validateAmount = (amount: string, maxDecimals: number = 18): number => {
+export const validateAmount = (amount: string, maxDecimals: number = 18): string => {
   if (!amount || typeof amount !== 'string') {
     throw new ValidationError('Amount is required', 'amount');
   }
@@ -54,8 +55,8 @@ export const validateAmount = (amount: string, maxDecimals: number = 18): number
     throw new ValidationError('Amount must be a valid number', 'amount');
   }
   
+  // Check for valid number using Number conversion for validation only
   const num = Number(trimmed);
-  
   if (isNaN(num) || !isFinite(num)) {
     throw new ValidationError('Amount must be a valid number', 'amount');
   }
@@ -64,9 +65,11 @@ export const validateAmount = (amount: string, maxDecimals: number = 18): number
     throw new ValidationError('Amount must be positive', 'amount');
   }
   
-  // Check for overflow protection
-  const maxSafeAmount = Number.MAX_SAFE_INTEGER / Math.pow(10, maxDecimals);
-  if (num > maxSafeAmount) {
+  // Check for overflow protection using string length comparison
+  // Compare against MAX_SAFE_INTEGER as a string to avoid precision loss
+  const maxSafeAmountStr = (Number.MAX_SAFE_INTEGER / Math.pow(10, maxDecimals)).toString();
+  if (trimmed.length > maxSafeAmountStr.length || 
+      (trimmed.length === maxSafeAmountStr.length && trimmed > maxSafeAmountStr)) {
     throw new ValidationError('Amount too large', 'amount');
   }
   
@@ -76,7 +79,7 @@ export const validateAmount = (amount: string, maxDecimals: number = 18): number
     throw new ValidationError(`Amount cannot have more than ${maxDecimals} decimal places`, 'amount');
   }
   
-  return num;
+  return trimmed;
 };
 
 // Address validation with checksum
@@ -84,14 +87,14 @@ export const validateAddress = (address: string): string => {
   if (!address || typeof address !== 'string') {
     throw new ValidationError('Address is required', 'address');
   }
-  
+
   const trimmed = address.trim();
-  
-  if (!/^0x[a-fA-F0-9]{40}$/.test(trimmed)) {
+
+  if (!isAddress(trimmed)) {
     throw new ValidationError('Invalid address format', 'address');
   }
-  
-  return trimmed.toLowerCase();
+
+  return getAddress(trimmed);
 };
 
 // Pool ID validation
@@ -102,23 +105,25 @@ export const validatePoolId = (poolId: string): string => {
   
   const trimmed = poolId.trim();
   
-  if (!/^0x[a-fA-F0-9]{40}$/.test(trimmed)) {
+  if (!isAddress(trimmed)) {
     throw new ValidationError('Invalid pool ID format', 'poolId');
   }
   
-  return trimmed.toLowerCase();
+  return getAddress(trimmed);
 };
 
 // Chain ID validation
 export const validateChainId = (chainId: number | string): number => {
-  const num = typeof chainId === 'string' ? parseInt(chainId, 10) : chainId;
+  const num = typeof chainId === 'string' 
+    ? (chainId.startsWith('0x') ? parseInt(chainId, 16) : parseInt(chainId, 10))
+    : chainId;
   
   if (isNaN(num) || !Number.isInteger(num) || num <= 0) {
     throw new ValidationError('Invalid chain ID', 'chainId');
   }
   
   // Check against authoritative supported chain IDs
-  if (!SUPPORTED_CHAIN_IDS.includes(num as any)) {
+  if (!SUPPORTED_CHAIN_IDS.some(id => id === num)) {
     throw new ValidationError('Unsupported chain ID', 'chainId');
   }
   

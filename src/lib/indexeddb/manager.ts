@@ -12,7 +12,8 @@ import {
   type PortfolioTransaction,
   type PortfolioCache,
   type SupportedChainId,
-  CACHE_CONFIG
+  CACHE_CONFIG,
+  DATABASE_CONFIG
 } from './config';
 
 export class FatePoolsIndexedDBManager {
@@ -231,22 +232,75 @@ export class FatePoolsIndexedDBManager {
       ...cache,
       lastUpdated: now
     };
-    await this.db.put('portfolioCache', cacheData);
-    logger.debug('Portfolio cache saved for user:', { userAddress: cache.userAddress });
+    
+    // Use composite key for multi-chain support
+    const cacheKey = `${cache.userAddress}-${cache.chainId}`;
+    const cacheWithKey = {
+      ...cacheData,
+      userAddress: cacheKey // Override userAddress with composite key
+    };
+    
+    await this.db.put('portfolioCache', cacheWithKey);
+    logger.debug('Portfolio cache saved for user:', { userAddress: cache.userAddress, chainId: cache.chainId });
   }
 
-  async getPortfolioCache(userAddress: string): Promise<PortfolioCache | null> {
-    return await this.db.get<PortfolioCache>('portfolioCache', userAddress);
+  async getPortfolioCache(userAddress: string, chainId: SupportedChainId): Promise<PortfolioCache | null> {
+    // First try to get by userAddress + chainId combination
+    const cacheKey = `${userAddress}-${chainId}`;
+    const cache = await this.db.get<PortfolioCache>('portfolioCache', cacheKey);
+    
+    if (cache) {
+      return cache;
+    }
+    
+    // Fallback: get by userAddress and filter by chainId
+    const allCache = await this.db.get<PortfolioCache>('portfolioCache', userAddress);
+    if (allCache && allCache.chainId === chainId) {
+      return allCache;
+    }
+    
+    return null;
   }
 
-  async deletePortfolioCache(userAddress: string): Promise<void> {
-    await this.db.delete('portfolioCache', userAddress);
-    logger.debug('Portfolio cache deleted for user:', { userAddress });
+  async deletePortfolioCache(userAddress: string, chainId: SupportedChainId): Promise<void> {
+    // Try to delete by userAddress + chainId combination first
+    const cacheKey = `${userAddress}-${chainId}`;
+    await this.db.delete('portfolioCache', cacheKey);
+    logger.debug('Portfolio cache deleted for user:', { userAddress, chainId });
+  }
+
+  async deletePortfolioPositions(userAddress: string, chainId: SupportedChainId): Promise<void> {
+    // Get all positions for the user
+    const allPositions = await this.db.getAll<PortfolioPosition>('portfolioPositions', 'userAddress', userAddress);
+    
+    // Filter positions for the specific chain and delete them
+    const positionsToDelete = allPositions.filter(pos => pos.chainId === chainId);
+    
+    for (const position of positionsToDelete) {
+      await this.db.delete('portfolioPositions', position.id);
+    }
+    
+    logger.debug('Portfolio positions deleted for user:', { userAddress, chainId, deletedCount: positionsToDelete.length });
+  }
+
+  async deletePortfolioTransactions(userAddress: string, chainId: SupportedChainId): Promise<void> {
+    // Get all transactions for the user
+    const allTransactions = await this.db.getAll<PortfolioTransaction>('portfolioTransactions', 'userAddress', userAddress);
+    
+    // Filter transactions for the specific chain and delete them
+    const transactionsToDelete = allTransactions.filter(tx => tx.chainId === chainId);
+    
+    for (const transaction of transactionsToDelete) {
+      await this.db.delete('portfolioTransactions', transaction.id);
+    }
+    
+    logger.debug('Portfolio transactions deleted for user:', { userAddress, chainId, deletedCount: transactionsToDelete.length });
   }
 
   // Utility Operations
   async clearAllData(): Promise<void> {
-    const storeNames = ['poolDetails', 'tokenDetails', 'chainStatus', 'cacheMetadata', 'portfolioPositions', 'portfolioTransactions', 'portfolioCache'];
+    // Dynamically get store names from DATABASE_CONFIG
+    const storeNames = DATABASE_CONFIG.stores.map(store => store.name);
     
     for (const storeName of storeNames) {
       await this.db.clear(storeName);

@@ -293,51 +293,35 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
 
 
 
-  const handleBuyTransaction = useCallback(async (amount: string, currentPoolId: Address) => {
+  const handleBuyTransaction = useCallback(async (amount: string) => {
+    let loadingToast: string | number | undefined;
+    
     try {
       const amountWei = parseUnits(amount, 18);
       
-      const loadingToast = toast.loading("Processing buy transaction...");
-      const hash = await writeContract({
+      loadingToast = toast.loading("Processing buy transaction...");
+      await writeContract({
         address: tokenAddress! as `0x${string}`,
         abi: CoinABI,
         functionName: 'buy',
         args: [address!, amountWei],
-      }) as unknown as string;
-      toast.dismiss(loadingToast);
+      });
       
-      // Update portfolio cache on successful buy
-      if (hash && (window as unknown as { updatePortfolioCache?: (action: string, poolId: string, amount: number, tokenType: string, hash: string, tokenAddress: string) => Promise<void> }).updatePortfolioCache) {
-        try {
-          // Calculate estimated token units based on current pool state
-          const baseAmount = Number(amount);
-          
-          // Estimate token amount using constant product formula: tokens = (baseAmount * supply) / (reserve + baseAmount)
-          const estimatedTokens = reserve > 0 && supply > 0 ? (baseAmount * supply) / (reserve + baseAmount) : 0;
-          
-          await (window as unknown as { updatePortfolioCache: (action: string, poolId: string, amount: number, tokenType: string, hash: string, tokenAddress: string) => Promise<void> }).updatePortfolioCache(
-            'buy',
-            currentPoolId,
-            estimatedTokens,
-            isBull ? 'bull' : 'bear',
-            hash,
-            isBull ? poolData.bull_token.id : poolData.bear_token.id
-          );
-          toast.success("Transaction successful! Portfolio updated.");
-        } catch (cacheError) {
-          console.error("Failed to update portfolio cache:", cacheError);
-          toast.success("Transaction successful!");
-        }
-      } else {
-        toast.success("Transaction successful!");
-      }
+      // Wait for the transaction to be confirmed and get the hash
+      // The hash will be available in the data property after the transaction is submitted
+      // For now, we'll handle the cache update in the useEffect when isConfirmed becomes true
+      toast.success("Transaction submitted! Waiting for confirmation...");
     } catch (err: unknown) {
       logger.error("Buy transaction error:", err instanceof Error ? err : undefined);
       toast.error((err as Error).message || "Failed to buy tokens");
+    } finally {
+      if (loadingToast !== undefined) {
+        toast.dismiss(loadingToast);
+      }
     }
-  }, [tokenAddress, address, writeContract, isBull]);
+  }, [tokenAddress, address, writeContract]);
 
-  const handleBuy = withErrorHandling(async (currentPoolId: Address) => {
+  const handleBuy = withErrorHandling(async () => {
     if (!address || !connected) {
       throw createTransactionError("Please connect your wallet");
     }
@@ -349,7 +333,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
     // Validate input with new validation system
     const validatedInput = validateTransactionInput({
       amount: buyAmount,
-      poolId: currentPoolId,
+      poolId: poolData?.asset_address as Address,
       chainId: poolData?.chainId || 1, // Use pool chain or fallback to mainnet
       userAddress: address
     });
@@ -379,10 +363,10 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
       return;
     }
 
-    await handleBuyTransaction(buyAmount, currentPoolId);
+    await handleBuyTransaction(buyAmount);
   }, { functionName: 'handleBuy' });
 
-  const handleSell = async (currentPoolId: Address) => {
+  const handleSell = async () => {
     if (!address || !connected) {
       toast.error('Please connect your wallet');
       return;
@@ -398,6 +382,8 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
       return;
     }
 
+    let loadingToast: string | number | undefined;
+    
     try {
       const amountWei = parseUnits(sellAmount, 18);
       
@@ -407,41 +393,26 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
         return;
       }
 
-      const loadingToast = toast.loading("Processing sell transaction...");
-      const hash = await writeContract({
+      loadingToast = toast.loading("Processing sell transaction...");
+      await writeContract({
         address: tokenAddress as `0x${string}`,
         abi: CoinABI,
         functionName: 'sell',
         args: [amountWei],
-      }) as unknown as string;
-      toast.dismiss(loadingToast);
+      });
       setSellAmount('');
       
-      // Update portfolio cache on successful sell
-      if (hash && (window as unknown as { updatePortfolioCache?: (action: string, poolId: string, amount: number, tokenType: string, hash: string, tokenAddress: string) => Promise<void> }).updatePortfolioCache) {
-        try {
-          // For sell transactions, the amount is already in token units
-          const tokenAmount = Number(sellAmount);
-          
-          await (window as unknown as { updatePortfolioCache: (action: string, poolId: string, amount: number, tokenType: string, hash: string, tokenAddress: string) => Promise<void> }).updatePortfolioCache(
-            'sell',
-            currentPoolId,
-            tokenAmount,
-            isBull ? 'bull' : 'bear',
-            hash,
-            isBull ? poolData.bull_token.id : poolData.bear_token.id
-          );
-          toast.success("Transaction successful! Portfolio updated.");
-        } catch (cacheError) {
-          console.error("Failed to update portfolio cache:", cacheError);
-          toast.success("Transaction successful!");
-        }
-      } else {
-        toast.success("Transaction successful!");
-      }
+      // Wait for the transaction to be confirmed
+      // The hash will be available in the data property after the transaction is submitted
+      // For now, we'll handle the cache update in the useEffect when isConfirmed becomes true
+      toast.success("Transaction submitted! Waiting for confirmation...");
     } catch (err: unknown) {
       logger.error('Sell error:', err instanceof Error ? err : undefined);
       toast.error((err as Error).message || 'Failed to sell tokens');
+    } finally {
+      if (loadingToast !== undefined) {
+        toast.dismiss(loadingToast);
+      }
     }
   };
 
@@ -449,7 +420,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
     if (isConfirmed && !isTransactionPending) {
       if (pendingApproval && pendingApproval.type === 'buy') {
         setPendingApproval(null);
-        handleBuyTransaction(pendingApproval.amount, poolData.id.id as Address);
+        handleBuyTransaction(pendingApproval.amount);
       } else {
         handlePoll();
       }
@@ -541,7 +512,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
                 </div>
               </div>
               <Button 
-                onClick={() => handleBuy(poolData.id.id as Address)} 
+                onClick={() => handleBuy()} 
                 className={`w-full ${buttonColor} text-white`} 
                 disabled={!buyAmount || !connected || isTransacting}
               >
@@ -571,7 +542,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
                 </div>
               </div>
               <Button 
-                onClick={() => handleSell(poolData.id.id as Address)} 
+                onClick={() => handleSell()} 
                 className="w-full bg-gray-100 hover:bg-gray-200 text-black border border-gray-300" 
                 disabled={!sellAmount || !connected || isTransacting}
               >

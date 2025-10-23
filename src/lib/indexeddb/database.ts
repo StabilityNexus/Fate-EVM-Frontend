@@ -121,7 +121,21 @@ export class IndexedDBDatabase {
     return new Promise((resolve, reject) => {
       const transaction = this.db!.transaction([storeName], 'readonly');
       const store = transaction.objectStore(storeName);
-      const source = indexName ? store.index(indexName) : store;
+      
+      // Validate index existence before accessing
+      let source: IDBObjectStore | IDBIndex;
+      if (indexName) {
+        if (!store.indexNames.contains(indexName)) {
+          const error = new Error(`Index '${indexName}' does not exist on store '${storeName}'`);
+          logger.error('Database getAll failed:', error);
+          reject(error);
+          return;
+        }
+        source = store.index(indexName);
+      } else {
+        source = store;
+      }
+      
       const request = source.getAll(query);
 
       request.onsuccess = () => {
@@ -181,13 +195,50 @@ export class IndexedDBDatabase {
     return new Promise((resolve, reject) => {
       const transaction = this.db!.transaction([storeName], 'readonly');
       const store = transaction.objectStore(storeName);
-      const source = indexName ? store.index(indexName) : store;
+      
+      // Validate index existence before accessing
+      let source: IDBObjectStore | IDBIndex;
+      if (indexName) {
+        if (!store.indexNames.contains(indexName)) {
+          const error = new Error(`Index '${indexName}' does not exist on store '${storeName}'`);
+          logger.error('Database count failed:', error);
+          reject(error);
+          return;
+        }
+        source = store.index(indexName);
+      } else {
+        source = store;
+      }
+      
       const request = source.count(query);
 
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => {
         const error = new Error(`Failed to count data in ${storeName}: ${request.error?.message}`);
         logger.error('Database count failed:', error);
+        reject(error);
+      };
+    });
+  }
+
+  async getByIndex<T>(storeName: string, indexName: string, key: IDBValidKey): Promise<T | null> {
+    if (!this.db) {
+      throw new Error('Database not initialized');
+    }
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction([storeName], 'readonly');
+      const store = transaction.objectStore(storeName);
+      const index = store.index(indexName);
+      const request = index.get(key);
+
+      request.onsuccess = () => {
+        const result = request.result;
+        resolve(result || null);
+      };
+      request.onerror = () => {
+        const error = new Error(`Failed to get data from ${storeName} by index ${indexName}: ${request.error?.message}`);
+        logger.error('Database getByIndex failed:', error);
         reject(error);
       };
     });

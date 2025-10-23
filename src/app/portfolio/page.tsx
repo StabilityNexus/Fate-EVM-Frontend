@@ -1,30 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-// Module-scoped cache queue to prevent race conditions
-const cacheUpdateQueue: Array<() => Promise<void>> = [];
-let isProcessingQueue = false;
-
-// Process cache update queue serially
-const processCacheQueue = async (): Promise<void> => {
-  if (isProcessingQueue || cacheUpdateQueue.length === 0) return;
-  
-  isProcessingQueue = true;
-  
-  while (cacheUpdateQueue.length > 0) {
-    const updateFn = cacheUpdateQueue.shift();
-    if (updateFn) {
-      try {
-        await updateFn();
-      } catch (error) {
-        console.error("❌ Cache update failed:", error);
-      }
-    }
-  }
-  
-  isProcessingQueue = false;
-};
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -54,6 +30,7 @@ import { formatUnits, Address, isAddress } from "viem";
 import { useRouter } from "next/navigation";
 import { useFatePoolsStorage } from "@/lib/fatePoolHook";
 import { SupportedChainId, PortfolioCache, PortfolioPosition } from "@/lib/indexeddb/config";
+import { FatePoolsIndexedDBManager } from "@/lib/indexeddb/manager";
 import { PredictionPoolABI } from "@/utils/abi/PredictionPool";
 import { CoinABI } from "@/utils/abi/Coin";
 import { FatePoolFactories } from "@/utils/addresses";
@@ -64,6 +41,18 @@ import { ChainlinkOracleABI } from "@/utils/abi/ChainlinkOracle";
 import { ERC20ABI } from "@/utils/abi/ERC20";
 import { createPublicClient, http } from "viem";
 
+// Helper function to get chain name
+const getChainName = (chainId: number): string => {
+  switch (chainId) {
+    case 1: return 'Ethereum Mainnet';
+    case 137: return 'Polygon';
+    case 56: return 'BSC';
+    case 8453: return 'Base';
+    case 61: return 'Ethereum Classic';
+    case 11155111: return 'Sepolia Testnet';
+    default: return `Chain ${chainId}`;
+  }
+};
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as const;
 
@@ -550,6 +539,7 @@ interface PoolData {
   // Additional smart contract data
   baseToken: string;
   baseTokenSymbol: string;
+  baseTokenName: string;
   bullTokenAddress: string;
   bearTokenAddress: string;
   bullTokenName: string;
@@ -711,7 +701,7 @@ const HistoricalInvestmentsTable: React.FC<{
             <div>
               <div className="text-xs text-neutral-500 dark:text-neutral-400">Total Invested</div>
               <div className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
-                {historicalPools.reduce((sum, pool) => sum + pool.totalCostBasis, 0).toFixed(4)} {historicalPools[0]?.baseTokenSymbol || 'WETH'}
+                {historicalPools.reduce((sum, pool) => sum + pool.totalCostBasis, 0).toFixed(4)} {historicalPools[0]?.baseTokenSymbol || 'UNKNOWN'}
               </div>
             </div>
             <div>
@@ -722,7 +712,7 @@ const HistoricalInvestmentsTable: React.FC<{
                   : 'text-red-600 dark:text-red-400'
               }`}>
                 {historicalPools.reduce((sum, pool) => sum + pool.totalPnL, 0) >= 0 ? '+' : ''}
-                {historicalPools.reduce((sum, pool) => sum + pool.totalPnL, 0).toFixed(4)} {historicalPools[0]?.baseTokenSymbol || 'WETH'}
+                {historicalPools.reduce((sum, pool) => sum + pool.totalPnL, 0).toFixed(4)} {historicalPools[0]?.baseTokenSymbol || 'UNKNOWN'}
               </div>
             </div>
           </div>
@@ -955,7 +945,7 @@ const PositionCard = ({ pool }: { pool: PoolData }) => {
         <div>
           <span className="text-neutral-600 dark:text-neutral-400">Current Price: </span>
           <span className="font-semibold text-neutral-900 dark:text-neutral-100">
-            ${pool.currentPrice.toLocaleString(undefined, {
+            {pool.currentPrice.toLocaleString(undefined, {
               minimumFractionDigits: 2,
               maximumFractionDigits: 2,
             })}
@@ -982,20 +972,20 @@ const PositionCard = ({ pool }: { pool: PoolData }) => {
             Bull Position ({pool.bullTokenSymbol})
           </div>
           <div className="font-semibold text-black dark:text-gray-500">
-            {pool.bullBalance.toLocaleString(undefined, {
+            {pool.bullCurrentValue.toLocaleString(undefined, {
               minimumFractionDigits: 0,
-              maximumFractionDigits: 2,
+              maximumFractionDigits: 4,
             })}{" "}
-            tokens
+            {pool.baseTokenSymbol}
           </div>
-          {pool.bullBalance === 0 && pool.bullPnL !== 0 && (
+          {pool.bullCurrentValue === 0 && pool.bullPnL !== 0 && (
             <div className="text-xs text-orange-600 dark:text-orange-400">
               Sold - P&L: {pool.bullPnL >= 0 ? '+' : ''}{pool.bullPnL.toFixed(4)} {pool.baseTokenSymbol}
             </div>
           )}
-          {pool.bullBalance > 0 && (
+          {pool.bullCurrentValue > 0 && (
             <div className="text-xs text-neutral-500 dark:text-neutral-400">
-              @ ${pool.bullPrice.toLocaleString(undefined, {
+              @ {pool.bullPrice.toLocaleString(undefined, {
                 minimumFractionDigits: 4,
                 maximumFractionDigits: 6,
               })} each
@@ -1009,20 +999,20 @@ const PositionCard = ({ pool }: { pool: PoolData }) => {
             Bear Position ({pool.bearTokenSymbol})
           </div>
           <div className="font-semibold text-gray-400 dark:text-gray-50">
-            {pool.bearBalance.toLocaleString(undefined, {
+            {pool.bearCurrentValue.toLocaleString(undefined, {
               minimumFractionDigits: 0,
-              maximumFractionDigits: 2,
+              maximumFractionDigits: 4,
             })}{" "}
-            tokens
+            {pool.baseTokenSymbol}
           </div>
-          {pool.bearBalance === 0 && pool.bearPnL !== 0 && (
+          {pool.bearCurrentValue === 0 && pool.bearPnL !== 0 && (
             <div className="text-xs text-orange-600 dark:text-orange-400">
               Sold - P&L: {pool.bearPnL >= 0 ? '+' : ''}{pool.bearPnL.toFixed(4)} {pool.baseTokenSymbol}
             </div>
           )}
-          {pool.bearBalance > 0 && (
+          {pool.bearCurrentValue > 0 && (
             <div className="text-xs text-neutral-500 dark:text-neutral-400">
-              @ ${pool.bearPrice.toLocaleString(undefined, {
+              @ {pool.bearPrice.toLocaleString(undefined, {
                 minimumFractionDigits: 4,
                 maximumFractionDigits: 6,
               })} each
@@ -1042,15 +1032,98 @@ const PositionChart = ({
   showDistribution,
   onToggleView,
 }: {
-  data: any[];
+  data: Array<{
+    name: string;
+    chartValue: number;
+    bullCurrentValue: number;
+    bearCurrentValue: number;
+    id: string;
+    chainId: number;
+    baseTokenSymbol: string;
+  }>;
   title: string;
   type: "bull" | "bear";
   showDistribution: boolean;
   onToggleView: () => void;
 }) => {
   const colors = type === "bull" ? BULL_COLORS : BEAR_COLORS;
-  const dataKey = type === "bull" ? "bullCurrentValue" : "bearCurrentValue";
+  const dataKey = "chartValue"; // Use the unified chartValue field
   const nameKey = "name";
+
+  // Removed excessive debug logging to prevent re-render issues
+
+  if (data.length === 0) {
+    console.log(`📊 Chart ${type}: No data to display`);
+    return (
+      <Card className="border-black dark:border-neutral-700/60 dark:bg-gradient-to-br dark:from-neutral-800/50 dark:to-neutral-900/50 backdrop-blur-sm shadow-xl">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-xl text-neutral-900 dark:text-neutral-100 mb-2 flex items-center gap-2">
+                <div
+                  className={`w-3 h-3 rounded-full ${
+                    type === "bull" ? "bg-gray-800" : "bg-gray-300"
+                  }`}
+                />
+                {title}
+              </CardTitle>
+              <p className="text-sm text-neutral-600 dark:text-neutral-400">
+                No {type} positions to display
+              </p>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="h-[300px] flex items-center justify-center text-neutral-500 dark:text-neutral-400">
+            <div className="text-center">
+              <div className="text-lg mb-2">No Data</div>
+              <div className="text-sm">No {type} positions found</div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Check if all chart values are 0 or very small
+  const hasAnyData = data.some(d => d.chartValue > 0.0001); // Allow very small values
+  const totalValue = data.reduce((sum, d) => sum + d.chartValue, 0);
+
+  if (!hasAnyData || totalValue < 0.0001) {
+    // Removed excessive debug logging to prevent re-render issues
+    return (
+      <Card className="border-black dark:border-neutral-700/60 dark:bg-gradient-to-br dark:from-neutral-800/50 dark:to-neutral-900/50 backdrop-blur-sm shadow-xl">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-xl text-neutral-900 dark:text-neutral-100 mb-2 flex items-center gap-2">
+                <div
+                  className={`w-3 h-3 rounded-full ${
+                    type === "bull" ? "bg-gray-800" : "bg-gray-300"
+                  }`}
+                />
+                {title}
+              </CardTitle>
+              <p className="text-sm text-neutral-600 dark:text-neutral-400">
+                {data.length} pool{data.length !== 1 ? 's' : ''} with minimal value
+              </p>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="h-[300px] flex items-center justify-center text-neutral-500 dark:text-neutral-400">
+            <div className="text-center">
+              <div className="text-lg mb-2">Minimal Value</div>
+              <div className="text-sm">Your {type} positions have very small values</div>
+              <div className="text-xs mt-2 opacity-75">
+                Total: {totalValue.toFixed(6)} {data[0]?.baseTokenSymbol || 'UNKNOWN'}
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card className="border-black dark:border-neutral-700/60 dark:bg-gradient-to-br dark:from-neutral-800/50 dark:to-neutral-900/50 backdrop-blur-sm shadow-xl">
@@ -1086,7 +1159,8 @@ const PositionChart = ({
         </div>
       </CardHeader>
       <CardContent>
-        <ResponsiveContainer width="100%" height={300}>
+        <div style={{ width: '100%', height: '300px', minHeight: '300px', position: 'relative' }}>
+          <ResponsiveContainer width="100%" height="100%" minHeight={300}>
           {showDistribution ? (
             <BarChart data={data}>
               <CartesianGrid
@@ -1115,8 +1189,8 @@ const PositionChart = ({
                   `${value.toLocaleString(undefined, {
                     minimumFractionDigits: 0,
                     maximumFractionDigits: 4,
-                  })} ${data[0]?.baseTokenSymbol || 'WETH'}`,
-                  "Value",
+                  })} ${data[0]?.baseTokenSymbol || 'UNKNOWN'}`,
+                    type === "bull" ? "Bull Value" : "Bear Value",
                 ]}
               />
               <Bar dataKey={dataKey} radius={[6, 6, 0, 0]}>
@@ -1154,8 +1228,8 @@ const PositionChart = ({
                   `${value.toLocaleString(undefined, {
                     minimumFractionDigits: 0,
                     maximumFractionDigits: 4,
-                  })} ${data[0]?.baseTokenSymbol || 'WETH'}`,
-                  "Value",
+                  })} ${data[0]?.baseTokenSymbol || 'UNKNOWN'}`,
+                    type === "bull" ? "Bull Value" : "Bear Value",
                 ]}
                 contentStyle={{
                   backgroundColor: "rgba(255, 255, 255, 0.95)",
@@ -1170,6 +1244,7 @@ const PositionChart = ({
             </PieChart>
           )}
         </ResponsiveContainer>
+        </div>
         <div className="flex justify-center gap-6 mt-4 flex-wrap">
           {data.map((item, index) => (
             <div key={index} className="flex items-center gap-2">
@@ -1195,16 +1270,12 @@ const EnhancedPoolDataLoader = ({
   userAddress,
   chainId,
   onDataLoad,
-  onEventFetchingChange,
-  showCachedData,
 }: {
   poolAddress: string;
   index: number;
   userAddress?: string;
   chainId: number;
   onDataLoad: (data: PoolData) => void;
-  onEventFetchingChange?: (isFetching: boolean) => void;
-  showCachedData?: boolean;
 }) => {
   // Step 1: Get basic pool information
   const { data: poolBasicData } = useReadContracts({
@@ -1266,6 +1337,7 @@ const EnhancedPoolDataLoader = ({
       { address: baseToken, abi: ERC20ABI, functionName: 'balanceOf', args: [bearTokenAddress] },
       { address: baseToken, abi: ERC20ABI, functionName: 'symbol' },
       { address: baseToken, abi: ERC20ABI, functionName: 'decimals' },
+      { address: baseToken, abi: ERC20ABI, functionName: 'name' },
     ] : [],
     query: {
       enabled: !!(baseToken && bullTokenAddress && bearTokenAddress),
@@ -1295,7 +1367,7 @@ const EnhancedPoolDataLoader = ({
   });
 
   useEffect(() => {
-    if (!poolBasicData || !tokenData || !reserveData || !userAddress) return;
+    if (!poolBasicData || !tokenData || !reserveData || !userBalanceData || !userAddress) return;
 
     const processPoolData = async () => {
       const bullName = tokenData[0]?.result as string || 'Bull Token';
@@ -1309,70 +1381,33 @@ const EnhancedPoolDataLoader = ({
       const baseTokenDecimals = Number(reserveData[3]?.result ?? 18);
       const bullReserve = Number(formatUnits((reserveData[0]?.result as bigint) ?? BigInt(0), baseTokenDecimals));
       const bearReserve = Number(formatUnits((reserveData[1]?.result as bigint) ?? BigInt(0), baseTokenDecimals));
-      const baseTokenSymbol = reserveData[2]?.result as string || 'WETH';
+      const baseTokenSymbol = reserveData[2]?.result as string || 'UNKNOWN';
+      const baseTokenName = reserveData[4]?.result as string || 'Unknown Token';
 
       const userBullTokens = Number(formatUnits((userBalanceData?.[0]?.result as bigint) ?? BigInt(0), 18));
       const userBearTokens = Number(formatUnits((userBalanceData?.[1]?.result as bigint) ?? BigInt(0), 18));
       const userBaseTokenBalance = Number(formatUnits((userBalanceData?.[2]?.result as bigint) ?? BigInt(0), baseTokenDecimals));
+      
+      console.log(`🔍 Pool ${poolAddress} user balances:`, {
+        userBullTokens,
+        userBearTokens,
+        userBaseTokenBalance,
+        rawBullBalance: userBalanceData?.[0]?.result,
+        rawBearBalance: userBalanceData?.[1]?.result
+      });
 
-      // Check if user has any transaction history even if current balance is 0
-      const hasTransactionHistory = async () => {
-        try {
-          // Quick check with smaller block range for history detection
-          const chainConfig = getChainConfig(chainId);
-          if (!chainConfig) return false;
 
-          const publicClient = createPublicClient({
-            chain: chainConfig.chain,
-            transport: http()
-          });
-
-          const currentBlock = await publicClient.getBlockNumber();
-          const recentBlocks = currentBlock - BigInt(50000); // Check recent ~1 week
-          
-          const buyEventABI = {
-            type: 'event',
-            name: 'Buy',
-            inputs: [
-              { name: 'buyer', type: 'address', indexed: true, internalType: 'address' },
-              { name: 'to', type: 'address', indexed: true, internalType: 'address' },
-              { name: 'amountAsset', type: 'uint256', indexed: false, internalType: 'uint256' },
-              { name: 'amountCoin', type: 'uint256', indexed: false, internalType: 'uint256' },
-              { name: 'feePaid', type: 'uint256', indexed: false, internalType: 'uint256' },
-            ]
-          } as const;
-
-          // Quick check for any recent transactions on both tokens
-          const [bullBuyLogs, bearBuyLogs] = await Promise.all([
-            publicClient.getLogs({
-              address: bullTokenAddress as Address,
-              event: buyEventABI,
-              args: { buyer: userAddress as Address },
-              fromBlock: recentBlocks,
-              toBlock: 'latest'
-            }).catch(() => []),
-            publicClient.getLogs({
-              address: bearTokenAddress as Address,
-              event: buyEventABI,
-              args: { buyer: userAddress as Address },
-              fromBlock: recentBlocks,
-              toBlock: 'latest'
-            }).catch(() => [])
-          ]);
-
-          return bullBuyLogs.length > 0 || bearBuyLogs.length > 0;
-        } catch {
-          return false;
-        }
-      };
-
-      // Only process pools where user has current positions OR transaction history
-      if (userBullTokens === 0 && userBearTokens === 0) {
-        const hasHistory = await hasTransactionHistory();
-        if (!hasHistory) {
-          return; // Skip pools without positions or history
-        }
-      }
+      // Process all pools - don't skip any pools
+      // This ensures we load data for all pools, even if user has no positions
+      console.log(`Processing pool ${poolAddress}:`, {
+        poolName,
+        userBullTokens,
+        userBearTokens,
+        currentPrice,
+        bullReserve,
+        bearReserve,
+        baseTokenSymbol
+      });
 
       const underlyingOracleAddress = underlyingOracleData?.[0]?.result as string;
       const finalOracleAddress = underlyingOracleAddress || oracleAddress;
@@ -1386,11 +1421,6 @@ const EnhancedPoolDataLoader = ({
       let bullMetrics, bearMetrics;
 
       try {
-        // Only start event fetching if not showing cached data (after 20s delay)
-        if (!showCachedData) {
-          onEventFetchingChange?.(true);
-        }
-        
         // Always calculate metrics if user has transaction history, even if current balance is 0
         bullMetrics = await calculateTokenMetricsWithEvents(
           bullReserve,
@@ -1409,13 +1439,8 @@ const EnhancedPoolDataLoader = ({
           userAddress,
           chainId
         );
-        
-        // Clear event fetching state
-        onEventFetchingChange?.(false);
       } catch (error) {
         console.error('Error calculating metrics with events, using fallback:', error instanceof Error ? error : new Error(String(error)));
-        // Clear event fetching state on error
-        onEventFetchingChange?.(false);
         // Fallback to legacy calculation
         const bullAvgPrice = bullSupply > 0 ? bullReserve / bullSupply : 0;
         const bearAvgPrice = bearSupply > 0 ? bearReserve / bearSupply : 0;
@@ -1433,7 +1458,7 @@ const EnhancedPoolDataLoader = ({
 
       const poolData: PoolData = {
         id: poolAddress,
-        name: poolName || `Pool ${index + 1}`,
+        name: poolName || priceFeedName || `Pool ${poolAddress.slice(0, 6)}...`,
         bullBalance: userBullTokens,
         bearBalance: userBearTokens,
         bullCurrentValue: bullMetrics.currentValue,
@@ -1464,7 +1489,8 @@ const EnhancedPoolDataLoader = ({
         priceFeed: priceFeedName,
         // Enhanced data
         baseToken: baseToken || '',
-        baseTokenSymbol: baseTokenSymbol || 'WETH',
+        baseTokenSymbol: baseTokenSymbol || 'UNKNOWN',
+        baseTokenName: baseTokenName || 'Unknown Token',
         bullTokenAddress: bullTokenAddress || '',
         bearTokenAddress: bearTokenAddress || '',
         bullTokenName: bullName,
@@ -1483,12 +1509,19 @@ const EnhancedPoolDataLoader = ({
         isCreator: userAddress?.toLowerCase() === vaultCreator?.toLowerCase(),
       };
 
-      console.debug("Enhanced EVM pool data with event-based P&L:", { poolData });
+      console.log(`📊 Final pool data for ${poolAddress}:`, {
+        name: poolData.name,
+        bullBalance: poolData.bullBalance,
+        bearBalance: poolData.bearBalance,
+        bullCurrentValue: poolData.bullCurrentValue,
+        bearCurrentValue: poolData.bearCurrentValue,
+        currentPrice: poolData.currentPrice
+      });
       onDataLoad(poolData);
     };
 
     processPoolData();
-  }, [poolBasicData, tokenData, reserveData, userBalanceData, underlyingOracleData, feeData, poolAddress, onDataLoad, userAddress, chainId, index, baseToken, bearTokenAddress, bullTokenAddress, currentPrice, oracleAddress, poolName, previousPrice, onEventFetchingChange, showCachedData]);
+  }, [poolBasicData, tokenData, reserveData, userBalanceData, underlyingOracleData, feeData, poolAddress, onDataLoad, userAddress, chainId, index, baseToken, bearTokenAddress, bullTokenAddress, currentPrice, oracleAddress, poolName, previousPrice]);
 
   return null;
 };
@@ -1501,19 +1534,29 @@ export default function PortfolioPage() {
   const [showBearDistribution, setShowBearDistribution] = useState(false);
   const [poolsData, setPoolsData] = useState<PoolData[]>([]);
   const [isLoadingPools, setIsLoadingPools] = useState(false); // Start with false to show empty state immediately
+  const [isLoadingFromBlockchain, setIsLoadingFromBlockchain] = useState(false);
   
-  // Caching and offline state
-  const [isOffline, setIsOffline] = useState(false);
-  const [isEventFetching, setIsEventFetching] = useState(false);
-  const [showCachedData, setShowCachedData] = useState(true);
-  
-  // IndexedDB storage hook
+  // IndexedDB storage hook (for portfolio cache only)
   const { 
     isInitialized: isDBInitialized, 
     savePortfolioCache,
-    getPortfolioCache,
-    clearPortfolioData
+    getPortfolioCache
   } = useFatePoolsStorage();
+
+  // Direct IndexedDB manager for pool details (more reliable)
+  const [indexedDB, setIndexedDB] = useState<FatePoolsIndexedDBManager | null>(null);
+  
+  // Initialize IndexedDB manager
+  useEffect(() => {
+    const initDB = async () => {
+      if (typeof window !== 'undefined') {
+        const db = new FatePoolsIndexedDBManager();
+        await db.init();
+        setIndexedDB(db);
+      }
+    };
+    initDB();
+  }, []);
 
   // Get factory address for current chain (or all chains if no cached data)
   const factoryAddress = useMemo(() => {
@@ -1555,7 +1598,9 @@ export default function PortfolioPage() {
 
   // Handle pool data loading with caching
   const handlePoolDataLoad = useCallback((data: PoolData) => {
-    console.debug("Received EVM pool data:", { data });
+    // Set flag to indicate this is fresh blockchain data that should be cached
+    setIsLoadingFromBlockchain(true);
+
     setPoolsData((prev) => {
       const existingIndex = prev.findIndex((p) => p.id === data.id);
       if (existingIndex >= 0) {
@@ -1570,119 +1615,163 @@ export default function PortfolioPage() {
     // Update cache status to fresh
   }, []);
 
-  // Efficient cache loading - only load from RPC if cache is missing or stale
+  // Efficient cache loading - load pool details from IndexedDB and combine with positions
   const loadCachedData = useCallback(async () => {
-    if (!address || !chainId || !isDBInitialized) return;
+    if (!address || !chainId || !isDBInitialized || !indexedDB || isLoadingFromBlockchain) return;
 
     try {
-      const cachedData = await getPortfolioCache(address);
+      const cachedData = await getPortfolioCache(address, chainId as SupportedChainId);
 
       // If we have fresh cached data, use it immediately
       if (cachedData && cachedData.positions.length > 0) {
         console.log("✅ Loading fresh cached portfolio data:", cachedData.positions.length, "positions");
+        // Get all pool details from IndexedDB for this chain
+        const allPoolDetails = await indexedDB!.getAllPoolsForChain(chainId as SupportedChainId);
+        console.log("📊 Loaded pool details from IndexedDB:", allPoolDetails.length, "pools");
 
-        // Immediately show cached data (this should be very fast since it's local)
-        const mappedData = cachedData.positions.map(pos => ({
-          id: pos.poolAddress, // Use actual pool address instead of cache key
-          name: `Pool ${pos.poolAddress.slice(0, 6)}...`,
-          bullBalance: pos.tokenType === 'bull' ? pos.currentBalance : 0,
-          bearBalance: pos.tokenType === 'bear' ? pos.currentBalance : 0,
-          bullCurrentValue: pos.tokenType === 'bull' ? pos.currentValue : 0,
-          bearCurrentValue: pos.tokenType === 'bear' ? pos.currentValue : 0,
-          totalValue: pos.currentValue,
-          totalCostBasis: pos.costBasis,
-          bullPnL: pos.tokenType === 'bull' ? pos.pnL : 0,
-          bearPnL: pos.tokenType === 'bear' ? pos.pnL : 0,
-          totalPnL: pos.pnL,
-          bullPrice: 0,
-          bearPrice: 0,
-          bullAvgPrice: 0,
-          bearAvgPrice: 0,
-          bullReturns: pos.returns,
-          bearReturns: 0,
-          totalReturnPercentage: pos.returns,
-          color: '#000000',
-          bullColor: '#000000',
-          bearColor: '#000000',
-          hasPositions: pos.currentBalance > 0,
-          hasBullPosition: pos.tokenType === 'bull' && pos.currentBalance > 0,
-          hasBearPosition: pos.tokenType === 'bear' && pos.currentBalance > 0,
-          bullReserve: 0,
-          bearReserve: 0,
-          bullSupply: 0,
-          bearSupply: 0,
-          chainId: pos.chainId,
-          priceFeed: 'Cached',
-          baseToken: '',
-          baseTokenSymbol: pos.baseTokenSymbol || 'UNKNOWN', // Use cached symbol or fallback
-          bullTokenAddress: pos.tokenType === 'bull' ? pos.tokenAddress : '',
-          bearTokenAddress: pos.tokenType === 'bear' ? pos.tokenAddress : '',
-          bullTokenName: 'Bull Token',
-          bearTokenName: 'Bear Token',
-          bullTokenSymbol: 'BULL',
-          bearTokenSymbol: 'BEAR',
-          oracleAddress: '',
-          underlyingOracleAddress: undefined,
-          vaultCreator: '',
-          fees: { mintFee: 0, burnFee: 0, creatorFee: 0, treasuryFee: 0 },
-          baseTokenBalance: 0,
-          isCreator: false,
-          currentPrice: 0,
-          previousPrice: 0,
-          priceChange: 0,
-          priceChangePercent: 0,
-        }));
+        // Group positions by pool address and combine with pool details
+        const grouped = new Map<string, PoolData>();
+        const filteredPositions = cachedData.positions.filter(p => p.chainId === (chainId as SupportedChainId));
+        console.log("Filtered positions:", filteredPositions.length);
         
+        for (const pos of filteredPositions) {
+          // Debug: Log position data
+          console.log("🔍 Processing position:", {
+            tokenType: pos.tokenType,
+            currentBalance: pos.currentBalance,
+            currentValue: pos.currentValue,
+            pnL: pos.pnL,
+            poolAddress: pos.poolAddress
+          });
+          
+          // Find the corresponding pool details
+          const poolDetails = allPoolDetails.find((p: any) => p.id === pos.poolAddress);
+          
+          const existing = grouped.get(pos.poolAddress);
+          const base = existing ?? {
+            id: pos.poolAddress,
+            name: poolDetails?.name || `Pool ${pos.poolAddress.slice(0,6)}...`,
+            bullBalance: 0, bearBalance: 0,
+            bullCurrentValue: 0, bearCurrentValue: 0,
+            totalValue: 0, totalCostBasis: 0,
+            bullPnL: 0, bearPnL: 0, totalPnL: 0,
+            bullPrice: 0, bearPrice: 0, bullAvgPrice: 0, bearAvgPrice: 0,
+            bullReturns: 0, bearReturns: 0, totalReturnPercentage: 0,
+            color: '#000000', bullColor: '#000000', bearColor: '#000000',
+            hasPositions: false, hasBullPosition: false, hasBearPosition: false,
+            bullReserve: poolDetails ? Number(poolDetails.bullReserve) : 0,
+            bearReserve: poolDetails ? Number(poolDetails.bearReserve) : 0,
+            bullSupply: poolDetails ? Number(poolDetails.bullToken.totalSupply) : 0,
+            bearSupply: poolDetails ? Number(poolDetails.bearToken.totalSupply) : 0,
+            chainId: pos.chainId, priceFeed: poolDetails?.priceFeedAddress || 'Cached',
+            baseToken: poolDetails?.assetAddress || '', 
+            baseTokenSymbol: pos.baseTokenSymbol || poolDetails?.baseTokenSymbol || 'UNKNOWN',
+            baseTokenName: poolDetails?.baseTokenName || 'Unknown Token',
+            bullTokenAddress: poolDetails?.bullToken.id || '', 
+            bearTokenAddress: poolDetails?.bearToken.id || '',
+            bullTokenName: poolDetails?.bullToken.name || 'Bull Token', 
+            bearTokenName: poolDetails?.bearToken.name || 'Bear Token',
+            bullTokenSymbol: poolDetails?.bullToken.symbol || 'BULL', 
+            bearTokenSymbol: poolDetails?.bearToken.symbol || 'BEAR',
+            oracleAddress: poolDetails?.oracleAddress || '', 
+            underlyingOracleAddress: undefined,
+            currentPrice: poolDetails?.currentPrice || 0, 
+            previousPrice: 0,
+            priceChange: 0,
+            priceChangePercent: 0,
+            vaultCreator: poolDetails?.vaultCreator || '', 
+            fees: { 
+              mintFee: poolDetails?.mintFee || 0, 
+              burnFee: poolDetails?.burnFee || 0, 
+              creatorFee: poolDetails?.creatorFee || 0, 
+              treasuryFee: poolDetails?.treasuryFee || 0 
+            },
+            baseTokenBalance: 0, isCreator: false
+          } as PoolData;
+
+          // Calculate prices from reserves and supply like in InteractionClient
+          if (poolDetails) {
+            const bullReserveNum = Number(poolDetails.bullReserve);
+            const bearReserveNum = Number(poolDetails.bearReserve);
+            const bullSupplyNum = Number(poolDetails.bullToken.totalSupply);
+            const bearSupplyNum = Number(poolDetails.bearToken.totalSupply);
+            
+            // Calculate prices: reserve / supply (same as InteractionClient)
+            base.bullPrice = bullSupplyNum > 0 ? bullReserveNum / bullSupplyNum : 1;
+            base.bearPrice = bearSupplyNum > 0 ? bearReserveNum / bearSupplyNum : 1;
+          }
+
+          if (pos.tokenType === 'bull') {
+            base.bullBalance += pos.currentBalance;
+            base.bullCurrentValue += pos.currentValue;
+            base.bullPnL += pos.pnL;
+            base.bullReturns = pos.returns;
+            base.hasBullPosition = pos.currentBalance > 0 || pos.currentValue > 0 || pos.pnL !== 0;
+            base.bullTokenAddress = pos.tokenAddress;
+            console.log("🐂 Bull position updated:", {
+              currentBalance: pos.currentBalance,
+              newBullBalance: base.bullBalance,
+              currentValue: pos.currentValue,
+              newBullCurrentValue: base.bullCurrentValue
+            });
+          } else {
+            base.bearBalance += pos.currentBalance;
+            base.bearCurrentValue += pos.currentValue;
+            base.bearPnL += pos.pnL;
+            base.bearReturns = pos.returns;
+            base.hasBearPosition = pos.currentBalance > 0 || pos.currentValue > 0 || pos.pnL !== 0;
+            base.bearTokenAddress = pos.tokenAddress;
+            console.log("🐻 Bear position updated:", {
+              currentBalance: pos.currentBalance,
+              newBearBalance: base.bearBalance,
+              currentValue: pos.currentValue,
+              newBearCurrentValue: base.bearCurrentValue
+            });
+          }
+          
+          base.totalValue = base.bullCurrentValue + base.bearCurrentValue;
+          base.totalPnL = base.bullPnL + base.bearPnL;
+          base.totalCostBasis = base.totalValue - base.totalPnL;
+          base.totalReturnPercentage = base.totalCostBasis > 0 ? (base.totalPnL / base.totalCostBasis) * 100 : 0;
+          base.hasPositions = base.hasBullPosition || base.hasBearPosition;
+          grouped.set(pos.poolAddress, base);
+        }
+        const mappedData = Array.from(grouped.values());
         console.log("✅ Mapped cached data:", mappedData.length, "positions");
+        
+        // Debug: Log final pool data
+        if (mappedData.length > 0) {
+          console.log("📊 Final pool data sample:", {
+            id: mappedData[0].id,
+            name: mappedData[0].name,
+            bullBalance: mappedData[0].bullBalance,
+            bearBalance: mappedData[0].bearBalance,
+            bullCurrentValue: mappedData[0].bullCurrentValue,
+            bearCurrentValue: mappedData[0].bearCurrentValue,
+            bullPrice: mappedData[0].bullPrice,
+            bearPrice: mappedData[0].bearPrice
+          });
+        }
+        
         setPoolsData(mappedData);
 
         // Force UI update and ensure loading state is cleared
         setIsLoadingPools(false);
-
-        // Cache is fresh due to real-time updates, no need to check staleness
+        setIsLoadingFromBlockchain(false); // This is cached data, not blockchain data
 
       } else {
         // No cached data - this is a first-time user, try to load from blockchain
-        console.log("🆕 No cached data found - first time user, attempting to load from blockchain");
 
         if (factoryAddress && factoryAddress !== "0x0000000000000000000000000000000000000000") {
-          console.log("🔗 Valid factory address available, blockchain loading should work");
           setIsLoadingPools(true);
         } else {
-          console.log("⚠️ No valid factory address - user might be on unsupported chain");
           setIsLoadingPools(false);
-          // Show empty state instead of loading indefinitely
         }
       }
     } catch (error) {
       console.error("❌ Failed to load cached data:", error);
-
-      // If it's a missing store error, try to reinitialize the database
-      if (error instanceof Error && error.message.includes('Missing required object stores')) {
-        // Check reload guard to prevent infinite reload loops
-        const reloadKey = 'portfolio-reload-guard';
-        const lastReload = sessionStorage.getItem(reloadKey);
-        const now = Date.now();
-        const RELOAD_COOLDOWN = 5 * 60 * 1000; // 5 minutes
-        
-        if (lastReload && (now - parseInt(lastReload)) < RELOAD_COOLDOWN) {
-          console.warn("🚫 Reload guard active - preventing infinite reload loop");
-          console.error("❌ Database corruption persists. Please clear browser data manually.");
-          return;
-        }
-        
-        console.log("🔄 Attempting to reinitialize database...");
-        try {
-          // Set reload guard before reloading
-          sessionStorage.setItem(reloadKey, now.toString());
-          // Force a page refresh to reinitialize the database
-          window.location.reload();
-        } catch (reloadError) {
-          console.error("Failed to reload page:", reloadError);
-        }
-      }
     }
-  }, [address, chainId, isDBInitialized, getPortfolioCache, factoryAddress]);
+  }, [address, chainId, isDBInitialized, indexedDB, getPortfolioCache, factoryAddress, isLoadingFromBlockchain]);
 
   // Save data to cache
   const saveDataToCache = useCallback(async (data: PoolData[]) => {
@@ -1749,166 +1838,61 @@ export default function PortfolioPage() {
         lastUpdated: Date.now(),
         blockNumber: 0,
         ttlMinutes: 2,
-        expiresAt: Date.now() + (2 * 60 * 1000), // Temporary value, will be overridden by savePortfolioCache
-        id: `${address}_${chainId}` // Temporary value, will be overridden by savePortfolioCache
+        expiresAt: Date.now() + (2 * 60 * 1000),
+        id: `${address}_${chainId}`
       } as Omit<PortfolioCache, 'userAddress'> & { userAddress: string };
       
       await savePortfolioCache(cacheData);
-      console.log("Portfolio data cached successfully");
+
+      // Also save pool details to IndexedDB for future use
+      if (indexedDB) {
+        for (const pool of data) {
+          try {
+            await indexedDB!.savePoolDetails({
+            id: pool.id,
+            name: pool.name,
+            description: `Prediction pool for ${pool.priceFeed}`,
+            assetAddress: pool.baseToken,
+            baseTokenSymbol: pool.baseTokenSymbol,
+            baseTokenName: pool.baseTokenName,
+            oracleAddress: pool.oracleAddress,
+            currentPrice: pool.currentPrice,
+            bullReserve: pool.bullReserve.toString(),
+            bearReserve: pool.bearReserve.toString(),
+            bullToken: {
+              id: pool.bullTokenAddress,
+              symbol: pool.bullTokenSymbol,
+              name: pool.bullTokenName,
+              totalSupply: pool.bullSupply.toString()
+            },
+            bearToken: {
+              id: pool.bearTokenAddress,
+              symbol: pool.bearTokenSymbol,
+              name: pool.bearTokenName,
+              totalSupply: pool.bearSupply.toString()
+            },
+            vaultCreator: pool.vaultCreator,
+            creatorFee: pool.fees.creatorFee,
+            mintFee: pool.fees.mintFee,
+            burnFee: pool.fees.burnFee,
+            treasuryFee: pool.fees.treasuryFee,
+            bullPercentage: pool.bullReserve > 0 ? (pool.bullReserve / (pool.bullReserve + pool.bearReserve)) * 100 : 0,
+            bearPercentage: pool.bearReserve > 0 ? (pool.bearReserve / (pool.bullReserve + pool.bearReserve)) * 100 : 0,
+            chainId: pool.chainId as SupportedChainId,
+            creator: pool.vaultCreator,
+            chainName: getChainName(pool.chainId),
+            priceFeedAddress: pool.priceFeed
+          });
+          } catch (error) {
+            console.error(`Failed to save pool details for ${pool.id}:`, error);
+          }
+        }
+        console.log("Portfolio data and pool details cached successfully");
+      }
     } catch (error) {
       console.error("Failed to save portfolio data to cache:", error);
     }
-  }, [address, chainId, isDBInitialized, savePortfolioCache]);
-
-  /**
-   * EFFICIENT REAL-TIME CACHE UPDATES
-   *
-   * Strategy: Cache-first with real-time updates
-   * - Portfolio loads instantly from cache (0 RPC calls)
-   * - Buy/sell actions update cache immediately (no waiting)
-   * - RPC only used for first-time users or manual refresh
-   * - Cache stays fresh through user actions
-   */
-  const updateCacheOnAction = useCallback(async (action: 'buy' | 'sell', poolAddress: string, amount: number, tokenType: 'bull' | 'bear', transactionHash: string, tokenAddress: string) => {
-    if (!address || !chainId || !isDBInitialized) return;
-
-    // Create a promise that resolves when the queued update completes
-    return new Promise<void>((resolve, reject) => {
-      const updateFn = async () => {
-        try {
-          console.log(`Real-time cache update for ${action}:`, { poolAddress, amount, tokenType, transactionHash });
-
-          // Get current cache or create new one
-          const currentCache = await getPortfolioCache(address);
-          if (!currentCache) {
-            console.log("No existing cache found, cannot update");
-            resolve();
-            return;
-          }
-
-          // Update positions efficiently
-          const existingPositionIndex = currentCache.positions.findIndex(pos =>
-            pos.poolAddress === poolAddress && pos.tokenType === tokenType
-          );
-
-          if (action === 'buy') {
-            if (existingPositionIndex >= 0) {
-              // Update existing position balance
-              currentCache.positions[existingPositionIndex].currentBalance += amount;
-              currentCache.positions[existingPositionIndex].lastUpdated = Date.now();
-            } else {
-              // Add new position with minimal data (will be filled by RPC when needed)
-              currentCache.positions.push({
-                id: `${poolAddress}-${tokenType}-${Date.now()}`,
-                userAddress: address,
-                tokenAddress: tokenAddress, // Will be updated when RPC data is available
-                poolAddress: poolAddress,
-                chainId: chainId as SupportedChainId,
-                tokenType: tokenType,
-                currentBalance: amount,
-                currentValue: 0, // Will be calculated
-                costBasis: 0, // Will be calculated
-                pnL: 0,
-                returns: 0,
-                totalFeesPaid: 0,
-                netInvestment: 0,
-                grossInvestment: 0,
-                lastUpdated: Date.now(),
-                blockNumber: 0
-              });
-            }
-          } else if (action === 'sell') {
-            if (existingPositionIndex >= 0) {
-              // Update existing position balance
-              currentCache.positions[existingPositionIndex].currentBalance = Math.max(0,
-                currentCache.positions[existingPositionIndex].currentBalance - amount
-              );
-              currentCache.positions[existingPositionIndex].lastUpdated = Date.now();
-
-              // Remove position if balance is 0
-              if (currentCache.positions[existingPositionIndex].currentBalance === 0) {
-                currentCache.positions.splice(existingPositionIndex, 1);
-              }
-            }
-          }
-
-          // Add transaction record with proper PortfolioTransaction structure
-          const newTransaction = {
-            id: `${address}-${poolAddress}-${transactionHash}-0`,
-            userAddress: address,
-            poolAddress: poolAddress,
-            chainId: chainId as SupportedChainId,
-            tokenType: tokenType,
-            action: action,
-            amount: amount,
-            price: 0,
-            value: 0,
-            fees: 0,
-            transactionHash: transactionHash,
-            blockNumber: 0,
-            timestamp: Date.now()
-          };
-          currentCache.transactions.push(newTransaction);
-
-          // Update cache metadata (minimal updates)
-          currentCache.lastUpdated = Date.now();
-          // Note: expiresAt will be set automatically by savePortfolioCache
-
-          // Save updated cache efficiently
-          await savePortfolioCache(currentCache);
-          console.log("✅ Cache updated successfully for", action, "action");
-
-          resolve();
-        } catch (error) {
-          console.error("❌ Failed to update cache on action:", error);
-          reject(error);
-        }
-      };
-
-      // Add to queue and start processing
-      cacheUpdateQueue.push(updateFn);
-      processCacheQueue().catch(reject);
-    });
-  }, [address, chainId, isDBInitialized, getPortfolioCache, savePortfolioCache]);
-
-  // Clear reload guard on successful database initialization
-  useEffect(() => {
-    if (isDBInitialized) {
-      const reloadKey = 'portfolio-reload-guard';
-      sessionStorage.removeItem(reloadKey);
-      console.log("✅ Database initialized successfully - cleared reload guard");
-    }
-  }, [isDBInitialized]);
-
-  // Expose cache update function globally for buy/sell actions
-  useEffect(() => {
-    (window as any).updatePortfolioCache = updateCacheOnAction;
-    return () => {
-      delete (window as any).updatePortfolioCache;
-    };
-  }, [updateCacheOnAction]);
-
-  // Offline detection
-  useEffect(() => {
-    const handleOnline = () => {
-      setIsOffline(false);
-    };
-    
-    const handleOffline = () => {
-      setIsOffline(true);
-    };
-    
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-    
-    // Check initial online status
-    setIsOffline(!navigator.onLine);
-    
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, []);
+  }, [address, chainId, isDBInitialized, indexedDB, savePortfolioCache]);
 
   // Initialize loading state based on connection
   useEffect(() => {
@@ -1934,28 +1918,10 @@ export default function PortfolioPage() {
    * 5. Instant UI: Portfolio shows data immediately, updates in real-time
    */
   useEffect(() => {
-    if (address && chainId && isDBInitialized) {
+    if (address && chainId && isDBInitialized && indexedDB) {
       loadCachedData();
-
-      // Cache is now always fresh due to real-time updates
-      // No need for background RPC unless manually requested
-      setShowCachedData(false); // Show real data immediately
     }
-  }, [address, chainId, isDBInitialized, loadCachedData]);
-
-  // Reset cache status when user changes
-  useEffect(() => {
-    if (address && chainId) {
-      setShowCachedData(true);
-    }
-  }, [address, chainId]);
-
-  // Save data to cache when pools data changes
-  useEffect(() => {
-    if (poolsData.length > 0 && address && chainId && isDBInitialized) {
-      saveDataToCache(poolsData);
-    }
-  }, [poolsData, address, chainId, isDBInitialized, saveDataToCache]);
+  }, [address, chainId, isDBInitialized, indexedDB, loadCachedData]);
 
   // Reset data when user changes
   useEffect(() => {
@@ -1968,29 +1934,17 @@ export default function PortfolioPage() {
     }
   }, [address, chainId]);
 
-  // Manual refresh function
-  const handleManualRefresh = useCallback(async () => {
-    if (!address || !chainId) return;
+  // Only save data to cache when it comes from blockchain (not cache)
+  // This prevents infinite loops between loadCachedData and saveDataToCache
 
-    console.log("🔄 Manual refresh requested by user");
-    setIsLoadingPools(true);
-    setPoolsData([]);
-
-    // Clear cache to force fresh data from blockchain
-    try {
-      // Clear cache for current chain only
-      await clearPortfolioData(address, chainId as SupportedChainId);
-      console.log("✅ Cache cleared for current chain, will reload from blockchain");
-      
-      // Reload data from blockchain after cache is cleared
-      await loadCachedData();
-      console.log("✅ Fresh data loaded from blockchain");
-    } catch (error) {
-      console.error("❌ Failed to clear cache or reload data:", error);
-    } finally {
-      setIsLoadingPools(false);
+  // Save data to cache only when loading from blockchain
+  useEffect(() => {
+    if (isLoadingFromBlockchain && poolsData.length > 0 && address && chainId && isDBInitialized && indexedDB) {
+      saveDataToCache(poolsData);
+      setIsLoadingFromBlockchain(false); // Reset flag after saving
     }
-  }, [address, chainId, clearPortfolioData, loadCachedData]);
+  }, [isLoadingFromBlockchain, poolsData, address, chainId, isDBInitialized, indexedDB, saveDataToCache]);
+
 
   // Remove the complex loading logic - let data load in background
   // The portfolio will show empty state (0 values) immediately and populate as data loads
@@ -2007,8 +1961,24 @@ export default function PortfolioPage() {
   } = useMemo((): {
     activePoolsData: PoolData[];
     historicalPoolsData: PoolData[];
-    bullPositionsData: PoolData[];
-    bearPositionsData: PoolData[];
+    bullPositionsData: Array<{
+      name: string;
+      chartValue: number;
+      bullCurrentValue: number;
+      bearCurrentValue: number;
+      id: string;
+      chainId: number;
+      baseTokenSymbol: string;
+    }>;
+    bearPositionsData: Array<{
+      name: string;
+      chartValue: number;
+      bullCurrentValue: number;
+      bearCurrentValue: number;
+      id: string;
+      chainId: number;
+      baseTokenSymbol: string;
+    }>;
     totalPortfolioValue: number;
     totalPnL: number;
     totalReturnPercentage: number;
@@ -2025,8 +1995,46 @@ export default function PortfolioPage() {
       (pool.bullPnL !== 0 || pool.bearPnL !== 0)
     );
     
-    const bullPositionsData = poolsData.filter((pool) => pool.hasBullPosition);
-    const bearPositionsData = poolsData.filter((pool) => pool.hasBearPosition);
+    // Transform data for charts - show all pools, not just ones with positions
+    const bullPositionsData: Array<{
+      name: string;
+      chartValue: number;
+      bullCurrentValue: number;
+      bearCurrentValue: number;
+      id: string;
+      chainId: number;
+      baseTokenSymbol: string;
+    }> = poolsData
+      .filter((pool) => pool.bullBalance > 0 || pool.bullCurrentValue > 0 || pool.bullPnL !== 0)
+      .map((pool) => ({
+        name: pool.name,
+        chartValue: Math.max(0, pool.bullCurrentValue || 0),
+        bullCurrentValue: Math.max(0, pool.bullCurrentValue || 0),
+        bearCurrentValue: 0,
+        id: pool.id,
+        chainId: pool.chainId,
+        baseTokenSymbol: pool.baseTokenSymbol || 'UNKNOWN'
+      }));
+
+    const bearPositionsData: Array<{
+      name: string;
+      chartValue: number;
+      bullCurrentValue: number;
+      bearCurrentValue: number;
+      id: string;
+      chainId: number;
+      baseTokenSymbol: string;
+    }> = poolsData
+      .filter((pool) => pool.bearBalance > 0 || pool.bearCurrentValue > 0 || pool.bearPnL !== 0)
+      .map((pool) => ({
+        name: pool.name,
+        chartValue: Math.max(0, pool.bearCurrentValue || 0),
+        bullCurrentValue: 0,
+        bearCurrentValue: Math.max(0, pool.bearCurrentValue || 0),
+        id: pool.id,
+        chainId: pool.chainId,
+        baseTokenSymbol: pool.baseTokenSymbol || 'UNKNOWN'
+      }));
 
     // Calculate totals including both active and historical
     const allPoolsWithPositions = poolsData.filter((pool) => pool.hasPositions);
@@ -2060,18 +2068,21 @@ export default function PortfolioPage() {
     };
   }, [poolsData]);
 
-  // Debug logging
-  // console.debug("Portfolio state:", {
-  //   isConnected,
-  //   address,
-  //   isLoadingPools,
-  //   availablePoolsLength: availablePools.length,
-  //   loadedPoolsCount,
-  //   hasAllPoolsData: !!allPoolsData,
-  //   chainId,
-  //   factoryAddress,
-  //   hasValidFactory: !!factoryAddress && factoryAddress !== "0x0000000000000000000000000000000000000000"
-  // });
+  // Debug logging (only when data changes)
+  useEffect(() => {
+    if (poolsData.length > 0) {
+      console.log("📊 Portfolio state updated:", {
+        poolsDataLength: poolsData.length,
+        samplePool: poolsData[0] ? {
+          id: poolsData[0].id,
+          name: poolsData[0].name,
+          bullBalance: poolsData[0].bullBalance,
+          bearBalance: poolsData[0].bearBalance,
+          currentPrice: poolsData[0].currentPrice
+        } : null
+      });
+    }
+  }, [poolsData]);
 
   // Remove the loading screen - show portfolio immediately with 0 values
 
@@ -2096,6 +2107,7 @@ export default function PortfolioPage() {
             </Button>
           </div>
         </Card>
+
       </div>
     );
   }
@@ -2103,52 +2115,6 @@ export default function PortfolioPage() {
   return (
     <div className="min-h-screen bg-white dark:bg-black text-neutral-900 dark:text-white p-4 pt-28 min-[900px]:p-6 min-[900px]:pt-32">
       <div className="max-w-7xl mx-auto space-y-8">
-        
-        {/* Status Indicators - Only show essential messages */}
-        {(isOffline || (isEventFetching && !showCachedData)) && (
-          <div className={`${
-            isOffline ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800' :
-            'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800'
-          } border rounded-lg p-4 mb-6`}>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <div className={`w-3 h-3 rounded-full ${
-                  isOffline ? 'bg-red-500' : 'bg-blue-500 animate-pulse'
-                }`} />
-                <div>
-                  <h3 className={`text-sm font-medium ${
-                    isOffline ? 'text-red-800 dark:text-red-200' : 'text-blue-800 dark:text-blue-200'
-                  }`}>
-                    {isOffline ? 'Offline Mode' : 'Loading Transaction History...'}
-                  </h3>
-                  <p className={`text-xs ${
-                    isOffline ? 'text-red-700 dark:text-red-300' : 'text-blue-700 dark:text-blue-300'
-                  }`}>
-                    {isOffline 
-                      ? 'You are offline. Showing cached data.' 
-                      : 'Fetching detailed transaction history from the blockchain. This may take up to 1 minute.'}
-                  </p>
-                </div>
-              </div>
-              <div className="flex space-x-2">
-                <Button
-                  onClick={handleManualRefresh}
-                  size="sm"
-                  variant="outline"
-                  className="border-yellow-300 dark:border-yellow-700 text-yellow-700 dark:text-yellow-300 hover:bg-yellow-100 dark:hover:bg-yellow-800"
-                  disabled={isOffline}
-                >
-                  Refresh
-                </Button>
-                {isOffline && (
-                  <div className="text-xs text-yellow-600 dark:text-yellow-400 px-2 py-1 bg-yellow-100 dark:bg-yellow-800 rounded">
-                    Offline
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
         {/* Enhanced Pool Data Loaders - Only loads pools where user has positions */}
         {availablePools.map((poolAddress, index) => (
           <EnhancedPoolDataLoader
@@ -2158,15 +2124,13 @@ export default function PortfolioPage() {
             userAddress={address}
             chainId={chainId || 1}
             onDataLoad={handlePoolDataLoad}
-            onEventFetchingChange={setIsEventFetching}
-            showCachedData={showCachedData}
           />
         ))}
 
         {/* Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {poolsData.length === 0 && isLoadingPools ? (
-            // Show skeleton loading cards while data is being loaded
+          {poolsData.length === 0 ? (
+            // Show skeleton loading cards while data is being calculated
             <>
               <div className="bg-white dark:bg-neutral-900 border border-gray-200 dark:border-neutral-700 rounded-xl p-6 shadow-sm">
                 <div className="flex items-center space-x-4">
@@ -2203,7 +2167,7 @@ export default function PortfolioPage() {
                 value={`${totalPortfolioValue.toLocaleString(undefined, {
                   minimumFractionDigits: 0,
                   maximumFractionDigits: 4,
-                })} ${poolsData[0]?.baseTokenSymbol || 'WETH'}`}
+                })} ${poolsData[0]?.baseTokenSymbol || 'UNKNOWN'}`}
                 icon={DollarSign}
                 trend="neutral"
               />
@@ -2215,7 +2179,7 @@ export default function PortfolioPage() {
                     minimumFractionDigits: 0,
                     maximumFractionDigits: 4,
                   }
-                )} ${poolsData[0]?.baseTokenSymbol || 'WETH'}`}
+                )} ${poolsData[0]?.baseTokenSymbol || 'UNKNOWN'}`}
                 icon={totalPnL >= 0 ? TrendingUp : TrendingDown}
                 trend={totalPnL >= 0 ? "up" : "down"}
               />
@@ -2234,8 +2198,8 @@ export default function PortfolioPage() {
           )}
         </div>
 
-        {poolsData.length === 0 && isLoadingPools ? (
-          // Show skeleton loading while portfolio data is being loaded
+        {poolsData.length === 0 ? (
+          // Show skeleton loading while portfolio data is being calculated
           <div className="space-y-6">
             {/* Skeleton for Bull and Bear Position Charts */}
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
@@ -2279,7 +2243,7 @@ export default function PortfolioPage() {
               </div>
             </div>
           </div>
-        ) : activePoolsData.length > 0 ? (
+        ) : poolsData.length > 0 ? (
           <div className="space-y-6">
             {/* Bull and Bear Position Charts */}
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
@@ -2300,15 +2264,19 @@ export default function PortfolioPage() {
               <Card className={`border-black ${bullPositionsData.length > 0 && bearPositionsData.length > 0 ? 'xl:col-span-1' : 'xl:col-span-2'} dark:border-neutral-700/60 dark:bg-gradient-to-br dark:from-neutral-800/50 dark:to-neutral-900/50 backdrop-blur-sm shadow-xl`}>
                 <CardHeader>
                   <CardTitle className="text-xl text-neutral-900 dark:text-neutral-100 mb-2">
-                    Active Positions
+                    {activePoolsData.length > 0 ? 'Active Positions' : 'Available Pools'}
                   </CardTitle>
                   <p className="text-sm text-neutral-600 dark:text-neutral-400">
-                    {activePoolsData.length} active position{activePoolsData.length !== 1 ? 's' : ''} across {availablePools.length} pool{availablePools.length !== 1 ? 's' : ''}
+                    {activePoolsData.length > 0 
+                      ? `${activePoolsData.length} active position${activePoolsData.length !== 1 ? 's' : ''} across ${availablePools.length} pool${availablePools.length !== 1 ? 's' : ''}`
+                      : `${poolsData.length} pool${poolsData.length !== 1 ? 's' : ''} available to trade`
+                    }
                   </p>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4 max-h-[400px] overflow-y-auto overflow-x-hidden">
-                    {activePoolsData.map((pool, index) => (
+                    {activePoolsData.length > 0 ? (
+                      activePoolsData.map((pool, index) => (
                       <div
                         key={pool.id}
                         className="animate-in slide-in-from-bottom-4 duration-300"
@@ -2316,7 +2284,18 @@ export default function PortfolioPage() {
                       >
                         <PositionCard pool={pool} />
                       </div>
-                    ))}
+                      ))
+                    ) : (
+                      poolsData.map((pool, index) => (
+                        <div
+                          key={pool.id}
+                          className="animate-in slide-in-from-bottom-4 duration-300"
+                          style={{ animationDelay: `${index * 100}ms` }}
+                        >
+                          <PositionCard pool={pool} />
+                        </div>
+                      ))
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -2344,7 +2323,7 @@ export default function PortfolioPage() {
               />
             )}
           </div>
-        ) : (
+        ) : !isLoadingPools ? (
           <div className="space-y-6">
             {/* Show history section if user has historical trades */}
             {historicalPoolsData.length > 0 && (
@@ -2354,7 +2333,7 @@ export default function PortfolioPage() {
                     Trading History
                   </CardTitle>
                   <p className="text-sm text-neutral-600 dark:text-neutral-400">
-                    {historicalPoolsData.length} completed position{historicalPoolsData.length !== 1 ? 's' : ''} with total P&L of {totalPnL >= 0 ? '+' : ''}{totalPnL.toFixed(4)} {historicalPoolsData[0]?.baseTokenSymbol || 'WETH'}
+                    {historicalPoolsData.length} completed position{historicalPoolsData.length !== 1 ? 's' : ''} with total P&L of {totalPnL >= 0 ? '+' : ''}{totalPnL.toFixed(4)} {historicalPoolsData[0]?.baseTokenSymbol || 'UNKNOWN'}
                   </p>
                 </CardHeader>
                 <CardContent>
@@ -2373,6 +2352,15 @@ export default function PortfolioPage() {
               </Card>
             )}
 
+            {/* Historical Investments Section - Show when no active positions */}
+            {historicalPoolsData.length > 0 && (
+              <HistoricalInvestmentsTable 
+                historicalPools={historicalPoolsData}
+                userAddress={address}
+                chainId={chainId}
+              />
+            )}
+
             {/* Contract deployment status message */}
             {!factoryAddress && isConnected && (
               <Card className="border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-900/20 p-8 text-center">
@@ -2380,10 +2368,10 @@ export default function PortfolioPage() {
                   Contracts Not Deployed
                 </CardTitle>
                 <p className="text-yellow-700 dark:text-yellow-300 mb-4">
-                  The Fate Protocol contracts are not yet deployed on {getChainConfig(chainId || 1)?.name || `Chain ${chainId || 1}`}.
+                   The Fate Protocol contracts are not yet deployed on {getChainName(chainId || 1)}.
                 </p>
                 <p className="text-yellow-600 dark:text-yellow-400 mb-6">
-                  You can test the protocol on supported networks or wait for mainnet deployment.
+                   You can test the protocol on Sepolia testnet (contracts are deployed there) or wait for mainnet deployment.
                 </p>
                 <div className="flex gap-4 justify-center flex-wrap">
                   <Button 
@@ -2397,19 +2385,19 @@ export default function PortfolioPage() {
                     variant="outline"
                     className="border-yellow-600 text-yellow-600 hover:bg-yellow-600 hover:text-white"
                   >
-                    Create Pool
+                     Create Pool (Testnet)
                   </Button>
                 </div>
                 <div className="mt-4 p-4 bg-yellow-100 dark:bg-yellow-800/30 rounded-lg">
                   <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                    <strong>Available Networks:</strong> Check the explore page for supported networks
+                     <strong>Available Networks:</strong> Sepolia Testnet (Chain ID: 11155111)
                   </p>
                   <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-1">
-                    Switch to a supported network to interact with deployed contracts
+                     Switch to Sepolia testnet to interact with deployed contracts
                   </p>
                   <div className="mt-2 p-2 bg-yellow-200 dark:bg-yellow-700/50 rounded text-xs">
                     <p className="text-yellow-800 dark:text-yellow-200">
-                      <strong>Debug Info:</strong> Current chain: {getChainConfig(chainId || 1)?.name || `Chain ${chainId || 1}`} (ID: {chainId})
+                       <strong>Debug Info:</strong> Current chain: {getChainName(chainId || 1)} (ID: {chainId})
                     </p>
                     <p className="text-yellow-700 dark:text-yellow-300">
                       Factory address: {factoryAddress || 'Not configured'}
@@ -2419,14 +2407,21 @@ export default function PortfolioPage() {
               </Card>
             )}
             
-            {/* No active positions message - only show when no data and not loading */}
-            {poolsData.length === 0 && !isLoadingPools && factoryAddress && (
+             {/* No active positions message */}
+             {factoryAddress && (
               <Card className="border-neutral-200 dark:border-neutral-700 dark:bg-neutral-800 p-8 text-center">
                 <CardTitle className="text-neutral-900 dark:text-neutral-100 mb-2">
-                  No Pools Found
+                   {poolsData.length === 0 ? 'No Pools Found' : (historicalPoolsData.length > 0 ? 'No Active Positions' : 'No Positions Yet')}
                 </CardTitle>
                 <p className="text-neutral-600 dark:text-neutral-400 mb-6">
-                  No prediction pools have been created on {getChainConfig(chainId || 1)?.name || `Chain ${chainId || 1}`} yet. Be the first to create one!
+                   {poolsData.length === 0 
+                     ? (chainId === 11155111 
+                       ? 'No prediction pools have been created on Sepolia testnet yet. Be the first to create one!'
+                       : 'No prediction pools found on this network. Try switching to a different network or check back later.')
+                     : (historicalPoolsData.length > 0 
+                       ? 'You don\'t have any active positions, but you can see your trading history above.'
+                       : 'You don\'t have any positions in prediction pools yet.')
+                   }
                 </p>
                 <div className="flex flex-col sm:flex-row gap-3 justify-center">
                   <Button 
@@ -2438,30 +2433,9 @@ export default function PortfolioPage() {
                 </div>
               </Card>
             )}
-
-            {/* No positions message - only show when user has no positions but pools exist */}
-            {poolsData.length > 0 && activePoolsData.length === 0 && historicalPoolsData.length === 0 && (
-              <Card className="border-neutral-200 dark:border-neutral-700 dark:bg-neutral-800 p-8 text-center">
-                <CardTitle className="text-neutral-900 dark:text-neutral-100 mb-2">
-                  No Positions Yet
-                </CardTitle>
-                <p className="text-neutral-600 dark:text-neutral-400 mb-6">
-                  You don&apos;t have any positions in prediction pools yet.
-                </p>
-                <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                  <Button 
-                    onClick={() => router.push('/explorePools')}
-                    className="bg-black hover:bg-gray-800 dark:bg-white dark:hover:bg-gray-200 text-white dark:text-black"
-                  >
-                    Explore Pools
-                  </Button>
                 </div>
-              </Card>
-            )}
-          </div>
-        )}
+        ) : null}
     </div>
   </div>
   );
 }
-  

@@ -2,17 +2,26 @@
 // Standardized error handling system for production
 
 import { logger } from './logger';
+import { ValidationError } from './validation';
 
 export class AppError extends Error {
   constructor(
     message: string,
-    public code: string,
+    public code: ErrorCode,
     public statusCode: number = 500,
     public userMessage?: string,
     public context?: Record<string, unknown>
   ) {
     super(message);
     this.name = 'AppError';
+    
+    // Ensure proper prototype chain for instanceof checks
+    Object.setPrototypeOf(this, AppError.prototype);
+    
+    // Capture stack trace if available (Node.js environments)
+    if (Error.captureStackTrace) {
+      Error.captureStackTrace(this, this.constructor);
+    }
   }
 }
 
@@ -47,6 +56,7 @@ export const ErrorCodes = {
   INTERNAL_ERROR: 'INTERNAL_ERROR'
 } as const;
 
+// Define ErrorCode type from ErrorCodes
 export type ErrorCode = typeof ErrorCodes[keyof typeof ErrorCodes];
 
 // Error factory functions
@@ -111,27 +121,55 @@ export const handleError = (error: unknown, context?: Record<string, unknown>): 
   if (error instanceof Error) {
     const message = error.message;
     
-    // Network errors
-    if (message.includes('fetch') || message.includes('network') || message.includes('timeout')) {
+    // Check for ValidationError instances (includes rate limiting)
+    if (error instanceof ValidationError || error.name === 'ValidationError') {
+      // Check if it's a rate limit error specifically
+      if (message.toLowerCase().includes('rate limit') || 
+          (message.toLowerCase().includes('maximum') && message.toLowerCase().includes('requests'))) {
+        return new AppError(
+          message,
+          ErrorCodes.RATE_LIMIT_EXCEEDED,
+          429,
+          'Too many requests. Please wait a moment and try again.',
+          { originalError: error.message, ...context }
+        );
+      }
+      
+      // Regular validation error
+      return new AppError(
+        message,
+        ErrorCodes.VALIDATION_ERROR,
+        400,
+        'Invalid input. Please check your data and try again.',
+        { originalError: error.message, ...context }
+      );
+    }
+    
+    // Network errors - more specific matching
+    const networkKeywords = ['fetch failed', 'network error', 'connection timeout', 'request timeout', 'dns'];
+    if (networkKeywords.some(keyword => message.toLowerCase().includes(keyword.toLowerCase()))) {
       return createNetworkError(message, { originalError: error.message, ...context });
     }
     
-    // Transaction errors
-    if (message.includes('transaction') || message.includes('gas') || message.includes('revert')) {
+    // Transaction errors - more specific matching
+    const transactionKeywords = ['transaction failed', 'gas estimation failed', 'revert', 'execution reverted'];
+    if (transactionKeywords.some(keyword => message.toLowerCase().includes(keyword.toLowerCase()))) {
       return createTransactionError(message, { originalError: error.message, ...context });
     }
     
-    // Balance errors
-    if (message.includes('balance') || message.includes('insufficient')) {
+    // Balance errors - more specific matching
+    const balanceKeywords = ['insufficient balance', 'insufficient funds', 'balance too low'];
+    if (balanceKeywords.some(keyword => message.toLowerCase().includes(keyword.toLowerCase()))) {
       return createBalanceError(message, { originalError: error.message, ...context });
     }
     
-    // Wallet errors
-    if (message.includes('wallet') || message.includes('connect') || message.includes('chain')) {
+    // Wallet errors - more specific matching
+    const walletKeywords = ['wallet not connected', 'please connect', 'wrong chain', 'unsupported chain'];
+    if (walletKeywords.some(keyword => message.toLowerCase().includes(keyword.toLowerCase()))) {
       return createWalletError(message, { originalError: error.message, ...context });
     }
     
-    // Generic error
+    // Generic error for truly unknown cases
     return new AppError(
       message,
       ErrorCodes.UNKNOWN_ERROR,
@@ -241,15 +279,40 @@ export const withTimeout = <T extends unknown[], R>(
   timeoutMs: number = 30000
 ) => {
   return async (...args: T): Promise<R> => {
+    let timeoutId: NodeJS.Timeout | null = null;
+    
     const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => {
-        reject(new Error(`Operation timed out after ${timeoutMs}ms`));
+      timeoutId = setTimeout(() => {
+        reject(new AppError(
+          `Operation timed out after ${timeoutMs}ms`,
+          ErrorCodes.TIMEOUT_ERROR,
+          408,
+          'The operation took too long to complete. Please try again.',
+          { timeoutMs }
+        ));
       }, timeoutMs);
     });
 
-    return Promise.race([
-      fn(...args),
-      timeoutPromise
-    ]);
+    try {
+      const result = await Promise.race([
+        fn(...args),
+        timeoutPromise
+      ]);
+      
+      // Clear timeout on success
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+      
+      return result;
+    } catch (error) {
+      // Clear timeout on error
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+      
+      // Re-throw the error (could be from main function or timeout)
+      throw error;
+    }
   };
 };

@@ -256,6 +256,11 @@ export async function initializePool(
   vaultId: Address,
   initialDeposit: bigint,
 ): Promise<TransactionReceipt> {
+  // Validate initialDeposit parameter
+  if (typeof initialDeposit !== 'bigint' || initialDeposit <= BigInt(0)) {
+    throw new Error('initialDeposit must be > 0');
+  }
+
   const provider = new ethers.BrowserProvider(walletClient.transport);
   const signer = await provider.getSigner();
 

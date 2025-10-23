@@ -15,10 +15,10 @@ export const formatNumber = (n: number, decimals = 9): string => {
 export const formatNumberDown = (n: number, decimals = 9): string => {
   if (!isFinite(n) || isNaN(n)) return "0";
   const factor = Math.pow(10, decimals);
-  const floored = Math.floor(n * factor) / factor;
-  const s = floored.toString();
+  const truncated = Math.trunc(n * factor) / factor;
+  const s = truncated.toString();
   if (s.indexOf('e') !== -1) {
-    return floored.toExponential(decimals);
+    return truncated.toExponential(decimals);
   }
   return s;
 };
