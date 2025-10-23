@@ -1,6 +1,8 @@
 // src/lib/validation.ts
 // Comprehensive validation layer for production security
 
+import { SUPPORTED_CHAIN_IDS } from './indexeddb/config';
+
 export class ValidationError extends Error {
   constructor(message: string, public field: string, public code: string = 'VALIDATION_ERROR') {
     super(message);
@@ -115,9 +117,8 @@ export const validateChainId = (chainId: number | string): number => {
     throw new ValidationError('Invalid chain ID', 'chainId');
   }
   
-  // Supported chains
-  const supportedChains = [1, 137, 56, 8453, 61, 11155111];
-  if (!supportedChains.includes(num)) {
+  // Check against authoritative supported chain IDs
+  if (!SUPPORTED_CHAIN_IDS.includes(num as any)) {
     throw new ValidationError('Unsupported chain ID', 'chainId');
   }
   
