@@ -9,7 +9,7 @@ import {
   useWriteContract,
   useWaitForTransactionReceipt
 } from 'wagmi';
-import { formatUnits, parseUnits, type Address, createPublicClient, http } from 'viem';
+import { formatUnits, parseUnits, type Address, createPublicClient, http, isAddress } from 'viem';
 import { PredictionPoolABI } from '@/utils/abi/PredictionPool';
 import { CoinABI } from '@/utils/abi/Coin';
 import { ERC20ABI } from '@/utils/abi/ERC20';
@@ -17,19 +17,26 @@ import { ChainlinkOracleABI } from '@/utils/abi/ChainlinkOracle';
 import { toast } from 'sonner';
 import { updateOracle } from '@/lib/vaultUtils';
 import { useSearchParams } from 'next/navigation';
-import { FatePoolFactories } from '@/utils/addresses';
 import { getPriceFeedName, CHAIN_PRICE_FEED_OPTIONS } from '@/utils/supportedChainFeed';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Loading } from '@/components/ui/loading';
-// import { getChainConfig } from '@/utils/chainConfig';
+import { formatNumber, formatNumberDown } from '@/utils/format';
+import { validateTransactionInput } from '@/lib/validation';
+import { withErrorHandling, createTransactionError } from '@/lib/errorHandler';
 
 // Note: ChainlinkAdapterFactories is imported but can be used for future oracle management features
 import TradingViewWidget from '@/components/ui/TradingViewWidget';
 import Navbar from '@/components/layout/Navbar';
 import { useTheme } from "next-themes";
-import { InfoIcon } from 'lucide-react';
+import { Info } from 'lucide-react';
+import { logger } from "@/lib/logger";
+
+// Utility function for safe BigInt subtraction to prevent underflow
+const safeBigIntSubtract = (a: bigint, b: bigint): bigint => {
+  return a > b ? a - b : BigInt(0);
+};
 
 // EVM-based pool hook
 const usePool = (poolId: Address | undefined, isConnected: boolean) => {
@@ -205,287 +212,9 @@ const usePool = (poolId: Address | undefined, isConnected: boolean) => {
   return { pool, userBalances, userAvgPrices, loading, error, refetch: refetchPool };
 };
 
-const formatNumber = (n: number, decimals = 9) => {
-  if (!isFinite(n) || isNaN(n)) return "0";
-  const rounded = Number(n.toFixed(decimals));
-  let s = rounded.toString();
-  if (s.indexOf("e") !== -1) s = rounded.toFixed(decimals);
-  if (s.indexOf(".") >= 0) s = s.replace(/\.?0+$/, "");
-  return s;
-};
-
-const formatNumberDown = (n: number, decimals = 9) => {
-  if (!isFinite(n) || isNaN(n)) return "0";
-  const factor = Math.pow(10, decimals);
-  const floored = Math.floor(n * factor) / factor;
-  let s = floored.toString();
-  if (s.indexOf("e") !== -1) s = floored.toFixed(decimals);
-  if (s.indexOf(".") >= 0) s = s.replace(/\.?0+$/, "");
-  return s;
-};
 
 const formatValue = (value: number) => `${formatNumber(value, 3)} WETH`;
-const safeNumber = (num: unknown, fallback = 0) => !isFinite(Number(num)) || isNaN(Number(num)) ? fallback : Number(num);
 
-// Fetch user transactions for P&L calculation
-const fetchUserTransactions = async (
-  tokenAddress: string,
-  userAddress: string,
-  chainId: number
-) => {
-  try {
-    // Use a simple chain config for the public client
-    const publicClient = createPublicClient({
-      chain: {
-        id: chainId,
-        name: `Chain ${chainId}`,
-        nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-        rpcUrls: {
-          default: { http: ['https://sepolia.drpc.org'] },
-          public: { http: ['https://sepolia.drpc.org'] }
-        },
-        blockExplorers: {
-          default: { name: 'Etherscan', url: 'https://sepolia.etherscan.io' }
-        }
-      } as const,
-      transport: http()
-    });
-
-    console.log(`🔍 Fetching transactions for token ${tokenAddress}, user ${userAddress}`);
-
-    // Get recent block range (last ~2 weeks on testnet)
-    const latestBlock = await publicClient.getBlockNumber();
-    const startBlock = latestBlock - BigInt(100000); // ~2 weeks on testnet
-
-    // Fetch Buy and Sell events
-    const [buyLogs, sellLogs] = await Promise.all([
-      publicClient.getLogs({
-        address: tokenAddress as Address,
-          event: {
-            type: 'event',
-          name: 'Buy',
-            inputs: [
-            { name: 'buyer', type: 'address', indexed: true },
-            { name: 'amountAsset', type: 'uint256', indexed: false },
-            { name: 'amountCoin', type: 'uint256', indexed: false },
-            { name: 'price', type: 'uint256', indexed: false },
-            { name: 'feePaid', type: 'uint256', indexed: false },
-            { name: 'timestamp', type: 'uint256', indexed: false }
-          ]
-        },
-        fromBlock: startBlock,
-        toBlock: 'latest',
-        args: {
-          buyer: userAddress as Address
-        }
-      }),
-      publicClient.getLogs({
-        address: tokenAddress as Address,
-            event: {
-              type: 'event',
-          name: 'Sell',
-              inputs: [
-            { name: 'seller', type: 'address', indexed: true },
-            { name: 'amountAsset', type: 'uint256', indexed: false },
-            { name: 'amountCoin', type: 'uint256', indexed: false },
-            { name: 'price', type: 'uint256', indexed: false },
-            { name: 'feePaid', type: 'uint256', indexed: false },
-            { name: 'timestamp', type: 'uint256', indexed: false }
-          ]
-        },
-        fromBlock: startBlock,
-        toBlock: 'latest',
-        args: {
-          seller: userAddress as Address
-        }
-      })
-    ]);
-
-    const transactions = [
-      ...buyLogs.map(log => ({
-        type: 'buy',
-        amountAsset: Number(formatUnits(log.args.amountAsset ?? BigInt(0), 18)),
-        amountCoin: Number(formatUnits(log.args.amountCoin ?? BigInt(0), 18)),
-        price: Number(formatUnits(log.args.price ?? BigInt(0), 18)),
-        feePaid: Number(formatUnits(log.args.feePaid ?? BigInt(0), 18)),
-        timestamp: Number(log.args.timestamp ?? BigInt(0)),
-        blockNumber: log.blockNumber
-      })),
-      ...sellLogs.map(log => ({
-        type: 'sell',
-        amountAsset: Number(formatUnits(log.args.amountAsset ?? BigInt(0), 18)),
-        amountCoin: Number(formatUnits(log.args.amountCoin ?? BigInt(0), 18)),
-        price: Number(formatUnits(log.args.price ?? BigInt(0), 18)),
-        feePaid: Number(formatUnits(log.args.feePaid ?? BigInt(0), 18)),
-        timestamp: Number(log.args.timestamp ?? BigInt(0)),
-        blockNumber: log.blockNumber
-      }))
-    ];
-
-    console.log(`📊 Found ${transactions.length} transactions for user`);
-    return transactions;
-  } catch (error) {
-    console.error('Error fetching user transactions:', error);
-    return [];
-  }
-};
-
-// Calculate token metrics with event-based P&L
-const calculateTokenMetricsWithEvents = async (
-  reserve: number,
-  supply: number,
-  userTokens: number,
-  tokenAddress: string,
-  userAddress: string,
-  chainId: number
-) => {
-  const currentPrice = safeNumber(supply > 0 ? reserve / supply : 0);
-  const currentValue = userTokens * currentPrice;
-
-  try {
-    // Get transactions from events
-    const transactions = await fetchUserTransactions(tokenAddress, userAddress, chainId);
-    
-    if (transactions.length === 0) {
-      // Fallback to current price if no transactions found
-      const costBasis = userTokens * currentPrice;
-      return {
-        price: currentPrice,
-        currentValue,
-        costBasis,
-        pnL: 0,
-        returns: 0
-      };
-    }
-
-    // FIFO-based P&L calculation
-    let totalCostBasis = 0;
-    let realizedPnL = 0;
-    const buyQueue: Array<{ 
-      amount: number; 
-      price: number; 
-      grossAmount: number;
-      timestamp: number;
-      blockNumber: number;
-    }> = [];
-
-    console.log(`🧮 Starting FIFO calculation for ${userTokens} current tokens`);
-
-    // Process transactions chronologically
-    const sortedTxns = transactions.sort((a: { blockNumber: bigint }, b: { blockNumber: bigint }) => Number(a.blockNumber) - Number(b.blockNumber));
-    
-    for (const tx of sortedTxns) {
-      if (tx.type === 'buy') {
-        // Track gross investment (including fees) as the true cost basis
-        const grossAmount = tx.amountAsset;
-        totalCostBasis += grossAmount;
-        
-        buyQueue.push({ 
-          amount: tx.amountCoin, 
-          price: tx.price,
-          grossAmount: grossAmount,
-          timestamp: tx.timestamp || 0,
-          blockNumber: Number(tx.blockNumber)
-        });
-        
-        console.log(`📈 Buy: ${tx.amountCoin} tokens @ ${tx.price} WETH/token, Total invested: ${grossAmount} WETH`);
-      } else if (tx.type === 'sell') {
-        let remainingToSell = tx.amountCoin;
-        const sellValue = tx.amountAsset;
-        let costOfSold = 0;
-
-        console.log(`📉 Sell: ${tx.amountCoin} tokens for ${tx.amountAsset} WETH`);
-
-        // FIFO: Sell from oldest purchases first
-        while (remainingToSell > 0 && buyQueue.length > 0) {
-          const oldestBuy = buyQueue[0];
-          const amountFromThisBuy = Math.min(remainingToSell, oldestBuy.amount);
-          
-          // Use gross amount (including fees) for cost basis calculation
-          const costPerToken = oldestBuy.grossAmount / oldestBuy.amount;
-          costOfSold += amountFromThisBuy * costPerToken;
-          
-          remainingToSell -= amountFromThisBuy;
-          oldestBuy.amount -= amountFromThisBuy;
-          
-          console.log(`🔄 FIFO: Sold ${amountFromThisBuy} @ ${costPerToken} WETH/token (gross) = ${amountFromThisBuy * costPerToken} WETH cost`);
-          
-          if (oldestBuy.amount === 0) {
-            buyQueue.shift();
-          }
-        }
-        
-        // Calculate realized P&L (sell value - gross cost basis)
-        const thisSaleRealizedPnL = sellValue - costOfSold;
-        realizedPnL += thisSaleRealizedPnL;
-        
-        console.log(`💰 Sale P&L: ${thisSaleRealizedPnL} WETH (${sellValue} received - ${costOfSold} gross cost)`);
-      }
-    }
-
-    // Calculate remaining cost basis for current holdings (using gross amounts)
-    const remainingCostBasis = buyQueue.reduce((sum, buy) => {
-      const costPerToken = buy.grossAmount / buy.amount;
-      return sum + (buy.amount * costPerToken);
-    }, 0);
-    
-    // Check if this is a position with only buys (no sells)
-    const hasOnlyBuys = buyQueue.length > 0 && buyQueue.every(buy => buy.amount > 0);
-    
-    // For positions with only buys, use the total investment as cost basis
-    // For positions with sells, use the remaining cost basis
-    const actualCostBasis = hasOnlyBuys ? totalCostBasis : remainingCostBasis;
-    
-    const unrealizedPnL = currentValue - actualCostBasis;
-    const totalPnL = realizedPnL + unrealizedPnL;
-    
-    // Calculate returns
-    const returns = actualCostBasis > 0 ? (totalPnL / actualCostBasis) * 100 : 0;
-
-    console.log(`📊 FIFO Results:`);
-    console.log(`   - Has only buys: ${hasOnlyBuys}`);
-    console.log(`   - Total cost basis: ${totalCostBasis} WETH`);
-    console.log(`   - Remaining cost basis: ${remainingCostBasis} WETH`);
-    console.log(`   - Actual cost basis used: ${actualCostBasis} WETH`);
-    console.log(`   - Current value: ${currentValue} WETH`);
-    console.log(`   - Realized P&L: ${realizedPnL} WETH`);
-    console.log(`   - Unrealized P&L: ${unrealizedPnL} WETH`);
-    console.log(`   - Total P&L: ${totalPnL} WETH`);
-    console.log(`   - Returns: ${returns}%`);
-
-    // For sold positions (userTokens = 0), return realized P&L only
-    if (userTokens === 0) {
-      console.log(`🏁 Position fully sold - showing realized P&L only`);
-      return {
-        price: currentPrice,
-        currentValue: 0,
-        costBasis: totalCostBasis,
-        pnL: realizedPnL,
-        returns: totalCostBasis > 0 ? (realizedPnL / totalCostBasis) * 100 : 0
-      };
-    }
-
-    return {
-      price: currentPrice,
-      currentValue,
-      costBasis: actualCostBasis,
-      pnL: totalPnL,
-      returns
-    };
-
-  } catch (error) {
-    console.error('Error calculating metrics with events:', error);
-    // Fallback to simple calculation
-    const costBasis = userTokens * currentPrice;
-    return {
-      price: currentPrice,
-      currentValue,
-      costBasis,
-      pnL: 0,
-      returns: 0
-    };
-  }
-};
 
 function VaultSection({ isBull, poolData, userTokens, price, value, symbol, connected, handlePoll, reserve, supply, tokenAddress }: {
   isBull: boolean;
@@ -528,8 +257,6 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
   const [baseTokenBalance, setBaseTokenBalance] = useState<bigint>(BigInt(0));
   const [allowance, setAllowance] = useState<bigint>(BigInt(0));
   const [pendingApproval, setPendingApproval] = useState<{ amount: string; type: 'buy' | 'sell' } | null>(null);
-  const [pnlData, setPnlData] = useState<{ pnL: number; returns: number; costBasis: number } | null>(null);
-  const [isCalculatingPnl, setIsCalculatingPnl] = useState(false);
 
   // Get base token balance for MAX calculation
   const { data: baseTokenBalanceData } = useReadContracts({
@@ -563,110 +290,92 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
     }
   }, [allowanceData]);
 
-  // Calculate P&L when component mounts or when user tokens change
-  useEffect(() => {
-    const calculatePnl = async () => {
-      if (!address || !tokenAddress || !poolData?.chainId || !connected) {
-        setPnlData(null);
-      return;
-    }
-
-      setIsCalculatingPnl(true);
-      try {
-        const userTokensNum = Number(formatUnits(userTokens, 18));
-        const metrics = await calculateTokenMetricsWithEvents(
-          reserve,
-          supply,
-          userTokensNum,
-          tokenAddress,
-          address,
-          poolData.chainId
-        );
-        
-        setPnlData({
-          pnL: metrics.pnL,
-          returns: metrics.returns,
-          costBasis: metrics.costBasis
-        });
-      } catch (error) {
-        console.error('Error calculating P&L:', error);
-        setPnlData(null);
-      } finally {
-        setIsCalculatingPnl(false);
-      }
-    };
-
-    calculatePnl();
-  }, [address, tokenAddress, poolData?.chainId, connected, userTokens, reserve, supply]);
 
 
 
   const handleBuyTransaction = useCallback(async (amount: string) => {
+    let loadingToast: string | number | undefined;
+    
     try {
       const amountWei = parseUnits(amount, 18);
       
-      const loadingToast = toast.loading("Processing buy transaction...");
+      loadingToast = toast.loading("Processing buy transaction...");
       await writeContract({
         address: tokenAddress! as `0x${string}`,
         abi: CoinABI,
         functionName: 'buy',
         args: [address!, amountWei],
       });
-      toast.dismiss(loadingToast);
+      
+      // Wait for the transaction to be confirmed and get the hash
+      // The hash will be available in the data property after the transaction is submitted
+      // For now, we'll handle the cache update in the useEffect when isConfirmed becomes true
+      toast.success("Transaction submitted! Waiting for confirmation...");
     } catch (err: unknown) {
-      console.error("Buy transaction error:", err);
+      logger.error("Buy transaction error:", err instanceof Error ? err : undefined);
       toast.error((err as Error).message || "Failed to buy tokens");
+    } finally {
+      if (loadingToast !== undefined) {
+        toast.dismiss(loadingToast);
+      }
     }
   }, [tokenAddress, address, writeContract]);
 
-  const handleBuy = async () => {
+  const handleBuy = withErrorHandling(async () => {
     if (!address || !connected) {
-      toast.error("Please connect your wallet");
-      return;
-    }
-
-    if (!buyAmount || isNaN(Number(buyAmount)) || Number(buyAmount) <= 0) {
-      toast.error("Please enter a valid amount greater than zero");
-      return;
+      const errorMessage = "Please connect your wallet";
+      toast.error(errorMessage);
+      throw createTransactionError(errorMessage);
     }
 
     if (!tokenAddress || !poolData?.asset_address) {
-      toast.error("Token information not available");
+      const errorMessage = "Token information not available";
+      toast.error(errorMessage);
+      throw createTransactionError(errorMessage);
+    }
+
+    // Validate input with new validation system
+    let validatedInput;
+    try {
+      validatedInput = validateTransactionInput({
+        amount: buyAmount,
+        poolId: poolData?.asset_address as Address,
+        chainId: poolData?.chainId || 1, // Use pool chain or fallback to mainnet
+        userAddress: address
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Invalid transaction input";
+      toast.error(errorMessage);
+      throw createTransactionError(errorMessage);
+    }
+
+    const amountWei = parseUnits(validatedInput.amount.toString(), 18);
+    
+    // Check user's base token balance
+    const userBaseTokenBalance = baseTokenBalance || BigInt(0);
+    if (userBaseTokenBalance < amountWei) {
+      const errorMessage = `Insufficient balance. You have ${formatUnits(userBaseTokenBalance, 18)} base tokens available.`;
+      toast.error(errorMessage);
+      throw createTransactionError(errorMessage);
+    }
+
+    // Check allowance
+    const currentAllowance = allowance || BigInt(0);
+    if (currentAllowance < amountWei) {
+      const approvalToast = toast.loading("Approving tokens...");
+      setPendingApproval({ amount: buyAmount, type: 'buy' });
+      await writeContract({
+        address: poolData.asset_address as `0x${string}`,
+        abi: ERC20ABI,
+        functionName: 'approve',
+        args: [tokenAddress, amountWei],
+      });
+      toast.dismiss(approvalToast);
       return;
     }
 
-    try {
-      const amountWei = parseUnits(buyAmount, 18);
-      
-      // Check user's base token balance
-      const userBaseTokenBalance = baseTokenBalance || BigInt(0);
-      if (userBaseTokenBalance < amountWei) {
-        toast.error(`Insufficient balance. You have ${formatUnits(userBaseTokenBalance, 18)} base tokens available.`);
-        return;
-      }
-
-      // Check allowance
-      const currentAllowance = allowance || BigInt(0);
-      if (currentAllowance < amountWei) {
-        const approvalToast = toast.loading("Approving tokens...");
-        setPendingApproval({ amount: buyAmount, type: 'buy' });
-        await writeContract({
-          address: poolData.asset_address as `0x${string}`,
-          abi: ERC20ABI,
-          functionName: 'approve',
-          args: [tokenAddress, amountWei],
-        });
-        toast.dismiss(approvalToast);
-        return;
-      }
-
-      await handleBuyTransaction(buyAmount);
-      setBuyAmount('');
-    } catch (err: unknown) {
-      console.error("Buy error:", err);
-      toast.error((err as Error).message || "Failed to buy tokens");
-    }
-  };
+    await handleBuyTransaction(buyAmount);
+  }, { functionName: 'handleBuy' });
 
   const handleSell = async () => {
     if (!address || !connected) {
@@ -684,6 +393,8 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
       return;
     }
 
+    let loadingToast: string | number | undefined;
+    
     try {
       const amountWei = parseUnits(sellAmount, 18);
       
@@ -693,18 +404,26 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
         return;
       }
 
-      const loadingToast = toast.loading("Processing sell transaction...");
+      loadingToast = toast.loading("Processing sell transaction...");
       await writeContract({
         address: tokenAddress as `0x${string}`,
         abi: CoinABI,
         functionName: 'sell',
         args: [amountWei],
       });
-      toast.dismiss(loadingToast);
       setSellAmount('');
+      
+      // Wait for the transaction to be confirmed
+      // The hash will be available in the data property after the transaction is submitted
+      // For now, we'll handle the cache update in the useEffect when isConfirmed becomes true
+      toast.success("Transaction submitted! Waiting for confirmation...");
     } catch (err: unknown) {
-      console.error('Sell error:', err);
+      logger.error('Sell error:', err instanceof Error ? err : undefined);
       toast.error((err as Error).message || 'Failed to sell tokens');
+    } finally {
+      if (loadingToast !== undefined) {
+        toast.dismiss(loadingToast);
+      }
     }
   };
 
@@ -713,12 +432,11 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
       if (pendingApproval && pendingApproval.type === 'buy') {
         setPendingApproval(null);
         handleBuyTransaction(pendingApproval.amount);
-        setBuyAmount('');
       } else {
         handlePoll();
       }
     }
-  }, [isConfirmed, isTransactionPending, pendingApproval, handlePoll, handleBuyTransaction]);
+  }, [isConfirmed, isTransactionPending, pendingApproval, handlePoll, handleBuyTransaction, poolData.id.id]);
 
   const vaultTitle = isBull ? 'Bull Vault' : 'Bear Vault';
   const vaultIcon = isBull ? (
@@ -781,21 +499,6 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
                 <span className="text-gray-600 dark:text-gray-400">Value</span>
                 <span className="font-medium text-black dark:text-white">{formatNumber(value, 4)} WETH</span>
               </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600 dark:text-gray-400">P&L</span>
-                <span className={`font-medium ${isCalculatingPnl ? 'text-gray-500' : (pnlData?.returns || 0) > 0 ? 'text-green-600' : (pnlData?.returns || 0) < 0 ? 'text-red-600' : 'text-black dark:text-white'}`}>
-                  {isCalculatingPnl ? 'Calculating...' : (
-                    <>
-                      {(pnlData?.returns || 0) > 0 ? '+' : ''}{formatNumber(pnlData?.returns || 0, 2)}%
-                      {pnlData && (
-                        <span className="ml-1 text-xs text-gray-500">
-                          ({pnlData.pnL > 0 ? '+' : ''}{formatNumber(pnlData.pnL, 4)} WETH)
-                        </span>
-                      )}
-                    </>
-                  )}
-                </span>
-              </div>
             </div>
           </div>
 
@@ -820,7 +523,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
                 </div>
               </div>
               <Button 
-                onClick={handleBuy} 
+                onClick={() => handleBuy()} 
                 className={`w-full ${buttonColor} text-white`} 
                 disabled={!buyAmount || !connected || isTransacting}
               >
@@ -850,7 +553,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
                 </div>
               </div>
               <Button 
-                onClick={handleSell} 
+                onClick={() => handleSell()} 
                 className="w-full bg-gray-100 hover:bg-gray-200 text-black border border-gray-300" 
                 disabled={!sellAmount || !connected || isTransacting}
               >
@@ -876,8 +579,10 @@ export default function InteractionClient() {
   // const stickyRef = useRef<HTMLElement | null>(null);
   const { theme } = useTheme();
   const params = useSearchParams();
-  const { address, isConnected } = useAccount();
-  const poolId = (params.get("id") || FatePoolFactories[1]) as Address;
+  const { address, isConnected, chain } = useAccount(); // eslint-disable-line @typescript-eslint/no-unused-vars
+  // Validate poolId from query params - don't default to zero address
+  const poolIdParam = params.get("id");
+  const poolId = poolIdParam && isAddress(poolIdParam) ? (poolIdParam as Address) : undefined;
 
   const { pool, userBalances, loading, error, refetch } = usePool(poolId, isConnected);
   const { data: walletClient } = useWalletClient();
@@ -914,7 +619,7 @@ export default function InteractionClient() {
       const stored = localStorage.getItem(`lastRebalance_${poolId}`);
       if (stored) {
         setLastRebalanceTime(new Date(stored));
-        console.log('Loaded rebalance time from localStorage:', new Date(stored).toLocaleString());
+        logger.debug('Loaded rebalance time from localStorage:', { rebalanceTime: new Date(stored).toLocaleString() });
       }
     }
   }, [poolId]);
@@ -929,19 +634,19 @@ export default function InteractionClient() {
   // Fetch the last rebalance event from blockchain
   const fetchLastRebalanceEvent = useCallback(async () => {
     if (!poolId || !walletClient) {
-      console.log('fetchLastRebalanceEvent: Missing poolId or walletClient', { poolId, walletClient: !!walletClient });
+      logger.debug('fetchLastRebalanceEvent: Missing poolId or walletClient', { poolId, walletClient: !!walletClient });
       return;
     }
 
     try {
-      console.log('fetchLastRebalanceEvent: Starting to fetch events for pool:', poolId);
+      logger.debug('fetchLastRebalanceEvent: Starting to fetch events for pool:', { poolId });
       setIsFetchingRebalanceEvents(true);
       const publicClient = createPublicClient({
         chain: walletClient.chain,
         transport: http()
       });
 
-      console.log('fetchLastRebalanceEvent: Created public client for chain:', walletClient.chain.name);
+      logger.debug('fetchLastRebalanceEvent: Created public client for chain:', { chainName: walletClient.chain.name });
       
       // Use the correct Rebalanced event signature from the ABI
       const rebalancedEventABI = {
@@ -962,7 +667,7 @@ export default function InteractionClient() {
 
       // Approach 1: Use the exact event ABI definition
       try {
-        console.log('Approach 1: Trying with correct Rebalanced event ABI...');
+        logger.debug('Approach 1: Trying with correct Rebalanced event ABI...');
         const logs = await publicClient.getLogs({
           address: poolId as Address,
           event: rebalancedEventABI,
@@ -970,7 +675,7 @@ export default function InteractionClient() {
           toBlock: 'latest'
         });
 
-        console.log('Approach 1: Found Rebalanced logs:', logs.length);
+        logger.debug('Approach 1: Found Rebalanced logs:', { logCount: logs.length });
         
         if (logs.length > 0) {
           const latestEvent = logs[logs.length - 1];
@@ -979,7 +684,7 @@ export default function InteractionClient() {
           setLastRebalanceTime(rebalanceTime);
           localStorage.setItem(`lastRebalance_${poolId}`, rebalanceTime.toISOString());
           
-          console.log('✅ Success with Approach 1 - Last rebalance event found:', {
+          logger.debug('Success with Approach 1 - Last rebalance event found:', {
             blockNumber: latestEvent.blockNumber,
             timestamp: block.timestamp,
             rebalanceTime: rebalanceTime.toLocaleString(),
@@ -988,12 +693,12 @@ export default function InteractionClient() {
           return;
         }
       } catch (approach1Error) {
-        console.log('Approach 1 failed:', approach1Error);
+        logger.debug('Approach 1 failed:', { error: approach1Error });
       }
 
       // Approach 2: Use event topic hash to find rebalance events
       try {
-        console.log('Approach 2: Searching by event topic hash...');
+        logger.debug('Approach 2: Searching by event topic hash...');
         
         // Get the event topic hash (keccak256 of event signature)
         // const eventSignature = 'Rebalanced(address,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256)';
@@ -1003,7 +708,7 @@ export default function InteractionClient() {
           toBlock: 'latest'
         });
 
-        console.log('Approach 2: Found total logs:', allLogs.length);
+        logger.debug('Approach 2: Found total logs:', { logCount: allLogs.length });
         
         // Look for rebalance events by checking if they have the expected number of topics
         const rebalanceEvents = allLogs.filter((log: { topics: string[] }) => {
@@ -1011,7 +716,7 @@ export default function InteractionClient() {
           return log.topics && log.topics.length === 3;
         });
 
-        console.log('Approach 2: Potential rebalance events (by topic count):', rebalanceEvents.length);
+        logger.debug('Approach 2: Potential rebalance events (by topic count):', { eventCount: rebalanceEvents.length });
         
         if (rebalanceEvents.length > 0) {
           const latestEvent = rebalanceEvents[rebalanceEvents.length - 1];
@@ -1020,7 +725,7 @@ export default function InteractionClient() {
           setLastRebalanceTime(rebalanceTime);
           localStorage.setItem(`lastRebalance_${poolId}`, rebalanceTime.toISOString());
           
-          console.log('✅ Success with Approach 2 - Found rebalance event:', {
+          logger.debug('Success with Approach 2 - Found rebalance event:', {
             blockNumber: latestEvent.blockNumber,
             timestamp: block.timestamp,
             rebalanceTime: rebalanceTime.toLocaleString(),
@@ -1029,14 +734,14 @@ export default function InteractionClient() {
           return;
         }
       } catch (approach2Error) {
-        console.log('Approach 2 failed:', approach2Error);
+        logger.debug('Approach 2 failed:', { error: approach2Error });
       }
 
       // Approach 3: Check recent blocks for any pool activity
       try {
-        console.log('Approach 3: Checking recent pool activity...');
+        logger.debug('Approach 3: Checking recent pool activity...');
         const latestBlock = await publicClient.getBlockNumber();
-        const startBlock = latestBlock - BigInt(10000); // Check last 10000 blocks
+        const startBlock = safeBigIntSubtract(latestBlock, BigInt(10000)); // Check last 10000 blocks, but never go below 0
         
         const recentLogs = await publicClient.getLogs({
           address: poolId as Address,
@@ -1044,7 +749,7 @@ export default function InteractionClient() {
           toBlock: 'latest'
         });
 
-        console.log('Approach 3: Found recent logs in last 10000 blocks:', recentLogs.length);
+        logger.debug('Approach 3: Found recent logs in last 10000 blocks:', { logCount: recentLogs.length });
         
         if (recentLogs.length > 0) {
           // Use the most recent activity as a potential rebalance indicator
@@ -1054,7 +759,7 @@ export default function InteractionClient() {
           setLastRebalanceTime(rebalanceTime);
           localStorage.setItem(`lastRebalance_${poolId}`, rebalanceTime.toISOString());
           
-          console.log('✅ Success with Approach 3 - Using latest pool activity:', {
+          logger.debug('Success with Approach 3 - Using latest pool activity:', {
             blockNumber: latestActivity.blockNumber,
             timestamp: block.timestamp,
             rebalanceTime: rebalanceTime.toLocaleString()
@@ -1062,10 +767,10 @@ export default function InteractionClient() {
           return;
         }
       } catch (approach3Error) {
-        console.log('Approach 3 failed:', approach3Error);
+        logger.debug('Approach 3 failed:', { error: approach3Error });
       }
 
-      console.log('❌ All approaches failed - No rebalance events found for pool:', poolId);
+      logger.warn('All approaches failed - No rebalance events found for pool:', { poolId });
       // Don't set to null immediately, check localStorage first
       const storedTime = localStorage.getItem(`lastRebalance_${poolId}`);
       if (!storedTime) {
@@ -1073,7 +778,7 @@ export default function InteractionClient() {
       }
       
     } catch (error) {
-      console.error('❌ Error fetching rebalance events:', error);
+      logger.error('Error fetching rebalance events:', error instanceof Error ? error : undefined);
       // Don't set to null on error, keep existing value
     } finally {
       setIsFetchingRebalanceEvents(false);
@@ -1110,7 +815,7 @@ export default function InteractionClient() {
           }
         }
       } catch (error) {
-        console.error('Error fetching gas data:', error);
+        logger.error('Error fetching gas data:', error instanceof Error ? error : undefined);
       }
     };
 
@@ -1125,11 +830,11 @@ export default function InteractionClient() {
         try {
           const parsedTime = new Date(storedTime);
           if (!isNaN(parsedTime.getTime())) {
-            console.log('Loaded last rebalance time from localStorage:', parsedTime.toLocaleString());
+            logger.debug('Loaded last rebalance time from localStorage:', { rebalanceTime: parsedTime.toLocaleString() });
             setLastRebalanceTime(parsedTime);
           }
         } catch (error) {
-          console.error('Error parsing stored rebalance time:', error);
+          logger.error('Error parsing stored rebalance time:', error instanceof Error ? error : undefined);
         }
       }
     }
@@ -1137,9 +842,9 @@ export default function InteractionClient() {
 
   // Fetch last rebalance event on mount and when pool changes
   useEffect(() => {
-    console.log('Initial fetch effect triggered:', { poolId, walletClient: !!walletClient });
+    logger.debug('Initial fetch effect triggered:', { poolId, walletClient: !!walletClient });
     if (poolId && walletClient) {
-      console.log('Calling fetchLastRebalanceEvent from initial effect');
+      logger.debug('Calling fetchLastRebalanceEvent from initial effect');
       fetchLastRebalanceEvent();
     }
   }, [poolId, walletClient, fetchLastRebalanceEvent]);
@@ -1151,7 +856,7 @@ export default function InteractionClient() {
       await refetch?.();
       // setLastUpdateTime(new Date());
     } catch (err) {
-      console.error("Polling error:", err);
+      logger.error("Polling error:", err instanceof Error ? err : undefined);
     }
   }, [pool?.id?.id, loading, refetch]);
 
@@ -1173,7 +878,7 @@ export default function InteractionClient() {
       const rebalanceCallTime = new Date();
       setLastRebalanceTime(rebalanceCallTime);
       localStorage.setItem(`lastRebalance_${poolId}`, rebalanceCallTime.toISOString());
-      console.log('Stored rebalance time in localStorage:', rebalanceCallTime.toLocaleString());
+      logger.debug('Stored rebalance time in localStorage:', { rebalanceTime: rebalanceCallTime.toLocaleString() });
       
       const loadingToast = toast.loading("Rebalancing pool...");
       await writeContract({
@@ -1183,7 +888,7 @@ export default function InteractionClient() {
       });
       toast.dismiss(loadingToast);
     } catch (err: unknown) {
-      console.error('Rebalance error:', err);
+      logger.error('Rebalance error:', err instanceof Error ? err : undefined);
       let errorMessage = 'Failed to rebalance pool';
       if ((err as Error).message.includes("user rejected transaction")) {
         errorMessage = "Transaction rejected";
@@ -1208,7 +913,7 @@ export default function InteractionClient() {
       setNewOracleAddress('');
       await handlePoll();
     } catch (err: unknown) {
-      console.error('Update oracle error:', err);
+      logger.error('Update oracle error:', err instanceof Error ? err : undefined);
       let errorMessage = 'Failed to update oracle';
       if ((err as Error).message.includes("user rejected transaction")) {
         errorMessage = "Transaction rejected";
@@ -1279,9 +984,8 @@ export default function InteractionClient() {
     const userBullValue = userBullTokens * bullPrice;
     const userBearValue = userBearTokens * bearPrice;
 
-    // P&L will be calculated in VaultSection components
-    const userBullReturns = 0; // Will be calculated in VaultSection
-    const userBearReturns = 0; // Will be calculated in VaultSection
+    const userBullReturns = 0;
+    const userBearReturns = 0;
 
     return {
       totalReserves,
@@ -1318,17 +1022,17 @@ export default function InteractionClient() {
   };
 
   // Debug logging for price feed detection
-  console.log('=== PRICE FEED DEBUG ===');
-  console.log('Pool Oracle Address (wrapper):', pool?.oracle_address);
-  console.log('Underlying Price Feed Address:', underlyingPriceFeedAddress);
-  console.log('Final Oracle Address used:', oracleAddress);
-  console.log('Chain ID:', chainId);
-  console.log('Available feeds for this chain:', CHAIN_PRICE_FEED_OPTIONS[chainId]);
-  console.log('Price Feed Name:', priceFeedName);
-  console.log('Asset CoinId:', asset.coinId);
-  console.log('Is Oracle Address Valid:', oracleAddress && oracleAddress.length === 42 && oracleAddress.startsWith('0x'));
-  console.log('Oracle Address Length:', oracleAddress?.length);
-  console.log('=== END DEBUG ===');
+  logger.debug('=== PRICE FEED DEBUG ===');
+  logger.debug('Pool Oracle Address (wrapper):', { oracleAddress: pool?.oracle_address });
+  logger.debug('Underlying Price Feed Address:', { underlyingPriceFeedAddress });
+  logger.debug('Final Oracle Address used:', { oracleAddress });
+  logger.debug('Chain ID:', { chainId });
+  logger.debug('Available feeds for this chain:', { feeds: CHAIN_PRICE_FEED_OPTIONS[chainId] });
+  logger.debug('Price Feed Name:', { priceFeedName });
+  logger.debug('Asset CoinId:', { coinId: asset.coinId });
+  logger.debug('Is Oracle Address Valid:', { isValid: oracleAddress && oracleAddress.length === 42 && oracleAddress.startsWith('0x') });
+  logger.debug('Oracle Address Length:', { length: oracleAddress?.length });
+  logger.debug('=== END DEBUG ===');
 
 
   const previousPoolData = useRef(poolData);
@@ -1341,14 +1045,14 @@ export default function InteractionClient() {
 
   // Handle rebalance transaction confirmation
   useEffect(() => {
-    console.log('Rebalance confirmation effect:', { 
+    logger.debug('Rebalance confirmation effect:', { 
       isRebalanceConfirmed, 
       isTransactionPending, 
       rebalanceHash 
     });
     
     if (isRebalanceConfirmed && !isTransactionPending) {
-      console.log('Rebalance confirmed! Setting current time as last rebalance time...');
+      logger.debug('Rebalance confirmed! Setting current time as last rebalance time...');
       toast.success('Pool rebalanced successfully!');
       setIsDistributeLoading(false);
       
@@ -1356,13 +1060,13 @@ export default function InteractionClient() {
       const currentTime = new Date();
       setLastRebalanceTime(currentTime);
       localStorage.setItem(`lastRebalance_${poolId}`, currentTime.toISOString());
-      console.log('✅ Updated last rebalance time to current time:', currentTime.toLocaleString());
+      logger.debug('Updated last rebalance time to current time:', { rebalanceTime: currentTime.toLocaleString() });
       
       handlePoll();
       
       // Also fetch from blockchain to verify (but don't override if it fails)
       setTimeout(() => {
-        console.log('Fetching rebalance events from blockchain to verify...');
+        logger.debug('Fetching rebalance events from blockchain to verify...');
         fetchLastRebalanceEvent();
       }, 3000); // Wait 3 seconds for blockchain to update
     }
@@ -1444,7 +1148,7 @@ export default function InteractionClient() {
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                          <InfoIcon className="w-4 h-4 text-neutral-400 dark:text-neutral-600 hover:text-neutral-600 dark:hover:text-neutral-400 cursor-pointer transition-colors" />
+                          <Info className="w-4 h-4 text-neutral-400 dark:text-neutral-600 hover:text-neutral-600 dark:hover:text-neutral-400 cursor-pointer transition-colors" />
                   </TooltipTrigger>
                         <TooltipContent side="right" align="center">
                           <div className="bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 px-3 py-2 rounded-xl shadow-lg text-sm space-y-1">

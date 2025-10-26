@@ -14,6 +14,7 @@ export interface FormData {
   burnFee: string;
   creatorFee: string;
   treasuryFee: string;
+  initialDeposit: string;
   quoteTokenAddress?: string; 
   oracleDescription?: string; 
 };

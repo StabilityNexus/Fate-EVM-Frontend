@@ -9,7 +9,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { InfoIcon, Coins, Wallet } from "lucide-react";
+import { Info, Coins, Wallet } from "lucide-react";
+import { logger } from "@/lib/logger";
 import type { FormData } from "../FormData";
 import { useAccount, useChainId } from "wagmi";
 import { HEBESWAP_PAIRS } from "@/utils/hebeswapConfig";
@@ -91,7 +92,7 @@ const PoolConfigurationStep: React.FC<PoolConfigurationStepProps> = ({
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <InfoIcon className="h-4 w-4 text-gray-600/70 dark:text-gray-400/70 cursor-help" />
+                  <Info className="h-4 w-4 text-gray-600/70 dark:text-gray-400/70 cursor-help" />
                 </TooltipTrigger>
                 <TooltipContent className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400">
                   <p className="w-64 text-sm">
@@ -125,7 +126,7 @@ const PoolConfigurationStep: React.FC<PoolConfigurationStepProps> = ({
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <InfoIcon className="h-4 w-4 text-gray-600/70 dark:text-gray-400/70 cursor-help" />
+                  <Info className="h-4 w-4 text-gray-600/70 dark:text-gray-400/70 cursor-help" />
                 </TooltipTrigger>
                 <TooltipContent className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400">
                   <p className="w-64 text-sm">
@@ -159,7 +160,7 @@ const PoolConfigurationStep: React.FC<PoolConfigurationStepProps> = ({
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <InfoIcon className="h-4 w-4 text-gray-600/70 dark:text-gray-400/70 cursor-help" />
+                  <Info className="h-4 w-4 text-gray-600/70 dark:text-gray-400/70 cursor-help" />
                 </TooltipTrigger>
                 <TooltipContent className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400">
                   <p className="w-64 text-sm">
@@ -181,6 +182,45 @@ const PoolConfigurationStep: React.FC<PoolConfigurationStepProps> = ({
           </p>
         </div>
 
+        {/* Initial Deposit */}
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <Coins className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+            <Label className="text-sm font-medium text-gray-600 dark:text-gray-400">
+              Initial Deposit (Optional)
+            </Label>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Info className="h-4 w-4 text-gray-600/70 dark:text-gray-400/70 cursor-help" />
+                </TooltipTrigger>
+                <TooltipContent className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400">
+                  <p className="w-64 text-sm">
+                    Optional: Add an initial deposit of base tokens to the pool. This helps bootstrap liquidity and ensures the pool can function immediately. You can set this to 0 if you prefer to deposit later.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+          <Input
+            type="number"
+            placeholder="0"
+            min="0"
+            step="any"
+            value={formData.initialDeposit}
+            onChange={(e) => updateFormData({ initialDeposit: e.target.value })}
+            className={`transition-all focus:ring-2 focus:ring-black dark:focus:ring-white border-gray-200 dark:border-gray-700 text-black dark:text-white ${
+              errors.initialDeposit ? "border-red-500" : ""
+            }`}
+          />
+          {errors.initialDeposit && (
+            <p className="text-red-500 text-sm">{errors.initialDeposit}</p>
+          )}
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            Amount in base token units. Set to 0 if you don&apos;t want to deposit now.
+          </p>
+        </div>
+
         {/* Oracle Type Display */}
         <div className="space-y-2">
           <div className="flex items-center gap-2">
@@ -191,7 +231,7 @@ const PoolConfigurationStep: React.FC<PoolConfigurationStepProps> = ({
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <InfoIcon className="h-4 w-4 text-gray-600/70 dark:text-gray-400/70 cursor-help" />
+                  <Info className="h-4 w-4 text-gray-600/70 dark:text-gray-400/70 cursor-help" />
                 </TooltipTrigger>
                 <TooltipContent className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400">
                   <p className="w-64 text-sm">
@@ -243,7 +283,7 @@ const PoolConfigurationStep: React.FC<PoolConfigurationStepProps> = ({
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <InfoIcon className="h-4 w-4 text-gray-600/70 dark:text-gray-400/70 cursor-help" />
+                    <Info className="h-4 w-4 text-gray-600/70 dark:text-gray-400/70 cursor-help" />
                   </TooltipTrigger>
                   <TooltipContent className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400">
                     <p className="w-80 text-sm">
@@ -290,7 +330,7 @@ const PoolConfigurationStep: React.FC<PoolConfigurationStepProps> = ({
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <InfoIcon className="h-4 w-4 text-gray-600/70 dark:text-gray-400/70 cursor-help" />
+                      <Info className="h-4 w-4 text-gray-600/70 dark:text-gray-400/70 cursor-help" />
                     </TooltipTrigger>
                     <TooltipContent className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400">
                       <p className="w-64 text-sm">
@@ -303,11 +343,11 @@ const PoolConfigurationStep: React.FC<PoolConfigurationStepProps> = ({
               <select
                 value={formData.hebeswapPairAddress}
                 onChange={(e) => {
-                  console.log('Hebeswap pair selection changed:', e.target.value);
+                  logger.debug('Hebeswap pair selection changed:', { value: e.target.value });
                   const selectedPair = HEBESWAP_PAIRS.find(pair => pair.pairAddress === e.target.value);
-                  console.log('Selected pair:', selectedPair);
+                  logger.debug('Selected pair:', { selectedPair });
                   if (selectedPair) {
-                    console.log('Updating form data with:', {
+                    logger.debug('Updating form data with:', {
                       hebeswapPairAddress: selectedPair.pairAddress,
                       hebeswapQuoteToken: selectedPair.quoteToken
                     });

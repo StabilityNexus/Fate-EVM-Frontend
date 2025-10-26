@@ -265,6 +265,19 @@ export const CoinABI=[
   },
   {
     "type": "function",
+    "name": "mintInitialSupply",
+    "inputs": [
+      {
+        "name": "amount",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "name",
     "inputs": [],
     "outputs": [
@@ -837,17 +850,6 @@ export const CoinABI=[
   },
   {
     "type": "error",
-    "name": "AddressEmptyCode",
-    "inputs": [
-      {
-        "name": "target",
-        "type": "address",
-        "internalType": "address"
-      }
-    ]
-  },
-  {
-    "type": "error",
     "name": "ERC20InsufficientAllowance",
     "inputs": [
       {
@@ -934,33 +936,7 @@ export const CoinABI=[
   },
   {
     "type": "error",
-    "name": "FailedCall",
-    "inputs": []
-  },
-  {
-    "type": "error",
-    "name": "InsufficientBalance",
-    "inputs": [
-      {
-        "name": "balance",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "needed",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ]
-  },
-  {
-    "type": "error",
     "name": "InvalidFeeConfiguration",
-    "inputs": []
-  },
-  {
-    "type": "error",
-    "name": "InvalidOtherCoinAddress",
     "inputs": []
   },
   {
@@ -990,5 +966,6 @@ export const CoinABI=[
     "inputs": []
   }
 ]
+
 
 

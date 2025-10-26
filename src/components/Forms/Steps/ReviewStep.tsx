@@ -2,6 +2,7 @@
 
 import React from "react";
 import { Button } from "@/components/ui/button";
+import { logger } from "@/lib/logger";
 import type { FormData } from "../FormData";
 import { useAccount } from "wagmi";
 
@@ -90,6 +91,12 @@ const ReviewStep: React.FC<ReviewStepProps> = ({
               <span className="text-gray-600 dark:text-gray-400">Pool Creator:</span>
               <span className="font-medium text-black dark:text-white break-all">
                 {address || "Not specified"}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-600 dark:text-gray-400">Initial Deposit:</span>
+              <span className="font-medium text-black dark:text-white">
+                {formData.initialDeposit || "0"} tokens
               </span>
             </div>
           </div>
@@ -198,7 +205,7 @@ const ReviewStep: React.FC<ReviewStepProps> = ({
             disabled={isSubmitting}
             onClick={(e) => {
               e.preventDefault();
-              console.log("Review step submit button clicked");
+              logger.debug("Review step submit button clicked");
 
               onSubmit({
                 preventDefault: () => {},

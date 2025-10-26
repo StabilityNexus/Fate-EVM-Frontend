@@ -89,6 +89,37 @@ export default function AboutSection() {
             *In a world of uncertainty, we provide clarity — empowering you to predict, protect, and prosper.*
           </p>
         </div>
+
+        {/* Structured Data for SEO */}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "SoftwareApplication",
+              "name": "Fate Protocol",
+              "applicationCategory": "FinanceApplication",
+              "description": "Fate Protocol is a decentralized finance (DeFi) platform that enables users to trade prediction markets through perpetual prediction pools. Users can buy bullCoins to bet on price increases or bearCoins to bet on price decreases, creating a dynamic hedging mechanism against price volatility risks.",
+              "featureList": [
+                "Decentralized prediction markets on multiple blockchain networks",
+                "Perpetual prediction pools with continuous operation",
+                "Bull and Bear coin trading for price movement prediction",
+                "Real-time price feeds powered by Chainlink oracles",
+                "Automated market making for efficient trading",
+                "Multi-chain support: Ethereum, Polygon, BSC, Base, Ethereum Classic",
+                "Transparent smart contracts ensuring fairness and security",
+                "DeFi trading platform for cryptocurrency price prediction"
+              ],
+              "operatingSystem": "Web Browser",
+              "offers": {
+                "@type": "Offer",
+                "price": "0",
+                "priceCurrency": "USD"
+              },
+              "url": "https://evm.fate.stability.nexus"
+            })
+          }}
+        />
       </div>
     </section>
   );

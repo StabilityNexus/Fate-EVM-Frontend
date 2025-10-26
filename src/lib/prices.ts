@@ -2,6 +2,7 @@ import { ethers } from 'ethers';
 import { EvmPriceServiceConnection } from '@pythnetwork/pyth-evm-js';
 import { PredictionPoolABI } from '@/utils/abi/PredictionPool';
 import { Address } from 'viem';
+import { logger } from './logger';
 
 const PYTH_HERMES_ENDPOINT = 'https://hermes.pyth.network';
 
@@ -38,7 +39,7 @@ export async function fetchPythPriceUpdateData(priceFeedId:string): Promise<stri
     const connection = new EvmPriceServiceConnection(PYTH_HERMES_ENDPOINT);
     const priceFeeds = await connection.getPriceFeedsUpdateData([priceFeedId]);
 
-    console.log('✅ Received price update data:', {
+    logger.debug('Received price update data:', {
       length: priceFeeds.length,
       preview: priceFeeds[0]?.slice(0, 20) + '...'
     });
@@ -50,7 +51,7 @@ export async function fetchPythPriceUpdateData(priceFeedId:string): Promise<stri
     return priceFeeds;
   } catch (err) {
     const pythError = err as PythError;
-    console.error('❌ Pyth fetch error:', {
+    logger.error('Pyth fetch error:', undefined, {
       message: pythError.message,
       stack: pythError.stack,
       response: pythError.response?.data
@@ -62,8 +63,8 @@ export async function fetchPythPriceUpdateData(priceFeedId:string): Promise<stri
 export async function getCurrentPrice(
   walletClient: WalletClient,
   vaultId: Address,
-  priceFeedId: string,
-  oracleAddress: Address
+  priceFeedId?: string,
+  oracleAddress?: Address
 ): Promise<number>  {
   try {
     const provider = new ethers.BrowserProvider(walletClient.transport);
@@ -71,16 +72,21 @@ export async function getCurrentPrice(
 
     const poolContract = new ethers.Contract(vaultId, PredictionPoolABI, signer);
 
-    // 1. Try getting current price (no args now)
+    // 1. Try getting current price directly (works for Chainlink and Hebeswap)
     try {
       const rawPrice: bigint = await poolContract.getCurrentPrice();
       // rawPrice is uint256 with 18 decimals from contract
       return Number(ethers.formatUnits(rawPrice, 18));
     } catch (initialPriceError) {
-      console.warn('⚠️ Initial fetch failed. Likely no price pushed yet.', initialPriceError);
+      logger.warn('Direct price fetch failed. Checking if Pyth oracle...', { error: initialPriceError });
     }
 
-    // 2. Fetch price update data
+    // 2. If direct fetch failed and we have priceFeedId/oracleAddress, try Pyth oracle
+    if (!priceFeedId || !oracleAddress) {
+      throw new Error('Unable to fetch price: No price available and Pyth parameters missing');
+    }
+
+    // Fetch price update data for Pyth
     const priceUpdateData = await fetchPythPriceUpdateData(priceFeedId);
 
     // 3. Query update fee
@@ -100,7 +106,7 @@ export async function getCurrentPrice(
 
     // 4. Estimate gas
     try {
-      console.log('⛽ Estimating gas for updatePriceAndDistributeOutcome...');
+      logger.debug('Estimating gas for updatePriceAndDistributeOutcome...');
       const gasEstimate: bigint = await poolContract.updatePriceAndDistributeOutcome.estimateGas(
         priceUpdateData,
         { value: feeWithBuffer }
@@ -116,10 +122,10 @@ export async function getCurrentPrice(
         }
       );
       await tx.wait();
-      console.log('✅ Transaction confirmed.');
+      logger.debug('Transaction confirmed.');
     } catch (txError) {
       const contractError = txError as ContractError;
-      console.error('❌ Transaction error during updatePriceAndDistributeOutcome:', {
+      logger.error('Transaction error during updatePriceAndDistributeOutcome:', undefined, {
         message: contractError.message,
         reason: contractError.reason,
         code: contractError.code,
@@ -135,7 +141,7 @@ export async function getCurrentPrice(
 
   } catch (err) {
     const contractError = err as ContractError;
-    console.error('❌ Final error in getCurrentPrice:', {
+    logger.error('Final error in getCurrentPrice:', undefined, {
       message: contractError.message,
       reason: contractError.reason,
       code: contractError.code,

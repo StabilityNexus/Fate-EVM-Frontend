@@ -14,7 +14,7 @@ import { getPriceFeedName } from "@/utils/supportedChainFeed";
 import { getChainConfig } from "@/utils/chainConfig";
 import type { Token, Pool, ChainLoadingState } from "@/lib/types";
 import { useFatePoolsStorage } from "@/lib/fatePoolHook";
-import type { SupportedChainId } from "@/utils/indexedDBTypes";
+import type { SupportedChainId } from "@/lib/indexeddb/config";
 
 // Import the reusable sub-components
 import ExploreHeader from "@/components/Explore/ExploreHeader";
@@ -22,6 +22,7 @@ import PoolSearch from "@/components/Explore/PoolSearch";
 import StatusMessages from "@/components/Explore/StatusMessages";
 import PoolList from "@/components/Explore/PoolList";
 import { Loading } from "@/components/ui/loading";
+import { logger } from "@/lib/logger";
 
 // Constants for configuration
 const DENOMINATOR = 100_000;
@@ -135,27 +136,20 @@ function ExploreFatePoolsClient() {
         // Convert Token to TokenDetails format for storage
         const tokenDetails = {
           id: token.id,
-          chainId: sourceChainId,
-          prediction_pool: token.prediction_pool,
-          other_token: token.other_token,
-          asset: token.asset,
-          name: token.name,
+          poolAddress: token.prediction_pool,
+          tokenType: token.symbol.includes('Bull') ? 'bull' as const : 'bear' as const,
           symbol: token.symbol,
-          vault_creator: token.vault_creator,
-          mint_fee: token.mint_fee,
-          burn_fee: token.burn_fee,
-          creator_fee: token.creator_fee,
-          treasury_fee: token.treasury_fee,
-          asset_balance: token.asset_balance,
-          supply: token.supply,
-          priceBuy: token.priceBuy || 0,
-          priceSell: token.priceSell || 0
+          name: token.name,
+          totalSupply: token.supply.toString(),
+          reserve: token.asset_balance.toString(),
+          price: token.priceBuy || 0,
+          chainId: sourceChainId
         };
         await batchSaveTokens([tokenDetails]);
       }
       return token;
     } catch (error) {
-      console.error(`Error fetching coin data for ${coinAddr}:`, error);
+      logger.error(`Error fetching coin data for ${coinAddr}:`, error instanceof Error ? error : undefined);
       return null;
     }
   }, [isInitialized, batchSaveTokens]);
@@ -169,7 +163,7 @@ function ExploreFatePoolsClient() {
     
     // If factory address is zero, show error and return empty
     if (!isAddress(factoryAddress) || factoryAddress === "0x0000000000000000000000000000000000000000") {
-      console.log(`Chain ${chainId} has no factory address configured`);
+      logger.debug(`Chain ${chainId} has no factory address configured`);
       updateChainState(chainId, { error: `No factory address configured for this chain`, loading: false });
       return [];
     }
@@ -186,18 +180,26 @@ function ExploreFatePoolsClient() {
         
         await publicClient.getBlockNumber();
         
-        console.log(`Fetching pools from chain ${chainId} (${chainConfig.name}) using factory: ${factoryAddress}`);
+        logger.debug(`Fetching pools from chain ${chainId} (${chainConfig.name}) using factory: ${factoryAddress}`, {
+          chainId,
+          chainName: chainConfig.name,
+          factoryAddress
+        });
         
         const poolAddresses = (await publicClient.readContract({
           address: factoryAddress as Address,
           abi: PredictionPoolFactoryABI,
           functionName: "getAllPools"
         }).catch((error) => {
-          console.error(`Failed to call getAllPools on chain ${chainId}:`, error);
+          logger.error(`Failed to call getAllPools on chain ${chainId}:`, error instanceof Error ? error : undefined);
           return [];
         })) as Address[];
 
-        console.log(`Found ${poolAddresses.length} pools on chain ${chainId}:`, poolAddresses);
+        logger.debug(`Found ${poolAddresses.length} pools on chain ${chainId}:`, {
+          poolCount: poolAddresses.length,
+          chainId,
+          poolAddresses
+        });
         
         updateChainState(chainId, { poolCount: poolAddresses.length });
         if (poolAddresses.length === 0) {
@@ -209,7 +211,7 @@ function ExploreFatePoolsClient() {
         for (let i = 0; i < poolAddresses.length; i += BATCH_SIZE) {
           const batch = poolAddresses.slice(i, i + BATCH_SIZE);
           const batchPromises = batch.map(async (addr: Address): Promise<Pool | null> => {
-            if (!isAddress(addr)) { console.warn(`Invalid pool address: ${addr}`); return null; }
+            if (!isAddress(addr)) { logger.warn(`Invalid pool address: ${addr}`); return null; }
             const [name, baseToken, oracleAddress, bullAddr, bearAddr, vaultCreator, mintFee, burnFee, creatorFee, treasuryFee] = await Promise.all([
               publicClient.readContract({ address: addr, abi: PredictionPoolABI, functionName: "poolName" }).catch((): string => "Unknown Pool"),
               publicClient.readContract({ address: addr, abi: PredictionPoolABI, functionName: "baseToken" }).catch((): Address => "0x0000000000000000000000000000000000000000"),
@@ -235,20 +237,30 @@ function ExploreFatePoolsClient() {
                   functionName: "priceFeed"
                 });
                 underlyingPriceFeedAddress = priceFeedAddress as Address;
-                console.log(`Pool ${addr}: Oracle ${oracleAddress} -> Underlying Pricefeed ${underlyingPriceFeedAddress}`);
+                logger.debug(`Pool ${addr}: Oracle ${oracleAddress} -> Underlying Pricefeed ${underlyingPriceFeedAddress}`, {
+                  poolAddress: addr,
+                  oracleAddress,
+                  underlyingPriceFeedAddress
+                });
               } catch (oracleError) {
-                console.warn(`Failed to get underlying pricefeed from oracle ${oracleAddress}:`, oracleError);
+                logger.warn(`Failed to get underlying pricefeed from oracle ${oracleAddress}:`, {
+                  oracleAddress,
+                  error: oracleError
+                });
                 // Fallback to oracle address if we can't get the underlying pricefeed
-                console.log(`Pool ${addr}: Using oracle address as fallback: ${oracleAddress}`);
+                logger.debug(`Pool ${addr}: Using oracle address as fallback: ${oracleAddress}`, {
+                  poolAddress: addr,
+                  oracleAddress
+                });
               }
             } else {
-              console.log(`Pool ${addr}: No oracle address found, using fallback`);
+              logger.debug(`Pool ${addr}: No oracle address found, using fallback`);
             }
             const [bull, bear] = await Promise.all([
               fetchCoin(bullAddr as Address, bearAddr as Address, addr, publicClient, chainId as SupportedChainId),
               fetchCoin(bearAddr as Address, bullAddr as Address, addr, publicClient, chainId as SupportedChainId)
             ]);
-            if (!bull || !bear) { console.warn(`Failed to fetch token data for pool ${addr} on chain ${chainId}`); return null; }
+            if (!bull || !bear) { logger.warn(`Failed to fetch token data for pool ${addr} on chain ${chainId}`); return null; }
             const bullSupply = Number(formatUnits(bull.supply, 18));
             const bearSupply = Number(formatUnits(bear.supply, 18));
             const bullPriceBuy = bull.priceBuy ?? 0;
@@ -268,40 +280,55 @@ function ExploreFatePoolsClient() {
           // Convert Pool to PoolDetails format for storage
           const poolDetails = pools.map(pool => ({
             id: pool.id,
-            chainId: pool.chainId as SupportedChainId,
             name: pool.name,
-            baseToken: pool.baseToken,
-            priceFeedAddress: pool.priceFeedAddress,
-            creator: pool.creator,
+            description: `Prediction pool for ${pool.name}`,
+            assetAddress: pool.baseToken,
+            oracleAddress: pool.priceFeedAddress,
+            currentPrice: 0, // Will be updated with real price data
+            bullReserve: "0",
+            bearReserve: "0",
+            bullToken: {
+              id: `${pool.id}-bull`,
+              symbol: `${pool.name}Bull`,
+              name: `${pool.name} Bull Token`,
+              totalSupply: "0"
+            },
+            bearToken: {
+              id: `${pool.id}-bear`,
+              symbol: `${pool.name}Bear`,
+              name: `${pool.name} Bear Token`,
+              totalSupply: "0"
+            },
+            vaultCreator: pool.creator,
+            creatorFee: pool.vaultCreatorFee,
+            mintFee: pool.mintFee ?? 0,
+            burnFee: pool.burnFee ?? 0,
+            treasuryFee: pool.treasuryFee,
             bullPercentage: pool.bullPercentage,
             bearPercentage: pool.bearPercentage,
-            vaultFee: pool.vaultFee,
-            vaultCreatorFee: pool.vaultCreatorFee,
-            treasuryFee: pool.treasuryFee,
-            chainName: pool.chainName
+            chainId: pool.chainId as SupportedChainId
           }));
           await batchSavePools(poolDetails);
           await saveChainStatus({
             chainId: chainId as SupportedChainId,
-            chainName: chainConfig.name,
-            poolCount: pools.length,
-            lastSyncTime: Date.now(),
-            isLoading: false,
-            error: null
+            isActive: true,
+            lastBlockNumber: 0, // Will be updated with real block number
+            lastUpdateTime: Date.now(),
+            poolCount: pools.length
           });
         }
 
         updateChainState(chainId, { loading: false, error: null });
         return pools;
       } catch (error) {
-        console.error(`Failed to fetch pools from factory on chain ${chainId}:`, error);
+        logger.error(`Failed to fetch pools from factory on chain ${chainId}:`, error instanceof Error ? error : undefined);
         // Fall back to cached data if factory fetch fails
       }
     }
     
     // Fallback to cached data when offline or factory fetch fails
     if (isInitialized) {
-      console.log(`Falling back to cached data for chain ${chainId}`);
+      logger.debug(`Falling back to cached data for chain ${chainId}`);
       try {
         const cachedPools = await getAllPools();
         const filteredPools = cachedPools.filter(p => p.chainId === chainId);
@@ -319,41 +346,45 @@ function ExploreFatePoolsClient() {
                 const bull: Token = {
                   ...bullDetails,
                   id: bullDetails.id as Address,
-                  prediction_pool: bullDetails.prediction_pool as Address,
-                  other_token: bullDetails.other_token as Address,
-                  asset: bullDetails.asset as Address,
+                  prediction_pool: bullDetails.poolAddress as Address,
+                  other_token: bearDetails.id as Address,
+                  asset: poolDetails.assetAddress as Address,
                   vault_creator: bullDetails.vault_creator as Address,
                   mint_fee: bullDetails.mint_fee as bigint,
                   burn_fee: bullDetails.burn_fee as bigint,
                   creator_fee: bullDetails.creator_fee as bigint,
                   treasury_fee: bullDetails.treasury_fee as bigint,
+                  asset_balance: BigInt(bullDetails.reserve || '0'),
+                  supply: BigInt(bullDetails.totalSupply || '0'),
                 };
                 const bear: Token = {
                   ...bearDetails,
                   id: bearDetails.id as Address,
-                  prediction_pool: bearDetails.prediction_pool as Address,
-                  other_token: bearDetails.other_token as Address,
-                  asset: bearDetails.asset as Address,
+                  prediction_pool: bearDetails.poolAddress as Address,
+                  other_token: bullDetails.id as Address,
+                  asset: poolDetails.assetAddress as Address,
                   vault_creator: bearDetails.vault_creator as Address,
                   mint_fee: bearDetails.mint_fee as bigint,
                   burn_fee: bearDetails.burn_fee as bigint,
                   creator_fee: bearDetails.creator_fee as bigint,
                   treasury_fee: bearDetails.treasury_fee as bigint,
+                  asset_balance: BigInt(bearDetails.reserve || '0'),
+                  supply: BigInt(bearDetails.totalSupply || '0'),
                 };
                 
                 convertedPools.push({
                   id: poolDetails.id as Address,
                   name: poolDetails.name,
-                  baseToken: poolDetails.baseToken as Address,
-                  priceFeedAddress: poolDetails.priceFeedAddress as Address,
-                  creator: poolDetails.creator as Address,
+                  baseToken: poolDetails.assetAddress as Address,
+                  priceFeedAddress: poolDetails.oracleAddress as Address,
+                  creator: poolDetails.vaultCreator as Address,
                   chainId: poolDetails.chainId,
-                  chainName: poolDetails.chainName,
-                  vaultFee: poolDetails.vaultFee,
-                  vaultCreatorFee: poolDetails.vaultCreatorFee,
-                  treasuryFee: poolDetails.treasuryFee,
-                  mintFee: poolDetails.vaultFee ?? 0, // Use vaultFee as mintFee for cached data
-                  burnFee: 0, // Default burnFee for cached data
+                  chainName: poolDetails.chainName || 'Unknown',
+                  vaultFee: poolDetails.mintFee ?? 0,
+                  vaultCreatorFee: poolDetails.creatorFee ?? 0,
+                  treasuryFee: poolDetails.treasuryFee ?? 0,
+                  mintFee: poolDetails.mintFee ?? 0,
+                  burnFee: poolDetails.burnFee ?? 0, // Use saved burnFee or default to 0
                   bullPercentage: poolDetails.bullPercentage,
                   bearPercentage: poolDetails.bearPercentage,
                   bullToken: bull,
@@ -363,12 +394,12 @@ function ExploreFatePoolsClient() {
               }
             }
           } catch (tokenError) {
-            console.error(`Failed to load tokens for pool ${poolDetails.id} from cache:`, tokenError);
+            logger.error(`Failed to load tokens for pool ${poolDetails.id} from cache:`, tokenError instanceof Error ? tokenError : undefined);
           }
         }
         return convertedPools;
       } catch (cacheError) {
-        console.error(`Failed to load cached pools for chain ${chainId}:`, cacheError);
+        logger.error(`Failed to load cached pools for chain ${chainId}:`, cacheError instanceof Error ? cacheError : undefined);
         updateChainState(chainId, { loading: false, error: `Failed to load cached data` });
         return [];
       }
@@ -411,18 +442,24 @@ function ExploreFatePoolsClient() {
     }
 
     try {
-      console.log(`Fetching pools from ${chainsToFetch.length} chains:`, chainsToFetch);
+      logger.debug(`Fetching pools from ${chainsToFetch.length} chains:`, { chainsToFetch });
       const allPools: Pool[] = [];
       let successfulChains = 0;
       let totalErrors = 0;
 
       for (const chainId of chainsToFetch) {
         const factoryAddress = (FatePoolFactories as FactoryAddresses)[chainId.toString()];
-        console.log(`Processing chain ${chainId} with factory address: ${factoryAddress}`);
+        logger.debug(`Processing chain ${chainId} with factory address: ${factoryAddress}`, {
+          chainId,
+          factoryAddress
+        });
         
         try {
           const poolsFromChain = await fetchPoolsFromChain(chainId, factoryAddress);
-          console.log(`Chain ${chainId} returned ${poolsFromChain.length} pools`);
+          logger.debug(`Chain ${chainId} returned ${poolsFromChain.length} pools`, {
+            chainId,
+            poolCount: poolsFromChain.length
+          });
           allPools.push(...poolsFromChain);
           if (poolsFromChain.length > 0) {
             successfulChains++;
@@ -430,7 +467,7 @@ function ExploreFatePoolsClient() {
           updateChainState(chainId, { loading: false, error: null, poolCount: poolsFromChain.length });
         } catch (error) {
           totalErrors++;
-          console.error(`Chain ${chainId} failed:`, error);
+          logger.error(`Chain ${chainId} failed:`, error instanceof Error ? error : undefined);
           updateChainState(chainId, { loading: false, error: (error as Error)?.message || 'Unknown error' });
         }
       }
@@ -444,9 +481,9 @@ function ExploreFatePoolsClient() {
         ? `Loaded ${uniquePools.length} pools from connected chain (${getChainConfig(currentChainId)?.name})`
         : `Loaded ${uniquePools.length} pools from ${successfulChains}/${chainCount} chains`;
       
-      console.log(isConnected && currentChainId && isConnectedChainSupported
-        ? `🚀 Pools from connected chain (${getChainConfig(currentChainId)?.name}):`
-        : "🚀 All fetched pools from all supported chains:", uniquePools);
+      logger.debug(isConnected && currentChainId && isConnectedChainSupported
+        ? `Pools from connected chain (${getChainConfig(currentChainId)?.name}):`
+        : "All fetched pools from all supported chains:", { uniquePools });
               if (showToast) {
           if (totalErrors > 0) { 
             toast.warning(`${message}. ${totalErrors} chains had errors.`); 
@@ -461,7 +498,7 @@ function ExploreFatePoolsClient() {
           }
         }
     } catch (error) {
-      console.error("Failed to fetch pools:", error);
+      logger.error("Failed to fetch pools:", error instanceof Error ? error : undefined);
       if (showToast) { toast.error("Failed to fetch pools. Please try again."); }
     } finally {
       setLoading(false);

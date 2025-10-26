@@ -1,5 +1,6 @@
 import { ethers } from "ethers";
 import {PredictionPoolABI} from "./abi/PredictionPool";
+import { logger } from "@/lib/logger";
 
 const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL!;
 const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_PREDICTION_POOL_ADDRESS!;
@@ -9,7 +10,7 @@ export function getPredictionPoolContract() {
     const provider = new ethers.JsonRpcProvider(RPC_URL);
     return new ethers.Contract(CONTRACT_ADDRESS, PredictionPoolABI, provider);
   } catch (error) {
-    console.error('Failed to create prediction pool contract:', error);
+    logger.error('Failed to create prediction pool contract:', error instanceof Error ? error : undefined);
     throw new Error('Unable to initialize prediction pool contract');
   }
 }
