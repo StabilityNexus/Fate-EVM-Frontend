@@ -63,7 +63,7 @@ export interface PredictionPool {
   vaultCreatorFee: number;
   treasuryFee: number;
   isInitialized?: boolean;
-  oracleType?: 'chainlink' | 'hebeswap' | 'pyth';
+  oracleType?: 'chainlink' | 'hebeswap';
 }
 
 export interface Pool extends PredictionPool {
