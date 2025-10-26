@@ -85,7 +85,7 @@ Built with cutting-edge Web3 technologies, Fate Protocol delivers high-performan
 - **TanStack React Query** for data sync
 
 ### Smart Contracts
-- **Multi-Chain**: Base, BNB Smart Chain, Ethereum Classic, Milkomeda
+- **Multi-Chain**: Ethereum, Base, BNB Smart Chain, Ethereum Classic and Polygon 
 - **Oracles**: Chainlink and Hebeswap price feeds
 - **Gas-Optimized**: Minimal transaction costs
 - **Audited**: Transparent fee structures

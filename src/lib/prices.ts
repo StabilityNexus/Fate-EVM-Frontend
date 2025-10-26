@@ -16,16 +16,6 @@ interface ContractError extends Error {
   data?: unknown;
 }
 
-
-interface TransactionReceipt {
-  hash: string;
-  blockNumber: number;
-  gasUsed: bigint;
-  status: number;
-  [key: string]: unknown;
-}
-
-
 export async function getCurrentPrice(
   walletClient: WalletClient,
   vaultId: Address
