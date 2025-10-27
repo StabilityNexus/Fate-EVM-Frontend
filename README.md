@@ -76,7 +76,7 @@ Watch the full walkthrough of Fate Protocol to understand the setup, features, a
 
 #### 2. Interaction Tutorial
 Learn how to create pools, buy/sell bullCoins and bearCoins, and manage your portfolio:
-[Fate Protocol Interaction Walkthrough](https://drive.google.com/file/d/10TZ3CIDKiyNDCG3m4sCJ8Qs7QSLJu6y6/view?usp=sharing)
+[Fate Protocol Interaction Walkthrough](https://drive.google.com/file/d/11tthnlqvWHdJjyYvYsvtZW19fug5N6Pu/view?usp=drive_link)
 
 ## Technical Architecture
 
