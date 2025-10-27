@@ -70,12 +70,10 @@ Built with cutting-edge Web3 technologies, Fate Protocol delivers high-performan
 
 ## 🎬 Video Tutorials
 
-#### 1. Protocol Walkthrough
-Watch the full walkthrough of Fate Protocol to understand the setup, features, and architecture:
+**1. Protocol Walkthrough:**
 [Fate Protocol Walkthrough](https://drive.google.com/file/d/1JHGfxee_9Yb33tlT0_rH85BZTfZGjxck/view?usp=sharing)
 
-#### 2. Interaction Tutorial
-Learn how to create pools, buy/sell bullCoins and bearCoins, and manage your portfolio:
+**2. Interaction Tutorial:**
 [Fate Protocol Interaction Walkthrough](https://drive.google.com/file/d/11tthnlqvWHdJjyYvYsvtZW19fug5N6Pu/view?usp=drive_link)
 
 ## Technical Architecture
@@ -207,7 +205,7 @@ Navigate to [http://localhost:3000](http://localhost:3000) to see the applicatio
 
 ## Project Structure
 
-```
+```text
 src/
 │   ├── [pool]/            # Pool interactions
 │   ├── createPool/        # Pool creation
