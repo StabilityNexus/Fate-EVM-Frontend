@@ -116,11 +116,15 @@ User Agent: ${navigator.userAgent}
 URL: ${window.location.href}
       `.trim();
       
-      navigator.clipboard.writeText(errorReport).then(() => {
-        alert('Error details copied to clipboard. Please share this with support.');
-      }).catch(() => {
+      if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+        navigator.clipboard.writeText(errorReport).then(() => {
+          alert('Error details copied to clipboard. Please share this with support.');
+        }).catch(() => {
+          alert(`Error ID: ${errorId}\nPlease share this with support.`);
+        });
+      } else {
         alert(`Error ID: ${errorId}\nPlease share this with support.`);
-      });
+      }
     }
   };
 

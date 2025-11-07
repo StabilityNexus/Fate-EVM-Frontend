@@ -12,4 +12,4 @@ export const IOracleABI = [
     ],
     "stateMutability": "view"
   }
-];
+] as const;

@@ -1,3 +1,4 @@
+
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
@@ -24,35 +25,21 @@ import {
   Activity,
   DollarSign,
 } from "lucide-react";
-import { useState, useEffect, useMemo, useCallback } from "react";
-import { useAccount, useReadContracts } from "wagmi";
-import { formatUnits, Address, isAddress } from "viem";
+import { useState, useEffect, useMemo } from "react";
+import { useAccount } from "wagmi";
+import { formatUnits, Address } from "viem";
 import { useRouter } from "next/navigation";
-import { useFatePoolsStorage } from "@/lib/fatePoolHook";
-import { SupportedChainId, PortfolioCache, PortfolioPosition } from "@/lib/indexeddb/config";
-import { FatePoolsIndexedDBManager } from "@/lib/indexeddb/manager";
+import { getPortfolioSnapshot, getRecentTransactions, updatePortfolioSnapshot } from "@/lib/indexeddb/portfolio";
+import { PortfolioSnapshot, CachedTransaction, PortfolioHolding } from "@/lib/types";
 import { PredictionPoolABI } from "@/utils/abi/PredictionPool";
 import { CoinABI } from "@/utils/abi/Coin";
 import { FatePoolFactories } from "@/utils/addresses";
 import { getChainConfig } from "@/utils/chainConfig";
-import { getPriceFeedName } from "@/utils/supportedChainFeed";
 import { PredictionPoolFactoryABI } from "@/utils/abi/PredictionPoolFactory";
-import { ChainlinkOracleABI } from "@/utils/abi/ChainlinkOracle";
-import { ERC20ABI } from "@/utils/abi/ERC20";
-import { createPublicClient, http } from "viem";
+import { createPublicClient, http, formatUnits as fromWei } from "viem";
+import { IOracleABI } from "@/utils/abi/IOracle";
+import { getPriceFeedName } from "@/utils/supportedChainFeed";
 
-// Helper function to get chain name
-const getChainName = (chainId: number): string => {
-  switch (chainId) {
-    case 1: return 'Ethereum Mainnet';
-    case 137: return 'Polygon';
-    case 56: return 'BSC';
-    case 8453: return 'Base';
-    case 61: return 'Ethereum Classic';
-    case 11155111: return 'Sepolia Testnet';
-    default: return `Chain ${chainId}`;
-  }
-};
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as const;
 
@@ -81,430 +68,6 @@ const BULL_COLORS = [
   "#000000", // pure black
 ];
 
-// Safe number utility
-const safeNumber = (value: any, fallback = 0): number => {
-  const num = Number(value);
-  return isFinite(num) && !isNaN(num) ? num : fallback;
-};
-
-
-// Enhanced token metrics calculation with maximum accuracy using all available data
-const calculateTokenMetricsWithEvents = async (
-  reserve: number,
-  supply: number,
-  userTokens: number,
-  tokenAddress: string,
-  userAddress: string,
-  chainId: number,
-) => {
-  const currentPrice = safeNumber(supply > 0 ? reserve / supply : 0);
-  const currentValue = userTokens * currentPrice;
-
-  try {
-    // Get detailed transactions from events (both Buy/Sell and DetailedBuy/DetailedSell)
-    const transactions = await fetchUserTransactions(tokenAddress, userAddress, chainId);
-    
-    if (transactions.length === 0) {
-      // Fallback to current price if no transactions found
-      const costBasis = userTokens * currentPrice;
-      return {
-        price: currentPrice,
-        currentValue,
-        costBasis,
-        pnL: 0,
-        returns: 0,
-        totalFeesPaid: 0,
-        netInvestment: 0,
-        grossInvestment: 0
-      };
-    }
-
-    // Correct FIFO-based P&L calculation - fees are transaction costs, not investment losses
-    let totalCostBasis = 0;
-    let totalFeesPaid = 0;
-    let realizedPnL = 0;
-    let grossInvestment = 0;
-    const buyQueue: Array<{ 
-      amount: number;              // remaining tokens
-      initialAmount: number;       // original tokens bought
-      price: number;
-      fees: number;
-      grossAmount: number;         // investment incl. fees
-      netAmount: number;           // investment excl. fees
-      timestamp: number;
-      blockNumber: number;
-    }> = [];
-
-    console.debug(`Starting correct FIFO calculation for ${userTokens} current tokens`);
-
-    // Process transactions chronologically
-    const sortedTxns = transactions.sort((a: any, b: any) => Number(a.blockNumber) - Number(b.blockNumber));
-    
-    for (const tx of sortedTxns) {
-      if (tx.type === 'buy') {
-        // CORRECTED: Track net investment (excluding fees) as cost basis
-        const feePaid = (tx as any).feePaid || 0;
-        const netInvestment = tx.amountAsset - feePaid; // Actual investment amount
-        
-        grossInvestment += tx.amountAsset; // Total paid (including fees)
-        totalFeesPaid += feePaid;
-        totalCostBasis += netInvestment; // Net investment (excluding fees)
-        
-        buyQueue.push({ 
-          amount: tx.amountCoin,
-          initialAmount: tx.amountCoin,
-          price: tx.price,
-          fees: feePaid,
-          grossAmount: tx.amountAsset,
-          netAmount: netInvestment, // Add net amount for correct cost basis
-          timestamp: (tx as any).timestamp || 0,
-          blockNumber: Number(tx.blockNumber)
-        });
-        
-        console.debug(`Buy: ${tx.amountCoin} tokens @ ${tx.price} WETH/token, Net invested: ${netInvestment} WETH (fees: ${feePaid} WETH)`, {
-          amountCoin: tx.amountCoin,
-          price: tx.price,
-          netInvestment,
-          feePaid
-        });
-      } else if (tx.type === 'sell') {
-        let remainingToSell = tx.amountCoin;
-        const sellValue = tx.amountAsset;
-        let costOfSold = 0;
-        const feesOnThisSale = (tx as any).feePaid || 0;
-
-        console.debug(`Sell: ${tx.amountCoin} tokens for ${tx.amountAsset} WETH, Fees: ${feesOnThisSale} WETH`, {
-          amountCoin: tx.amountCoin,
-          amountAsset: tx.amountAsset,
-          fees: feesOnThisSale
-        });
-
-        // FIFO: Sell from oldest purchases first
-        while (remainingToSell > 0 && buyQueue.length > 0) {
-          const oldestBuy = buyQueue[0];
-          const amountFromThisBuy = Math.min(remainingToSell, oldestBuy.amount);
-          
-          // CORRECTED: Use net amount (excluding fees) for cost basis calculation
-          const costPerToken = oldestBuy.netAmount / oldestBuy.initialAmount;
-          costOfSold += amountFromThisBuy * costPerToken;
-          
-          remainingToSell -= amountFromThisBuy;
-          oldestBuy.amount -= amountFromThisBuy;
-          
-          console.debug(`FIFO: Sold ${amountFromThisBuy} @ ${costPerToken} WETH/token (net) = ${amountFromThisBuy * costPerToken} WETH cost`, {
-            amountFromThisBuy,
-            costPerToken,
-            totalCost: amountFromThisBuy * costPerToken
-          });
-          
-          if (oldestBuy.amount === 0) {
-            buyQueue.shift();
-          }
-        }
-        
-        // Calculate realized P&L (sell value - gross cost basis)
-        const thisSaleRealizedPnL = sellValue - costOfSold;
-        realizedPnL += thisSaleRealizedPnL;
-        totalFeesPaid += feesOnThisSale;
-        
-        console.debug(`Sale P&L: ${thisSaleRealizedPnL} WETH (${sellValue} received - ${costOfSold} net cost)`, {
-          realizedPnL: thisSaleRealizedPnL,
-          sellValue,
-          costOfSold
-        });
-      }
-    }
-
-    // Calculate remaining cost basis for current holdings (using net amounts)
-    const remainingCostBasis = buyQueue.reduce((sum, buy) => {
-      const costPerToken = buy.netAmount / buy.initialAmount;
-      return sum + buy.amount * costPerToken;
-    }, 0);
-    
-    // Check if there were any sell transactions (not based on mutated queue)
-    const hadSell = transactions.some((t: any) => t.type === 'sell');
-    
-    // Use totalCostBasis if no sells, otherwise remainingCostBasis
-    const actualCostBasis = hadSell ? remainingCostBasis : totalCostBasis;
-    
-    const unrealizedPnL = currentValue - actualCostBasis;
-    const totalPnL = realizedPnL + unrealizedPnL;
-    const netInvestment = grossInvestment - totalFeesPaid;
-    
-    const returns = actualCostBasis > 0 ? (totalPnL / actualCostBasis) * 100 : 0;
-
-    console.debug(`CORRECTED FIFO Results:`, {
-      hadSell,
-      grossInvestment,
-      totalFeesPaid,
-      netInvestment: grossInvestment - totalFeesPaid,
-      totalCostBasis,
-      remainingCostBasis,
-      actualCostBasis,
-      currentValue,
-      realizedPnL,
-      unrealizedPnL,
-      totalPnL,
-      returns,
-      buyQueueLength: buyQueue.length
-    });
-    console.debug(`User tokens: ${userTokens}`);
-
-    // For sold positions (userTokens = 0), return comprehensive data
-    if (userTokens === 0) {
-      console.debug(`Position fully sold - showing realized P&L only`);
-      return {
-        price: currentPrice,
-        currentValue: 0,
-        costBasis: totalCostBasis,
-        pnL: realizedPnL,
-        returns: totalCostBasis > 0 ? (realizedPnL / totalCostBasis) * 100 : 0,
-        totalFeesPaid,
-        netInvestment,
-        grossInvestment
-      };
-    }
-
-    return {
-      price: currentPrice,
-      currentValue,
-      costBasis: actualCostBasis,
-      pnL: totalPnL,
-      returns,
-      totalFeesPaid,
-      netInvestment,
-      grossInvestment
-    };
-
-  } catch (error) {
-    console.error('Error calculating enhanced metrics with events:', error instanceof Error ? error : new Error(String(error)));
-    // Fallback to simple calculation
-    const costBasis = userTokens * currentPrice;
-    return {
-      price: currentPrice,
-      currentValue,
-      costBasis,
-      pnL: 0,
-      returns: 0,
-      totalFeesPaid: 0,
-      netInvestment: 0,
-      grossInvestment: 0
-    };
-  }
-};
-
-// Fetch user transactions from blockchain events
-const fetchUserTransactions = async (tokenAddress: string, userAddress: string, chainId: number) => {
-  try {
-    console.debug(`Fetching transactions for token: ${tokenAddress}, user: ${userAddress}, chain: ${chainId}`, {
-      tokenAddress,
-      userAddress,
-      chainId
-    });
-    
-    const chainConfig = getChainConfig(chainId);
-    if (!chainConfig) {
-      console.warn('No chain config found for chainId:', { chainId });
-      return [];
-    }
-
-    const publicClient = createPublicClient({
-      chain: chainConfig.chain,
-      transport: http()
-    });
-
-    // Buy event ABI
-    const buyEventABI = {
-      type: 'event',
-      name: 'Buy',
-      inputs: [
-        { name: 'buyer', type: 'address', indexed: true, internalType: 'address' },
-        { name: 'to', type: 'address', indexed: true, internalType: 'address' },
-        { name: 'amountAsset', type: 'uint256', indexed: false, internalType: 'uint256' },
-        { name: 'amountCoin', type: 'uint256', indexed: false, internalType: 'uint256' },
-        { name: 'feePaid', type: 'uint256', indexed: false, internalType: 'uint256' },
-      ]
-    } as const;
-
-    // Sell event ABI
-    const sellEventABI = {
-      type: 'event',
-      name: 'Sell',
-      inputs: [
-        { name: 'seller', type: 'address', indexed: true, internalType: 'address' },
-        { name: 'amountAsset', type: 'uint256', indexed: false, internalType: 'uint256' },
-        { name: 'amountCoin', type: 'uint256', indexed: false, internalType: 'uint256' },
-        { name: 'feePaid', type: 'uint256', indexed: false, internalType: 'uint256' },
-      ]
-    } as const;
-
-    console.debug('Fetching buy and sell events...');
-
-    // Helper function to fetch logs in chunks to avoid RPC limits
-    const fetchLogsInChunks = async (eventABI: any, args: any) => {
-      const currentBlock = await publicClient.getBlockNumber();
-      const chunkSize = BigInt(5000);
-      const allLogs: any[] = [];
-      const lookback = chainId === 11155111 ? BigInt(100000) : BigInt(50000);
-      const startBlock = currentBlock > lookback ? currentBlock - lookback : BigInt(0);
-      
-      console.debug(`Scanning from block ${startBlock} to ${currentBlock} (${currentBlock - startBlock} blocks)`, {
-        startBlock,
-        currentBlock,
-        blockRange: currentBlock - startBlock
-      });
-      
-      for (let fromBlock = startBlock; fromBlock <= currentBlock; fromBlock += chunkSize) {
-        const toBlock = fromBlock + chunkSize - BigInt(1) > currentBlock 
-          ? currentBlock 
-          : fromBlock + chunkSize - BigInt(1);
-        
-        try {
-          const logs = await publicClient.getLogs({
-            address: tokenAddress as Address,
-            event: eventABI,
-            args,
-            fromBlock,
-            toBlock
-          });
-          
-          allLogs.push(...logs);
-          if (logs.length > 0) {
-            console.debug(`Fetched ${logs.length} logs from block ${fromBlock} to ${toBlock}`, {
-              logCount: logs.length,
-              fromBlock,
-              toBlock
-            });
-          }
-        } catch (error: any) {
-          console.warn(`Failed to fetch logs from block ${fromBlock} to ${toBlock}`, {
-            fromBlock,
-            toBlock,
-            error: error?.shortMessage || error?.message
-          });
-          
-          // If we get a block range error, try with smaller chunks
-          if (error?.message?.includes('range') || error?.message?.includes('blocks')) {
-            console.debug('Retrying with smaller chunk size...');
-            try {
-              const smallerChunkSize = BigInt(1000);
-              for (let smallFromBlock = fromBlock; smallFromBlock <= toBlock; smallFromBlock += smallerChunkSize) {
-                const smallToBlock = smallFromBlock + smallerChunkSize - BigInt(1) > toBlock 
-                  ? toBlock 
-                  : smallFromBlock + smallerChunkSize - BigInt(1);
-                
-                const smallLogs = await publicClient.getLogs({
-                  address: tokenAddress as Address,
-                  event: eventABI,
-                  args,
-                  fromBlock: smallFromBlock,
-                  toBlock: smallToBlock
-                });
-                
-                allLogs.push(...smallLogs);
-              }
-            } catch {
-              console.warn(`Retry also failed for block ${fromBlock} to ${toBlock}`, {
-                fromBlock,
-                toBlock
-              });
-            }
-          }
-        }
-      }
-      
-      return allLogs;
-    };
-
-    // Fetch buy and sell events in parallel with chunking
-    const [buyLogs, sellLogs] = await Promise.all([
-      fetchLogsInChunks(buyEventABI, { buyer: userAddress as Address }),
-      fetchLogsInChunks(sellEventABI, { seller: userAddress as Address })
-    ]);
-
-    console.debug(`Found ${buyLogs.length} buy events and ${sellLogs.length} sell events`, {
-      buyEvents: buyLogs.length,
-      sellEvents: sellLogs.length
-    });
-
-    const transactions: Array<{
-      type: 'buy' | 'sell';
-      blockNumber: bigint;
-      amountAsset: number;
-      amountCoin: number;
-      price: number;
-    }> = [];
-
-    // Process buy events
-    for (const log of buyLogs) {
-      const amountAsset = Number(formatUnits(log.args.amountAsset!, 18));
-      const amountCoin = Number(formatUnits(log.args.amountCoin!, 18));
-      const price = amountCoin > 0 ? amountAsset / amountCoin : 0;
-      
-      console.debug(`BUY: ${amountCoin} tokens for ${amountAsset} WETH (price: ${price})`, {
-        amountCoin,
-        amountAsset,
-        price
-      });
-      
-      transactions.push({
-        type: 'buy',
-        blockNumber: log.blockNumber,
-        amountAsset,
-        amountCoin,
-        price,
-      });
-    }
-
-    // Process sell events
-    for (const log of sellLogs) {
-      const amountAsset = Number(formatUnits(log.args.amountAsset!, 18));
-      const amountCoin = Number(formatUnits(log.args.amountCoin!, 18));
-      const price = amountCoin > 0 ? amountAsset / amountCoin : 0;
-      
-      console.debug(`SELL: ${amountCoin} tokens for ${amountAsset} WETH (price: ${price})`, {
-        amountCoin,
-        amountAsset,
-        price
-      });
-      
-      transactions.push({
-        type: 'sell',
-        blockNumber: log.blockNumber,
-        amountAsset,
-        amountCoin,
-        price,
-      });
-    }
-
-    console.debug(`Total transactions processed: ${transactions.length}`, {
-      transactionCount: transactions.length
-    });
-    return transactions;
-
-  } catch (error) {
-    console.error('Error fetching transactions:', error instanceof Error ? error : new Error(String(error)));
-    return [];
-  }
-};
-
-// Legacy calculation for backup
-const calculateTokenMetrics = (
-  reserve: number,
-  supply: number,
-  userTokens: number,
-  avgPrice: number
-) => {
-  const price = safeNumber(supply > 0 ? reserve / supply : 0);
-  const currentValue = userTokens * price;
-  const costBasis = userTokens * avgPrice;
-  const pnL = currentValue - costBasis;
-  const returns =
-    userTokens === 0 || avgPrice === 0 ? 0 : (pnL / costBasis) * 100;
-
-  return { price, currentValue, costBasis, pnL, returns };
-};
-
 interface PoolData {
   id: string;
   name: string;
@@ -514,6 +77,7 @@ interface PoolData {
   bearCurrentValue: number;
   totalValue: number;
   totalCostBasis: number;
+  totalCapitalInvested?: number;
   bullPnL: number;
   bearPnL: number;
   totalPnL: number;
@@ -563,7 +127,52 @@ interface PoolData {
   isCreator: boolean;
 }
 
-// Historical Investments Table Component
+// Recent Transactions Component
+const RecentTransactions: React.FC<{ 
+  transactions: CachedTransaction[],
+  onLoadMore: () => void,
+  isLoadingMore: boolean,
+  canLoadMore: boolean
+}> = ({ transactions, onLoadMore, isLoadingMore, canLoadMore }) => {
+  if (transactions.length === 0) {
+    return null;
+  }
+
+  return (
+    <Card className="border-neutral-200 dark:border-neutral-700 dark:bg-neutral-800">
+      <CardHeader>
+        <CardTitle className="text-xl text-neutral-900 dark:text-neutral-100 mb-2 flex items-center gap-2">
+          <Activity className="h-5 w-5" />
+          Recent Transactions
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-3">
+          {transactions.map((tx) => (
+            <div key={tx.hash} className="flex items-center justify-between p-2 border-b border-neutral-200 dark:border-neutral-700">
+              <div>
+                <p className="font-semibold">{tx.type.toUpperCase()}</p>
+                <p className="text-sm text-neutral-500 dark:text-neutral-400">Pool: {tx.poolId.slice(0, 6)}...</p>
+              </div>
+              <div>
+                <p>{formatUnits(tx.baseTokenAmount, 18)} WETH</p>
+                <p className="text-sm text-neutral-500 dark:text-neutral-400 text-right">{new Date(tx.timestamp).toLocaleDateString()}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+        {canLoadMore && (
+          <div className="flex justify-center mt-6">
+            <Button onClick={onLoadMore} disabled={isLoadingMore}>
+              {isLoadingMore ? 'Loading...' : 'Load More'}
+            </Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+};
+
 const HistoricalInvestmentsTable: React.FC<{
   historicalPools: PoolData[];
   userAddress?: string;
@@ -1263,267 +872,97 @@ const PositionChart = ({
   );
 };
 
-// Enhanced pool data loader with comprehensive smart contract integration
-const EnhancedPoolDataLoader = ({
-  poolAddress,
-  index,
-  userAddress,
-  chainId,
-  onDataLoad,
-}: {
-  poolAddress: string;
-  index: number;
-  userAddress?: string;
-  chainId: number;
-  onDataLoad: (data: PoolData) => void;
-}) => {
-  // Step 1: Get basic pool information
-  const { data: poolBasicData } = useReadContracts({
-    contracts: [
-      { address: poolAddress as Address, abi: PredictionPoolABI, functionName: 'poolName' },
-      { address: poolAddress as Address, abi: PredictionPoolABI, functionName: 'baseToken' },
-      { address: poolAddress as Address, abi: PredictionPoolABI, functionName: 'bullCoin' },
-      { address: poolAddress as Address, abi: PredictionPoolABI, functionName: 'bearCoin' },
-      { address: poolAddress as Address, abi: PredictionPoolABI, functionName: 'oracle' },
-      { address: poolAddress as Address, abi: PredictionPoolABI, functionName: 'getCurrentPrice' },
-      { address: poolAddress as Address, abi: PredictionPoolABI, functionName: 'previousPrice' },
-    ],
-    query: {
-      enabled: !!poolAddress,
-    }
+// Function to build the portfolio snapshot from RPC
+const buildSnapshotFromRPC = async (userAddress: Address, chainId: number): Promise<{snapshot: PortfolioSnapshot, poolInfo: Record<Address, { name: string; bullCoin: Address; bearCoin: Address; oracle: Address }>}> => {
+  const chainConfig = getChainConfig(chainId);
+  if (!chainConfig) {
+    throw new Error(`Unsupported chainId: ${chainId}`);
+  }
+
+  const publicClient = createPublicClient({
+    chain: chainConfig.chain,
+    transport: http(),
   });
 
-  const poolName = poolBasicData?.[0]?.result as string;
-  const baseToken = poolBasicData?.[1]?.result as Address;
-  const bullTokenAddress = poolBasicData?.[2]?.result as Address;
-  const bearTokenAddress = poolBasicData?.[3]?.result as Address;
-  const oracleAddress = poolBasicData?.[4]?.result as Address;
-  const currentPrice = Number(formatUnits(poolBasicData?.[5]?.result as bigint || BigInt(0), 18));
-  const previousPrice = Number(formatUnits(poolBasicData?.[6]?.result as bigint || BigInt(0), 18));
+  const factoryAddress = FatePoolFactories[chainId as keyof typeof FatePoolFactories];
+  if (!factoryAddress || factoryAddress === ZERO_ADDRESS) {
+    throw new Error(`No factory address for chainId: ${chainId}`);
+  }
 
-  // Step 2: Get fee information
-  const { data: feeData } = useReadContracts({
-    contracts: poolAddress ? [
-      { address: poolAddress as Address, abi: PredictionPoolABI, functionName: 'mintFee' },
-      { address: poolAddress as Address, abi: PredictionPoolABI, functionName: 'burnFee' },
-      { address: poolAddress as Address, abi: PredictionPoolABI, functionName: 'creatorFee' },
-      { address: poolAddress as Address, abi: PredictionPoolABI, functionName: 'treasuryFee' },
-    ] : [],
-    query: {
-      enabled: !!poolAddress,
-    }
+  const poolAddresses = await publicClient.readContract({
+    address: factoryAddress,
+    abi: PredictionPoolFactoryABI,
+    functionName: 'getAllPools',
+  }) as Address[];
+
+  const filteredPools = poolAddresses.filter(addr => addr !== ZERO_ADDRESS);
+
+  const poolInfoResults = await publicClient.multicall({
+    contracts: filteredPools.flatMap(poolAddress => ([
+      { address: poolAddress, abi: PredictionPoolABI, functionName: 'poolName' },
+      { address: poolAddress, abi: PredictionPoolABI, functionName: 'bullCoin' },
+      { address: poolAddress, abi: PredictionPoolABI, functionName: 'bearCoin' },
+      { address: poolAddress, abi: PredictionPoolABI, functionName: 'oracle' },
+    ])),
   });
 
-  // Step 3: Get token metadata and supplies
-  const { data: tokenData } = useReadContracts({
-    contracts: bullTokenAddress && bearTokenAddress ? [
-      { address: bullTokenAddress, abi: CoinABI, functionName: 'name' },
-      { address: bullTokenAddress, abi: CoinABI, functionName: 'symbol' },
-      { address: bullTokenAddress, abi: CoinABI, functionName: 'totalSupply' },
-      { address: bullTokenAddress, abi: CoinABI, functionName: 'vaultCreator' },
-      { address: bearTokenAddress, abi: CoinABI, functionName: 'name' },
-      { address: bearTokenAddress, abi: CoinABI, functionName: 'symbol' },
-      { address: bearTokenAddress, abi: CoinABI, functionName: 'totalSupply' },
-    ] : [],
-    query: {
-      enabled: !!(bullTokenAddress && bearTokenAddress),
-    }
-  });
+  const poolInfo: Record<Address, { name: string; bullCoin: Address; bearCoin: Address; oracle: Address }> = {};
+  const tokenAddresses: { address: Address, pool: Address, type: 'bull' | 'bear' }[] = [];
 
-  // Step 4: Get reserves (base token balances in bull/bear tokens)
-  const { data: reserveData } = useReadContracts({
-    contracts: baseToken && bullTokenAddress && bearTokenAddress ? [
-      { address: baseToken, abi: ERC20ABI, functionName: 'balanceOf', args: [bullTokenAddress] },
-      { address: baseToken, abi: ERC20ABI, functionName: 'balanceOf', args: [bearTokenAddress] },
-      { address: baseToken, abi: ERC20ABI, functionName: 'symbol' },
-      { address: baseToken, abi: ERC20ABI, functionName: 'decimals' },
-      { address: baseToken, abi: ERC20ABI, functionName: 'name' },
-    ] : [],
-    query: {
-      enabled: !!(baseToken && bullTokenAddress && bearTokenAddress),
-    }
-  });
+  filteredPools.forEach((poolAddress, i) => {
+    const nameResult = poolInfoResults[i * 4];
+    const bullCoinResult = poolInfoResults[i * 4 + 1];
+    const bearCoinResult = poolInfoResults[i * 4 + 2];
+    const oracleResult = poolInfoResults[i * 4 + 3];
 
-  // Step 5: Get user balances if user is connected
-  const { data: userBalanceData } = useReadContracts({
-    contracts: userAddress && bullTokenAddress && bearTokenAddress && baseToken ? [
-      { address: bullTokenAddress, abi: CoinABI, functionName: 'balanceOf', args: [userAddress as Address] },
-      { address: bearTokenAddress, abi: CoinABI, functionName: 'balanceOf', args: [userAddress as Address] },
-      { address: baseToken, abi: ERC20ABI, functionName: 'balanceOf', args: [userAddress as Address] },
-    ] : [],
-    query: {
-      enabled: !!(userAddress && bullTokenAddress && bearTokenAddress && baseToken),
-    }
-  });
-
-  // Step 6: Get underlying oracle address
-  const { data: underlyingOracleData } = useReadContracts({
-    contracts: oracleAddress && oracleAddress !== "0x0000000000000000000000000000000000000000" ? [
-      { address: oracleAddress, abi: ChainlinkOracleABI, functionName: 'priceFeed' },
-    ] : [],
-    query: {
-      enabled: !!(oracleAddress && oracleAddress !== "0x0000000000000000000000000000000000000000"),
-    }
-  });
-
-  useEffect(() => {
-    if (!poolBasicData || !tokenData || !reserveData || !userBalanceData || !userAddress) return;
-
-    const processPoolData = async () => {
-      const bullName = tokenData[0]?.result as string || 'Bull Token';
-      const bullSymbol = tokenData[1]?.result as string || 'BULL';
-      const bullSupply = Number(formatUnits(tokenData[2]?.result as bigint || BigInt(0), 18));
-      const vaultCreator = tokenData[3]?.result as Address || '';
-      const bearName = tokenData[4]?.result as string || 'Bear Token';
-      const bearSymbol = tokenData[5]?.result as string || 'BEAR';
-      const bearSupply = Number(formatUnits(tokenData[6]?.result as bigint || BigInt(0), 18));
-
-      const baseTokenDecimals = Number(reserveData[3]?.result ?? 18);
-      const bullReserve = Number(formatUnits((reserveData[0]?.result as bigint) ?? BigInt(0), baseTokenDecimals));
-      const bearReserve = Number(formatUnits((reserveData[1]?.result as bigint) ?? BigInt(0), baseTokenDecimals));
-      const baseTokenSymbol = reserveData[2]?.result as string || 'UNKNOWN';
-      const baseTokenName = reserveData[4]?.result as string || 'Unknown Token';
-
-      const userBullTokens = Number(formatUnits((userBalanceData?.[0]?.result as bigint) ?? BigInt(0), 18));
-      const userBearTokens = Number(formatUnits((userBalanceData?.[1]?.result as bigint) ?? BigInt(0), 18));
-      const userBaseTokenBalance = Number(formatUnits((userBalanceData?.[2]?.result as bigint) ?? BigInt(0), baseTokenDecimals));
-      
-      console.log(`🔍 Pool ${poolAddress} user balances:`, {
-        userBullTokens,
-        userBearTokens,
-        userBaseTokenBalance,
-        rawBullBalance: userBalanceData?.[0]?.result,
-        rawBearBalance: userBalanceData?.[1]?.result
-      });
-
-
-      // Process all pools - don't skip any pools
-      // This ensures we load data for all pools, even if user has no positions
-      console.log(`Processing pool ${poolAddress}:`, {
-        poolName,
-        userBullTokens,
-        userBearTokens,
-        currentPrice,
-        bullReserve,
-        bearReserve,
-        baseTokenSymbol
-      });
-
-      const underlyingOracleAddress = underlyingOracleData?.[0]?.result as string;
-      const finalOracleAddress = underlyingOracleAddress || oracleAddress;
-      const priceFeedName = getPriceFeedName(finalOracleAddress, chainId);
-
-      // Calculate price metrics
-      const priceChange = currentPrice - previousPrice;
-      const priceChangePercent = previousPrice > 0 ? (priceChange / previousPrice) * 100 : 0;
-
-      // Calculate P&L using transaction events
-      let bullMetrics, bearMetrics;
-
-      try {
-        // Always calculate metrics if user has transaction history, even if current balance is 0
-        bullMetrics = await calculateTokenMetricsWithEvents(
-          bullReserve,
-          bullSupply,
-          userBullTokens,
-          bullTokenAddress,
-          userAddress,
-          chainId
-        );
-
-        bearMetrics = await calculateTokenMetricsWithEvents(
-          bearReserve,
-          bearSupply,
-          userBearTokens,
-          bearTokenAddress,
-          userAddress,
-          chainId
-        );
-      } catch (error) {
-        console.error('Error calculating metrics with events, using fallback:', error instanceof Error ? error : new Error(String(error)));
-        // Fallback to legacy calculation
-        const bullAvgPrice = bullSupply > 0 ? bullReserve / bullSupply : 0;
-        const bearAvgPrice = bearSupply > 0 ? bearReserve / bearSupply : 0;
-        
-        bullMetrics = calculateTokenMetrics(bullReserve, bullSupply, userBullTokens, bullAvgPrice);
-        bearMetrics = calculateTokenMetrics(bearReserve, bearSupply, userBearTokens, bearAvgPrice);
-      }
-
-      const fees = {
-        mintFee: Number(formatUnits(feeData?.[0]?.result as bigint || BigInt(0), 4)),
-        burnFee: Number(formatUnits(feeData?.[1]?.result as bigint || BigInt(0), 4)),
-        creatorFee: Number(formatUnits(feeData?.[2]?.result as bigint || BigInt(0), 4)),
-        treasuryFee: Number(formatUnits(feeData?.[3]?.result as bigint || BigInt(0), 4)),
+    if (nameResult.status === 'success' && bullCoinResult.status === 'success' && bearCoinResult.status === 'success' && oracleResult.status === 'success') {
+      const bullCoinAddress = bullCoinResult.result as Address;
+      const bearCoinAddress = bearCoinResult.result as Address;
+      poolInfo[poolAddress] = {
+        name: nameResult.result as string,
+        bullCoin: bullCoinAddress,
+        bearCoin: bearCoinAddress,
+        oracle: oracleResult.result as Address,
       };
+      tokenAddresses.push({ address: bullCoinAddress, pool: poolAddress, type: 'bull' });
+      tokenAddresses.push({ address: bearCoinAddress, pool: poolAddress, type: 'bear' });
+    }
+  });
 
-      const poolData: PoolData = {
-        id: poolAddress,
-        name: poolName || priceFeedName || `Pool ${poolAddress.slice(0, 6)}...`,
-        bullBalance: userBullTokens,
-        bearBalance: userBearTokens,
-        bullCurrentValue: bullMetrics.currentValue,
-        bearCurrentValue: bearMetrics.currentValue,
-        totalValue: bullMetrics.currentValue + bearMetrics.currentValue,
-        totalCostBasis: bullMetrics.costBasis + bearMetrics.costBasis,
-        bullPnL: bullMetrics.pnL,
-        bearPnL: bearMetrics.pnL,
-        totalPnL: bullMetrics.pnL + bearMetrics.pnL,
-        bullPrice: bullMetrics.price,
-        bearPrice: bearMetrics.price,
-        bullAvgPrice: bullMetrics.costBasis > 0 && userBullTokens > 0 ? bullMetrics.costBasis / userBullTokens : 0,
-        bearAvgPrice: bearMetrics.costBasis > 0 && userBearTokens > 0 ? bearMetrics.costBasis / userBearTokens : 0,
-        bullReturns: bullMetrics.returns,
-        bearReturns: bearMetrics.returns,
-        totalReturnPercentage: (bullMetrics.costBasis + bearMetrics.costBasis) > 0 ? ((bullMetrics.pnL + bearMetrics.pnL) / (bullMetrics.costBasis + bearMetrics.costBasis)) * 100 : 0,
-        color: CHART_COLORS[index % CHART_COLORS.length],
-        bullColor: BULL_COLORS[index % BULL_COLORS.length],
-        bearColor: BEAR_COLORS[index % BEAR_COLORS.length],
-        hasPositions: userBullTokens > 0 || userBearTokens > 0 || bullMetrics.pnL !== 0 || bearMetrics.pnL !== 0,
-        hasBullPosition: userBullTokens > 0 || bullMetrics.pnL !== 0,
-        hasBearPosition: userBearTokens > 0 || bearMetrics.pnL !== 0,
-        bullReserve,
-        bearReserve,
-        bullSupply,
-        bearSupply,
-        chainId,
-        priceFeed: priceFeedName,
-        // Enhanced data
-        baseToken: baseToken || '',
-        baseTokenSymbol: baseTokenSymbol || 'UNKNOWN',
-        baseTokenName: baseTokenName || 'Unknown Token',
-        bullTokenAddress: bullTokenAddress || '',
-        bearTokenAddress: bearTokenAddress || '',
-        bullTokenName: bullName,
-        bearTokenName: bearName,
-        bullTokenSymbol: bullSymbol,
-        bearTokenSymbol: bearSymbol,
-        oracleAddress: oracleAddress || '',
-        underlyingOracleAddress,
-        currentPrice,
-        previousPrice,
-        priceChange,
-        priceChangePercent,
-        vaultCreator: vaultCreator || '',
-        fees,
-        baseTokenBalance: userBaseTokenBalance,
-        isCreator: userAddress?.toLowerCase() === vaultCreator?.toLowerCase(),
+  const balances = await publicClient.multicall({
+    contracts: tokenAddresses.map(token => ({
+      address: token.address,
+      abi: CoinABI,
+      functionName: 'balanceOf',
+      args: [userAddress],
+    })),
+  });
+
+  const holdings: Record<Address, PortfolioHolding> = {};
+  const totalValue = BigInt(0);
+
+  balances.forEach((balance, i) => {
+    if (balance.status === 'success' && (balance.result as bigint) > 0) {
+      const token = tokenAddresses[i];
+      holdings[token.address] = {
+        tokenId: token.address,
+        poolId: token.pool,
+        balance: balance.result as bigint,
+        costBasis: BigInt(0),
+        realizedPnl: BigInt(0),
+        lastUpdated: Date.now(),
       };
+    }
+  });
 
-      console.log(`📊 Final pool data for ${poolAddress}:`, {
-        name: poolData.name,
-        bullBalance: poolData.bullBalance,
-        bearBalance: poolData.bearBalance,
-        bullCurrentValue: poolData.bullCurrentValue,
-        bearCurrentValue: poolData.bearCurrentValue,
-        currentPrice: poolData.currentPrice
-      });
-      onDataLoad(poolData);
-    };
+  const snapshot = {
+    userAddress,
+    totalValue,
+    holdings,
+    lastUpdated: Date.now(),
+  };
 
-    processPoolData();
-  }, [poolBasicData, tokenData, reserveData, userBalanceData, underlyingOracleData, feeData, poolAddress, onDataLoad, userAddress, chainId, index, baseToken, bearTokenAddress, bullTokenAddress, currentPrice, oracleAddress, poolName, previousPrice]);
-
-  return null;
+  return { snapshot, poolInfo };
 };
 
 // Main component
@@ -1532,424 +971,284 @@ export default function PortfolioPage() {
   const router = useRouter();
   const [showBullDistribution, setShowBullDistribution] = useState(false);
   const [showBearDistribution, setShowBearDistribution] = useState(false);
-  const [poolsData, setPoolsData] = useState<PoolData[]>([]);
-  const [isLoadingPools, setIsLoadingPools] = useState(false); // Start with false to show empty state immediately
-  const [isLoadingFromBlockchain, setIsLoadingFromBlockchain] = useState(false);
-  
-  // IndexedDB storage hook (for portfolio cache only)
-  const { 
-    isInitialized: isDBInitialized, 
-    savePortfolioCache,
-    getPortfolioCache
-  } = useFatePoolsStorage();
+  const [snapshot, setSnapshot] = useState<PortfolioSnapshot | null>(null);
+  const [transactions, setTransactions] = useState<CachedTransaction[]>([]);
+  const [poolInfo, setPoolInfo] = useState<Record<Address, { name: string; bullCoin: Address; bearCoin: Address; oracle: Address }>>({});
+  const [oraclePrices, setOraclePrices] = useState<Record<Address, number>>({});
+  const [poolStats, setPoolStats] = useState<Record<Address, { bullReserves: bigint; bearReserves: bigint; bullTotalSupply: bigint; bearTotalSupply: bigint }>>({});
+  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [canLoadMore, setCanLoadMore] = useState(true);
 
-  // Direct IndexedDB manager for pool details (more reliable)
-  const [indexedDB, setIndexedDB] = useState<FatePoolsIndexedDBManager | null>(null);
-  
-  // Initialize IndexedDB manager
+  const handleLoadMore = async () => {
+    if (!address) return;
+    setIsLoadingMore(true);
+    // This is where you would make an RPC call to fetch older transactions
+    // For now, we'll just simulate a delay and then indicate that no more can be loaded.
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    setCanLoadMore(false);
+    setIsLoadingMore(false);
+  };
+
   useEffect(() => {
-    const initDB = async () => {
-      if (typeof window !== 'undefined') {
-        const db = new FatePoolsIndexedDBManager();
-        await db.init();
-        setIndexedDB(db);
-      }
-    };
-    initDB();
-  }, []);
-
-  // Get factory address for current chain (or all chains if no cached data)
-  const factoryAddress = useMemo(() => {
-    if (!chainId) return null;
-
-    // First try the current chain
-    const currentChainAddress = FatePoolFactories[chainId as keyof typeof FatePoolFactories];
-    if (currentChainAddress && currentChainAddress !== "0x0000000000000000000000000000000000000000") {
-      return currentChainAddress;
-    }
-
-    // If no valid address for current chain, this might be an unsupported chain
-    console.warn(`No valid factory address configured for chain ${chainId}`);
-    return null;
-  }, [chainId]);
-
-  // Get all pools from factory
-  const { data: allPoolsData } = useReadContracts({
-    contracts: (factoryAddress && isAddress(factoryAddress as Address) && factoryAddress !== ZERO_ADDRESS) ? [
-      { address: factoryAddress as Address, abi: PredictionPoolFactoryABI, functionName: 'getAllPools' },
-      { address: factoryAddress as Address, abi: PredictionPoolFactoryABI, functionName: 'getPoolCount' },
-    ] : [],
-    query: {
-      enabled: !!(factoryAddress && isAddress(factoryAddress as Address) && factoryAddress !== ZERO_ADDRESS),
-      refetchInterval: 30000, // Refetch every 30 seconds for fresh data
-    }
-  });
-
-  const availablePools = useMemo(() => {
-    const pools = allPoolsData?.[0]?.result as string[] || [];
-    console.debug(`Found ${pools.length} pools from factory:`, { 
-      pools, 
-      factoryAddress, 
-      chainId,
-      chainName: getChainConfig(chainId || 1)?.name || `Chain ${chainId || 1}`
-    });
-    return pools.filter(pool => pool && pool !== "0x0000000000000000000000000000000000000000");
-  }, [allPoolsData, factoryAddress, chainId]);
-
-  // Handle pool data loading with caching
-  const handlePoolDataLoad = useCallback((data: PoolData) => {
-    // Set flag to indicate this is fresh blockchain data that should be cached
-    setIsLoadingFromBlockchain(true);
-
-    setPoolsData((prev) => {
-      const existingIndex = prev.findIndex((p) => p.id === data.id);
-      if (existingIndex >= 0) {
-        const updated = [...prev];
-        updated[existingIndex] = data;
-        return updated;
-      } else {
-        return [...prev, data];
-      }
-    });
-    
-    // Update cache status to fresh
-  }, []);
-
-  // Efficient cache loading - load pool details from IndexedDB and combine with positions
-  const loadCachedData = useCallback(async () => {
-    if (!address || !chainId || !isDBInitialized || !indexedDB || isLoadingFromBlockchain) return;
-
-    try {
-      const cachedData = await getPortfolioCache(address, chainId as SupportedChainId);
-
-      // If we have fresh cached data, use it immediately
-      if (cachedData && cachedData.positions.length > 0) {
-        console.log("✅ Loading fresh cached portfolio data:", cachedData.positions.length, "positions");
-        // Get all pool details from IndexedDB for this chain
-        const allPoolDetails = await indexedDB!.getAllPoolsForChain(chainId as SupportedChainId);
-        console.log("📊 Loaded pool details from IndexedDB:", allPoolDetails.length, "pools");
-
-        // Group positions by pool address and combine with pool details
-        const grouped = new Map<string, PoolData>();
-        const filteredPositions = cachedData.positions.filter(p => p.chainId === (chainId as SupportedChainId));
-        console.log("Filtered positions:", filteredPositions.length);
-        
-        for (const pos of filteredPositions) {
-          // Debug: Log position data
-          console.log("🔍 Processing position:", {
-            tokenType: pos.tokenType,
-            currentBalance: pos.currentBalance,
-            currentValue: pos.currentValue,
-            pnL: pos.pnL,
-            poolAddress: pos.poolAddress
-          });
-          
-          // Find the corresponding pool details
-          const poolDetails = allPoolDetails.find((p: any) => p.id === pos.poolAddress);
-          
-          const existing = grouped.get(pos.poolAddress);
-          const base = existing ?? {
-            id: pos.poolAddress,
-            name: poolDetails?.name || `Pool ${pos.poolAddress.slice(0,6)}...`,
-            bullBalance: 0, bearBalance: 0,
-            bullCurrentValue: 0, bearCurrentValue: 0,
-            totalValue: 0, totalCostBasis: 0,
-            bullPnL: 0, bearPnL: 0, totalPnL: 0,
-            bullPrice: 0, bearPrice: 0, bullAvgPrice: 0, bearAvgPrice: 0,
-            bullReturns: 0, bearReturns: 0, totalReturnPercentage: 0,
-            color: '#000000', bullColor: '#000000', bearColor: '#000000',
-            hasPositions: false, hasBullPosition: false, hasBearPosition: false,
-            bullReserve: poolDetails ? Number(poolDetails.bullReserve) : 0,
-            bearReserve: poolDetails ? Number(poolDetails.bearReserve) : 0,
-            bullSupply: poolDetails ? Number(poolDetails.bullToken.totalSupply) : 0,
-            bearSupply: poolDetails ? Number(poolDetails.bearToken.totalSupply) : 0,
-            chainId: pos.chainId, priceFeed: poolDetails?.priceFeedAddress || 'Cached',
-            baseToken: poolDetails?.assetAddress || '', 
-            baseTokenSymbol: pos.baseTokenSymbol || poolDetails?.baseTokenSymbol || 'UNKNOWN',
-            baseTokenName: poolDetails?.baseTokenName || 'Unknown Token',
-            bullTokenAddress: poolDetails?.bullToken.id || '', 
-            bearTokenAddress: poolDetails?.bearToken.id || '',
-            bullTokenName: poolDetails?.bullToken.name || 'Bull Token', 
-            bearTokenName: poolDetails?.bearToken.name || 'Bear Token',
-            bullTokenSymbol: poolDetails?.bullToken.symbol || 'BULL', 
-            bearTokenSymbol: poolDetails?.bearToken.symbol || 'BEAR',
-            oracleAddress: poolDetails?.oracleAddress || '', 
-            underlyingOracleAddress: undefined,
-            currentPrice: poolDetails?.currentPrice || 0, 
-            previousPrice: 0,
-            priceChange: 0,
-            priceChangePercent: 0,
-            vaultCreator: poolDetails?.vaultCreator || '', 
-            fees: { 
-              mintFee: poolDetails?.mintFee || 0, 
-              burnFee: poolDetails?.burnFee || 0, 
-              creatorFee: poolDetails?.creatorFee || 0, 
-              treasuryFee: poolDetails?.treasuryFee || 0 
-            },
-            baseTokenBalance: 0, isCreator: false
-          } as PoolData;
-
-          // Calculate prices from reserves and supply like in InteractionClient
-          if (poolDetails) {
-            const bullReserveNum = Number(poolDetails.bullReserve);
-            const bearReserveNum = Number(poolDetails.bearReserve);
-            const bullSupplyNum = Number(poolDetails.bullToken.totalSupply);
-            const bearSupplyNum = Number(poolDetails.bearToken.totalSupply);
-            
-            // Calculate prices: reserve / supply (same as InteractionClient)
-            base.bullPrice = bullSupplyNum > 0 ? bullReserveNum / bullSupplyNum : 1;
-            base.bearPrice = bearSupplyNum > 0 ? bearReserveNum / bearSupplyNum : 1;
-          }
-
-          if (pos.tokenType === 'bull') {
-            base.bullBalance += pos.currentBalance;
-            base.bullCurrentValue += pos.currentValue;
-            base.bullPnL += pos.pnL;
-            base.bullReturns = pos.returns;
-            base.hasBullPosition = pos.currentBalance > 0 || pos.currentValue > 0 || pos.pnL !== 0;
-            base.bullTokenAddress = pos.tokenAddress;
-            console.log("🐂 Bull position updated:", {
-              currentBalance: pos.currentBalance,
-              newBullBalance: base.bullBalance,
-              currentValue: pos.currentValue,
-              newBullCurrentValue: base.bullCurrentValue
-            });
-          } else {
-            base.bearBalance += pos.currentBalance;
-            base.bearCurrentValue += pos.currentValue;
-            base.bearPnL += pos.pnL;
-            base.bearReturns = pos.returns;
-            base.hasBearPosition = pos.currentBalance > 0 || pos.currentValue > 0 || pos.pnL !== 0;
-            base.bearTokenAddress = pos.tokenAddress;
-            console.log("🐻 Bear position updated:", {
-              currentBalance: pos.currentBalance,
-              newBearBalance: base.bearBalance,
-              currentValue: pos.currentValue,
-              newBearCurrentValue: base.bearCurrentValue
-            });
-          }
-          
-          base.totalValue = base.bullCurrentValue + base.bearCurrentValue;
-          base.totalPnL = base.bullPnL + base.bearPnL;
-          base.totalCostBasis = base.totalValue - base.totalPnL;
-          base.totalReturnPercentage = base.totalCostBasis > 0 ? (base.totalPnL / base.totalCostBasis) * 100 : 0;
-          base.hasPositions = base.hasBullPosition || base.hasBearPosition;
-          grouped.set(pos.poolAddress, base);
-        }
-        const mappedData = Array.from(grouped.values());
-        console.log("✅ Mapped cached data:", mappedData.length, "positions");
-        
-        // Debug: Log final pool data
-        if (mappedData.length > 0) {
-          console.log("📊 Final pool data sample:", {
-            id: mappedData[0].id,
-            name: mappedData[0].name,
-            bullBalance: mappedData[0].bullBalance,
-            bearBalance: mappedData[0].bearBalance,
-            bullCurrentValue: mappedData[0].bullCurrentValue,
-            bearCurrentValue: mappedData[0].bearCurrentValue,
-            bullPrice: mappedData[0].bullPrice,
-            bearPrice: mappedData[0].bearPrice
-          });
-        }
-        
-        setPoolsData(mappedData);
-
-        // Force UI update and ensure loading state is cleared
-        setIsLoadingPools(false);
-        setIsLoadingFromBlockchain(false); // This is cached data, not blockchain data
-
-      } else {
-        // No cached data - this is a first-time user, try to load from blockchain
-
-        if (factoryAddress && factoryAddress !== "0x0000000000000000000000000000000000000000") {
-          setIsLoadingPools(true);
+    if (address && chainId) {
+      const loadData = async () => {
+        setIsLoading(true);
+        const [snapshotData, transactionsData] = await Promise.all([
+          getPortfolioSnapshot(address),
+          getRecentTransactions(address)
+        ]);
+        if (snapshotData) {
+          setSnapshot(snapshotData);
+          setTransactions(transactionsData);
+          setIsLoading(false);
         } else {
-          setIsLoadingPools(false);
+          // If no snapshot exists, fetch from RPC, build snapshot, and save it.
+          console.log("No snapshot found, fetching from RPC...");
+          const { snapshot: newSnapshot, poolInfo: newPoolInfo } = await buildSnapshotFromRPC(address, chainId);
+          await updatePortfolioSnapshot(newSnapshot);
+          setSnapshot(newSnapshot);
+          setPoolInfo(newPoolInfo);
+          setTransactions([]);
+          setIsLoading(false);
         }
-      }
-    } catch (error) {
-      console.error("❌ Failed to load cached data:", error);
-    }
-  }, [address, chainId, isDBInitialized, indexedDB, getPortfolioCache, factoryAddress, isLoadingFromBlockchain]);
-
-  // Save data to cache
-  const saveDataToCache = useCallback(async (data: PoolData[]) => {
-    if (!address || !chainId || !isDBInitialized || data.length === 0) return;
-    
-    try {
-      const cacheData = {
-        userAddress: address,
-        chainId: chainId as SupportedChainId,
-        positions: data.flatMap(pool => {
-          const entries: PortfolioPosition[] = [];
-
-          if (pool.bullBalance > 0 || pool.bullPnL !== 0) {
-            entries.push({
-              id: `${address}-${pool.bullTokenAddress}-${chainId}`,
-              userAddress: address,
-              tokenAddress: pool.bullTokenAddress,
-              poolAddress: pool.id,
-              chainId: chainId as SupportedChainId,
-              tokenType: 'bull',
-              currentBalance: pool.bullBalance,
-              currentValue: pool.bullCurrentValue,
-              costBasis: pool.bullCurrentValue - pool.bullPnL,
-              pnL: pool.bullPnL,
-              returns: pool.bullReturns,
-              totalFeesPaid: 0,
-              netInvestment: pool.bullCurrentValue - pool.bullPnL,
-              grossInvestment: pool.bullCurrentValue - pool.bullPnL,
-              lastUpdated: Date.now(),
-              blockNumber: 0,
-              baseTokenSymbol: pool.baseTokenSymbol || 'UNKNOWN',
-            });
-          }
-
-          if (pool.bearBalance > 0 || pool.bearPnL !== 0) {
-            entries.push({
-              id: `${address}-${pool.bearTokenAddress}-${chainId}`,
-              userAddress: address,
-              tokenAddress: pool.bearTokenAddress,
-              poolAddress: pool.id,
-              chainId: chainId as SupportedChainId,
-              tokenType: 'bear',
-              currentBalance: pool.bearBalance,
-              currentValue: pool.bearCurrentValue,
-              costBasis: pool.bearCurrentValue - pool.bearPnL,
-              pnL: pool.bearPnL,
-              returns: pool.bearReturns,
-              totalFeesPaid: 0,
-              netInvestment: pool.bearCurrentValue - pool.bearPnL,
-              grossInvestment: pool.bearCurrentValue - pool.bearPnL,
-              lastUpdated: Date.now(),
-              blockNumber: 0,
-              baseTokenSymbol: pool.baseTokenSymbol,
-            });
-          }
-
-          return entries;
-        }),
-        transactions: [],
-        totalValue: data.reduce((sum, pool) => sum + pool.totalValue, 0),
-        totalPortfolioValue: data.reduce((sum, pool) => sum + pool.totalValue, 0),
-        totalPnL: data.reduce((sum, pool) => sum + pool.totalPnL, 0),
-        totalReturns: 0,
-        lastUpdated: Date.now(),
-        blockNumber: 0,
-        ttlMinutes: 2,
-        expiresAt: Date.now() + (2 * 60 * 1000),
-        id: `${address}_${chainId}`
-      } as Omit<PortfolioCache, 'userAddress'> & { userAddress: string };
-      
-      await savePortfolioCache(cacheData);
-
-      // Also save pool details to IndexedDB for future use
-      if (indexedDB) {
-        for (const pool of data) {
-          try {
-            await indexedDB!.savePoolDetails({
-            id: pool.id,
-            name: pool.name,
-            description: `Prediction pool for ${pool.priceFeed}`,
-            assetAddress: pool.baseToken,
-            baseTokenSymbol: pool.baseTokenSymbol,
-            baseTokenName: pool.baseTokenName,
-            oracleAddress: pool.oracleAddress,
-            currentPrice: pool.currentPrice,
-            bullReserve: pool.bullReserve.toString(),
-            bearReserve: pool.bearReserve.toString(),
-            bullToken: {
-              id: pool.bullTokenAddress,
-              symbol: pool.bullTokenSymbol,
-              name: pool.bullTokenName,
-              totalSupply: pool.bullSupply.toString()
-            },
-            bearToken: {
-              id: pool.bearTokenAddress,
-              symbol: pool.bearTokenSymbol,
-              name: pool.bearTokenName,
-              totalSupply: pool.bearSupply.toString()
-            },
-            vaultCreator: pool.vaultCreator,
-            creatorFee: pool.fees.creatorFee,
-            mintFee: pool.fees.mintFee,
-            burnFee: pool.fees.burnFee,
-            treasuryFee: pool.fees.treasuryFee,
-            bullPercentage: pool.bullReserve > 0 ? (pool.bullReserve / (pool.bullReserve + pool.bearReserve)) * 100 : 0,
-            bearPercentage: pool.bearReserve > 0 ? (pool.bearReserve / (pool.bullReserve + pool.bearReserve)) * 100 : 0,
-            chainId: pool.chainId as SupportedChainId,
-            creator: pool.vaultCreator,
-            chainName: getChainName(pool.chainId),
-            priceFeedAddress: pool.priceFeed
-          });
-          } catch (error) {
-            console.error(`Failed to save pool details for ${pool.id}:`, error);
-          }
-        }
-        console.log("Portfolio data and pool details cached successfully");
-      }
-    } catch (error) {
-      console.error("Failed to save portfolio data to cache:", error);
-    }
-  }, [address, chainId, isDBInitialized, indexedDB, savePortfolioCache]);
-
-  // Initialize loading state based on connection
-  useEffect(() => {
-    if (!isConnected) {
-      setIsLoadingPools(false);
-    } else if (!factoryAddress) {
-      // No valid factory address - stop loading immediately
-      console.warn("No valid factory address for current chain, stopping loading");
-      setIsLoadingPools(false);
-    } else {
-      // Start loading data in background but don't show loading screen
-      setIsLoadingPools(false);
-    }
-  }, [isConnected, factoryAddress]);
-
-  /**
-   * OPTIMIZED PORTFOLIO LOADING STRATEGY
-   *
-   * 1. Cache-First: Load from IndexedDB cache immediately (0 RPC calls)
-   * 2. Real-time Updates: Buy/sell actions update cache instantly
-   * 3. Fresh Data: Cache stays current through user actions
-   * 4. RPC Minimal: Only used for first-time users or manual refresh
-   * 5. Instant UI: Portfolio shows data immediately, updates in real-time
-   */
-  useEffect(() => {
-    if (address && chainId && isDBInitialized && indexedDB) {
-      loadCachedData();
-    }
-  }, [address, chainId, isDBInitialized, indexedDB, loadCachedData]);
-
-  // Reset data when user changes
-  useEffect(() => {
-    if (address) {
-      setPoolsData([]);
-      setIsLoadingPools(false); // Don't show loading screen
-    } else {
-      setPoolsData([]);
-      setIsLoadingPools(false);
+      };
+      loadData();
     }
   }, [address, chainId]);
 
-  // Only save data to cache when it comes from blockchain (not cache)
-  // This prevents infinite loops between loadCachedData and saveDataToCache
-
-  // Save data to cache only when loading from blockchain
   useEffect(() => {
-    if (isLoadingFromBlockchain && poolsData.length > 0 && address && chainId && isDBInitialized && indexedDB) {
-      saveDataToCache(poolsData);
-      setIsLoadingFromBlockchain(false); // Reset flag after saving
+    if (snapshot && chainId) {
+        const fetchPoolInfo = async () => {
+            const poolIds = Object.values(snapshot.holdings).map(h => h.poolId);
+            const uniquePoolIds = [...new Set(poolIds)];
+
+            if (uniquePoolIds.length === 0) return;
+
+            const chainConfig = getChainConfig(chainId);
+            if (!chainConfig) return;
+
+            const publicClient = createPublicClient({
+                chain: chainConfig.chain,
+                transport: http(),
+            });
+
+            try {
+                const poolInfoResults = await publicClient.multicall({
+                    contracts: uniquePoolIds.flatMap(poolId => ([
+                        { address: poolId, abi: PredictionPoolABI, functionName: 'poolName' },
+                        { address: poolId, abi: PredictionPoolABI, functionName: 'bullCoin' },
+                        { address: poolId, abi: PredictionPoolABI, functionName: 'bearCoin' },
+                        { address: poolId, abi: PredictionPoolABI, functionName: 'oracle' },
+                    ])),
+                });
+
+                const info: Record<Address, { name: string; bullCoin: Address; bearCoin: Address; oracle: Address }> = {};
+                uniquePoolIds.forEach((poolId, i) => {
+                    const nameResult = poolInfoResults[i * 4];
+                    const bullCoinResult = poolInfoResults[i * 4 + 1];
+                    const bearCoinResult = poolInfoResults[i * 4 + 2];
+                    const oracleResult = poolInfoResults[i * 4 + 3];
+                    if (nameResult.status === 'success' && bullCoinResult.status === 'success' && bearCoinResult.status === 'success' && oracleResult.status === 'success') {
+                        info[poolId] = {
+                            name: nameResult.result as string,
+                            bullCoin: bullCoinResult.result as Address,
+                            bearCoin: bearCoinResult.result as Address,
+                            oracle: oracleResult.result as Address,
+                        };
+                    }
+                });
+                setPoolInfo(info);
+            } catch (error) {
+                console.error("Failed to fetch pool info:", error);
+            }
+        };
+        fetchPoolInfo();
     }
-  }, [isLoadingFromBlockchain, poolsData, address, chainId, isDBInitialized, indexedDB, saveDataToCache]);
+  }, [snapshot, chainId]);
 
+  useEffect(() => {
+    if (Object.keys(poolInfo).length > 0 && chainId) {
+      const fetchOraclePrices = async () => {
+        const chainConfig = getChainConfig(chainId);
+        if (!chainConfig) return;
 
-  // Remove the complex loading logic - let data load in background
-  // The portfolio will show empty state (0 values) immediately and populate as data loads
+        const publicClient = createPublicClient({
+          chain: chainConfig.chain,
+          transport: http(),
+        });
 
-  // Calculate portfolio statistics
+        const uniqueOracleAddresses = [...new Set(Object.values(poolInfo).map(p => p.oracle))];
+
+        try {
+          const priceResults = await publicClient.multicall({
+            contracts: uniqueOracleAddresses.map(oracleAddress => ({
+              address: oracleAddress,
+              abi: IOracleABI,
+              functionName: 'getLatestPrice',
+            })),
+          });
+
+          const prices: Record<Address, number> = {};
+          uniqueOracleAddresses.forEach((oracleAddress, i) => {
+            const result = priceResults[i];
+            if (result.status === 'success') {
+              prices[oracleAddress] = Number(fromWei(result.result as bigint, 18));
+            }
+          });
+          setOraclePrices(prices);
+        } catch (error) {
+          console.error("Failed to fetch oracle prices:", error);
+        }
+      };
+      fetchOraclePrices();
+    }
+  }, [poolInfo, chainId]);
+
+  useEffect(() => {
+    if (Object.keys(poolInfo).length > 0 && chainId) {
+      const fetchPoolStats = async () => {
+        const chainConfig = getChainConfig(chainId);
+        if (!chainConfig) return;
+
+        const publicClient = createPublicClient({
+          chain: chainConfig.chain,
+          transport: http(),
+        });
+
+        const poolIds = Object.keys(poolInfo) as Address[];
+
+        try {
+          const statsResults = await publicClient.multicall({
+            contracts: poolIds.flatMap(poolId => ([
+              { address: poolId, abi: PredictionPoolABI, functionName: 'getPoolStats' },
+              { address: poolInfo[poolId].bullCoin, abi: CoinABI, functionName: 'totalSupply' },
+              { address: poolInfo[poolId].bearCoin, abi: CoinABI, functionName: 'totalSupply' },
+            ])),
+          });
+
+          const stats: Record<Address, { bullReserves: bigint; bearReserves: bigint; bullTotalSupply: bigint; bearTotalSupply: bigint; }> = {};
+          poolIds.forEach((poolId, i) => {
+            const poolStatsResult = statsResults[i * 3];
+            const bullSupplyResult = statsResults[i * 3 + 1];
+            const bearSupplyResult = statsResults[i * 3 + 2];
+
+            if (poolStatsResult.status === 'success' && bullSupplyResult.status === 'success' && bearSupplyResult.status === 'success') {
+              const poolStats = poolStatsResult.result as readonly [bigint, bigint, bigint, bigint, bigint];
+              stats[poolId] = {
+                bullReserves: poolStats[0],
+                bearReserves: poolStats[1],
+                bullTotalSupply: bullSupplyResult.result as bigint,
+                bearTotalSupply: bearSupplyResult.result as bigint,
+              };
+            }
+          });
+          setPoolStats(stats);
+        } catch (error) {
+          console.error("Failed to fetch pool stats:", error);
+        }
+      };
+      fetchPoolStats();
+    }
+  }, [poolInfo, chainId]);
+
+  const poolsData = useMemo(() => {
+    if (!snapshot || Object.keys(poolInfo).length === 0) return [];
+
+    const groupedByPool = Object.values(snapshot.holdings).reduce((acc, holding) => {
+      if (!acc[holding.poolId]) {
+        acc[holding.poolId] = { bull: null, bear: null };
+      }
+      const info = poolInfo[holding.poolId];
+      if (info) {
+        if (holding.tokenId === info.bullCoin) {
+          acc[holding.poolId].bull = holding;
+        } else if (holding.tokenId === info.bearCoin) {
+          acc[holding.poolId].bear = holding;
+        }
+      }
+      return acc;
+    }, {} as Record<string, { bull: PortfolioHolding | null, bear: PortfolioHolding | null }>);
+
+    return Object.entries(groupedByPool).map(([poolId, { bull, bear }], index) => {
+      const bullBalance = bull ? Math.max(0, Number(formatUnits(bull.balance, 18))) : 0;
+      const bearBalance = bear ? Math.max(0, Number(formatUnits(bear.balance, 18))) : 0;
+      const bullCostBasis = bull ? Number(formatUnits(bull.costBasis, 18)) : 0;
+      const bearCostBasis = bear ? Number(formatUnits(bear.costBasis, 18)) : 0;
+      const bullRealizedPnl = bull ? Number(formatUnits(bull.realizedPnl, 18)) : 0;
+      const bearRealizedPnl = bear ? Number(formatUnits(bear.realizedPnl, 18)) : 0;
+      const totalCapitalInvested = (bull ? Number(formatUnits(bull.totalCapitalInvested || bull.costBasis, 18)) : 0) + (bear ? Number(formatUnits(bear.totalCapitalInvested || bear.costBasis, 18)) : 0);
+
+      const stats = poolStats[poolId as Address];
+      const bullPrice = stats && stats.bullTotalSupply > BigInt(0) ? Number(fromWei(stats.bullReserves, 18)) / Number(fromWei(stats.bullTotalSupply, 18)) : 0;
+      const bearPrice = stats && stats.bearTotalSupply > BigInt(0) ? Number(fromWei(stats.bearReserves, 18)) / Number(fromWei(stats.bearTotalSupply, 18)) : 0;
+
+      const bullCurrentValue = bullBalance * bullPrice;
+      const bearCurrentValue = bearBalance * bearPrice;
+
+      const bullUnrealizedPnl = bull ? bullCurrentValue - bullCostBasis : 0;
+      const bearUnrealizedPnl = bear ? bearCurrentValue - bearCostBasis : 0;
+
+      const bullPnL = bullUnrealizedPnl + bullRealizedPnl;
+      const bearPnL = bearUnrealizedPnl + bearRealizedPnl;
+
+      const totalCostBasis = bullCostBasis + bearCostBasis;
+      const totalValue = bullCurrentValue + bearCurrentValue;
+      const totalPnL = (bullPnL + bearPnL);
+      const totalReturnPercentage = totalCostBasis > 0 ? (totalPnL / totalCostBasis) * 100 : 0;
+
+      const info = poolInfo[poolId as Address];
+
+      return {
+        id: poolId,
+        name: info?.name || `Pool ${poolId.slice(0, 6)}...`,
+        bullBalance,
+        bearBalance,
+        bullCurrentValue,
+        bearCurrentValue,
+        totalValue,
+        totalCostBasis,
+        totalCapitalInvested,
+        bullPnL,
+        bearPnL,
+        totalPnL,
+        bullPrice,
+        bearPrice,
+        bullAvgPrice: bullBalance > 0 ? bullCostBasis / bullBalance : 0,
+        bearAvgPrice: bearBalance > 0 ? bearCostBasis / bearBalance : 0,
+        bullReturns: bullCostBasis > 0 ? (bullPnL / bullCostBasis) * 100 : 0,
+        bearReturns: bearCostBasis > 0 ? (bearPnL / bearCostBasis) * 100 : 0,
+        totalReturnPercentage,
+        color: CHART_COLORS[index % CHART_COLORS.length],
+        bullColor: BULL_COLORS[index % BULL_COLORS.length],
+        bearColor: BEAR_COLORS[index % BEAR_COLORS.length],
+        hasPositions: bullBalance > 0 || bearBalance > 0,
+        hasBullPosition: bullBalance > 0,
+        hasBearPosition: bearBalance > 0,
+        bullTokenAddress: info?.bullCoin || "0x...",
+        bearTokenAddress: info?.bearCoin || "0x...",
+        chainId: chainId || 1,
+        priceFeed: getPriceFeedName(info?.oracle, chainId || 1),
+        baseToken: "0x...",
+        baseTokenSymbol: "WETH",
+        baseTokenName: "Wrapped Ether",
+        bullTokenName: "BULL",
+        bearTokenName: "BEAR",
+        bullTokenSymbol: "BULL",
+        bearTokenSymbol: "BEAR",
+        oracleAddress: "0x...",
+        currentPrice: oraclePrices[info?.oracle] || 0,
+        previousPrice: 1,
+        priceChange: 0,
+        priceChangePercent: 0,
+        vaultCreator: "0x...",
+        fees: { mintFee: 0, burnFee: 0, creatorFee: 0, treasuryFee: 0 },
+        baseTokenBalance: 0,
+        isCreator: false,
+      } as PoolData;
+    });
+  }, [snapshot, chainId, poolInfo, oraclePrices, poolStats]);
+
   const {
     activePoolsData,
     historicalPoolsData,
@@ -2051,8 +1350,13 @@ export default function PortfolioPage() {
       (sum, pool) => sum + pool.totalPnL,
       0
     );
+    
+    const totalCapitalInvested = allPoolsWithPositions.reduce(
+      (sum, pool) => sum + (pool.totalCapitalInvested || pool.totalCostBasis),
+      0
+    );
     const totalReturnPercentage =
-      totalCostBasis > 0 ? (totalPnL / totalCostBasis) * 100 : 0;
+      totalCapitalInvested > 0 ? (totalPnL / totalCapitalInvested) * 100 : 0;
 
     // const hasAnyPositions = activePoolsData.length > 0 || historicalPoolsData.length > 0;
 
@@ -2115,17 +1419,6 @@ export default function PortfolioPage() {
   return (
     <div className="min-h-screen bg-white dark:bg-black text-neutral-900 dark:text-white p-4 pt-28 min-[900px]:p-6 min-[900px]:pt-32">
       <div className="max-w-7xl mx-auto space-y-8">
-        {/* Enhanced Pool Data Loaders - Only loads pools where user has positions */}
-        {availablePools.map((poolAddress, index) => (
-          <EnhancedPoolDataLoader
-            key={poolAddress}
-            poolAddress={poolAddress}
-            index={index}
-            userAddress={address}
-            chainId={chainId || 1}
-            onDataLoad={handlePoolDataLoad}
-          />
-        ))}
 
         {/* Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -2198,7 +1491,7 @@ export default function PortfolioPage() {
           )}
         </div>
 
-        {poolsData.length === 0 ? (
+        {isLoading && (
           // Show skeleton loading while portfolio data is being calculated
           <div className="space-y-6">
             {/* Skeleton for Bull and Bear Position Charts */}
@@ -2243,7 +1536,9 @@ export default function PortfolioPage() {
               </div>
             </div>
           </div>
-        ) : poolsData.length > 0 ? (
+        )}
+
+        {!isLoading && poolsData.length > 0 && (
           <div className="space-y-6">
             {/* Bull and Bear Position Charts */}
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
@@ -2267,9 +1562,9 @@ export default function PortfolioPage() {
                     {activePoolsData.length > 0 ? 'Active Positions' : 'Available Pools'}
                   </CardTitle>
                   <p className="text-sm text-neutral-600 dark:text-neutral-400">
-                    {activePoolsData.length > 0 
-                      ? `${activePoolsData.length} active position${activePoolsData.length !== 1 ? 's' : ''} across ${availablePools.length} pool${availablePools.length !== 1 ? 's' : ''}`
-                      : `${poolsData.length} pool${poolsData.length !== 1 ? 's' : ''} available to trade`
+                    {activePoolsData.length > 0
+                      ? `${activePoolsData.length} active position${activePoolsData.length !== 1 ? 's' : ''}`
+                      : `${poolsData.length} pools with history`
                     }
                   </p>
                 </CardHeader>
@@ -2314,16 +1609,26 @@ export default function PortfolioPage() {
               )}
             </div>
 
+            {/* Recent Transactions Section */}
+            <RecentTransactions
+              transactions={transactions}
+              onLoadMore={handleLoadMore}
+              isLoadingMore={isLoadingMore}
+              canLoadMore={canLoadMore}
+            />
+
             {/* Historical Investments Section - Show below active positions */}
             {historicalPoolsData.length > 0 && (
-              <HistoricalInvestmentsTable 
+              <HistoricalInvestmentsTable
                 historicalPools={historicalPoolsData}
                 userAddress={address}
                 chainId={chainId}
               />
             )}
           </div>
-        ) : !isLoadingPools ? (
+        )}
+
+        {!isLoading && poolsData.length === 0 && (
           <div className="space-y-6">
             {/* Show history section if user has historical trades */}
             {historicalPoolsData.length > 0 && (
@@ -2333,109 +1638,36 @@ export default function PortfolioPage() {
                     Trading History
                   </CardTitle>
                   <p className="text-sm text-neutral-600 dark:text-neutral-400">
-                    {historicalPoolsData.length} completed position{historicalPoolsData.length !== 1 ? 's' : ''} with total P&L of {totalPnL >= 0 ? '+' : ''}{totalPnL.toFixed(4)} {historicalPoolsData[0]?.baseTokenSymbol || 'UNKNOWN'}
+                    {historicalPoolsData.length} completed position{historicalPoolsData.length !== 1 ? 's' : ''} with total P&L of {totalPnL.toFixed(4)} {poolsData[0]?.baseTokenSymbol || 'UNKNOWN'}
                   </p>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-4 max-h-[400px] overflow-y-auto">
-                    {historicalPoolsData.map((pool, index) => (
-                      <div
-                        key={pool.id}
-                        className="animate-in slide-in-from-bottom-4 duration-300"
-                        style={{ animationDelay: `${index * 100}ms` }}
-                      >
-                        <HistoryCard pool={pool} />
-                      </div>
+                  <div className="space-y-3 max-h-[300px] overflow-y-auto">
+                    {historicalPoolsData.map((pool) => (
+                      <HistoryCard key={pool.id} pool={pool} />
                     ))}
                   </div>
                 </CardContent>
               </Card>
             )}
 
-            {/* Historical Investments Section - Show when no active positions */}
-            {historicalPoolsData.length > 0 && (
-              <HistoricalInvestmentsTable 
-                historicalPools={historicalPoolsData}
-                userAddress={address}
-                chainId={chainId}
-              />
-            )}
-
-            {/* Contract deployment status message */}
-            {!factoryAddress && isConnected && (
-              <Card className="border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-900/20 p-8 text-center">
-                <CardTitle className="text-yellow-800 dark:text-yellow-200 mb-2">
-                  Contracts Not Deployed
-                </CardTitle>
-                <p className="text-yellow-700 dark:text-yellow-300 mb-4">
-                   The Fate Protocol contracts are not yet deployed on {getChainName(chainId || 1)}.
-                </p>
-                <p className="text-yellow-600 dark:text-yellow-400 mb-6">
-                   You can test the protocol on Sepolia testnet (contracts are deployed there) or wait for mainnet deployment.
-                </p>
-                <div className="flex gap-4 justify-center flex-wrap">
-                  <Button 
-                    onClick={() => router.push('/explorePools')}
-                    className="bg-yellow-600 hover:bg-yellow-700 text-white"
-                  >
-                    Check Available Networks
-                  </Button>
-                  <Button 
-                    onClick={() => router.push('/createPool')}
-                    variant="outline"
-                    className="border-yellow-600 text-yellow-600 hover:bg-yellow-600 hover:text-white"
-                  >
-                     Create Pool (Testnet)
-                  </Button>
-                </div>
-                <div className="mt-4 p-4 bg-yellow-100 dark:bg-yellow-800/30 rounded-lg">
-                  <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                     <strong>Available Networks:</strong> Sepolia Testnet (Chain ID: 11155111)
-                  </p>
-                  <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-1">
-                     Switch to Sepolia testnet to interact with deployed contracts
-                  </p>
-                  <div className="mt-2 p-2 bg-yellow-200 dark:bg-yellow-700/50 rounded text-xs">
-                    <p className="text-yellow-800 dark:text-yellow-200">
-                       <strong>Debug Info:</strong> Current chain: {getChainName(chainId || 1)} (ID: {chainId})
-                    </p>
-                    <p className="text-yellow-700 dark:text-yellow-300">
-                      Factory address: {factoryAddress || 'Not configured'}
-                    </p>
-                  </div>
-                </div>
-              </Card>
-            )}
-            
-             {/* No active positions message */}
-             {factoryAddress && (
-              <Card className="border-neutral-200 dark:border-neutral-700 dark:bg-neutral-800 p-8 text-center">
-                <CardTitle className="text-neutral-900 dark:text-neutral-100 mb-2">
-                   {poolsData.length === 0 ? 'No Pools Found' : (historicalPoolsData.length > 0 ? 'No Active Positions' : 'No Positions Yet')}
+            {/* No positions message */}
+            {historicalPoolsData.length === 0 && (
+              <Card className="p-8 text-center max-w-md mx-auto border-neutral-200 dark:border-neutral-700 dark:bg-neutral-800">
+                <CardTitle className="text-xl mb-2 text-neutral-900 dark:text-neutral-100">
+                  No Positions Yet
                 </CardTitle>
                 <p className="text-neutral-600 dark:text-neutral-400 mb-6">
-                   {poolsData.length === 0 
-                     ? (chainId === 11155111 
-                       ? 'No prediction pools have been created on Sepolia testnet yet. Be the first to create one!'
-                       : 'No prediction pools found on this network. Try switching to a different network or check back later.')
-                     : (historicalPoolsData.length > 0 
-                       ? 'You don\'t have any active positions, but you can see your trading history above.'
-                       : 'You don\'t have any positions in prediction pools yet.')
-                   }
+                  You do not have any active or historical positions.
                 </p>
-                <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                  <Button 
-                    onClick={() => router.push('/explorePools')}
-                    className="bg-black hover:bg-gray-800 dark:bg-white dark:hover:bg-gray-200 text-white dark:text-black"
-                  >
-                    Explore Pools
-                  </Button>
-                </div>
+                <Button onClick={() => router.push('/explore')}>
+                  Explore Pools
+                </Button>
               </Card>
             )}
-                </div>
-        ) : null}
+          </div>
+        )}
+      </div>
     </div>
-  </div>
   );
 }

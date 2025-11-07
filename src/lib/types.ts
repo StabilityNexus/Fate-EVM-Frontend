@@ -121,6 +121,47 @@ export interface UserPortfolio {
   positionRatio: number;
 }
 
+export interface PortfolioHolding {
+  tokenId: Address;
+  poolId: Address;
+  balance: bigint;
+  costBasis: bigint;
+  realizedPnl: bigint;
+  lastUpdated: number;
+  totalCapitalInvested?: bigint;
+}
+
+export interface PortfolioSnapshot {
+  userAddress: Address;
+  totalValue: bigint;
+  holdings: Record<Address, PortfolioHolding>;
+  lastUpdated: number;
+}
+
+export enum TransactionType {
+  Buy = 'buy',
+  Sell = 'sell',
+  Swap = 'swap',
+  AddLiquidity = 'add_liquidity',
+  RemoveLiquidity = 'remove_liquidity',
+}
+
+export interface Transaction {
+  hash: string;
+  userAddress: Address;
+  poolId: Address;
+  type: TransactionType;
+  bullTokenAmount: bigint;
+  bearTokenAmount: bigint;
+  baseTokenAmount: bigint;
+  timestamp: number;
+  price: number;
+}
+
+export interface CachedTransaction extends Transaction {
+  cachedAt: number;
+}
+
 export interface TransactionState {
   isPending: boolean;
   isConfirming: boolean;

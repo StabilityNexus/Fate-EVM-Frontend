@@ -1,4 +1,4 @@
-export const PredictionPoolFactoryABI =[
+export const PredictionPoolFactoryABI = [
   {
     "type": "function",
     "name": "allPools",
@@ -316,6 +316,6 @@ export const PredictionPoolFactoryABI =[
       }
     ]
   }
-]
+] as const;
 
 

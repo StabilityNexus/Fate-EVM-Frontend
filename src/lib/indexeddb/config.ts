@@ -23,7 +23,7 @@ export interface IndexConfig {
 // Database configuration
 export const DATABASE_CONFIG: DatabaseConfig = {
   name: 'FatePoolsDB',
-  version: 3,
+  version: 5,
   stores: [
     {
       name: 'poolDetails',
@@ -44,22 +44,6 @@ export const DATABASE_CONFIG: DatabaseConfig = {
       ]
     },
     {
-      name: 'bullTokens',
-      keyPath: 'id',
-      indexes: [
-        { name: 'poolAddress', keyPath: 'poolAddress' },
-        { name: 'lastUpdated', keyPath: 'lastUpdated' }
-      ]
-    },
-    {
-      name: 'bearTokens',
-      keyPath: 'id',
-      indexes: [
-        { name: 'poolAddress', keyPath: 'poolAddress' },
-        { name: 'lastUpdated', keyPath: 'lastUpdated' }
-      ]
-    },
-    {
       name: 'chainStatus',
       keyPath: 'chainId',
       indexes: [
@@ -75,31 +59,18 @@ export const DATABASE_CONFIG: DatabaseConfig = {
       ]
     },
     {
-      name: 'portfolioPositions',
-      keyPath: 'id',
-      indexes: [
-        { name: 'userAddress', keyPath: 'userAddress' },
-        { name: 'chainId', keyPath: 'chainId' },
-        { name: 'poolAddress', keyPath: 'poolAddress' },
-        { name: 'lastUpdated', keyPath: 'lastUpdated' }
-      ]
-    },
-    {
-      name: 'portfolioTransactions',
-      keyPath: 'id',
-      indexes: [
-        { name: 'userAddress', keyPath: 'userAddress' },
-        { name: 'chainId', keyPath: 'chainId' },
-        { name: 'poolAddress', keyPath: 'poolAddress' },
-        { name: 'timestamp', keyPath: 'timestamp' }
-      ]
-    },
-    {
-      name: 'portfolioCache',
+      name: 'portfolioSnapshots',
       keyPath: 'userAddress',
       indexes: [
-        { name: 'chainId', keyPath: 'chainId' },
         { name: 'lastUpdated', keyPath: 'lastUpdated' }
+      ]
+    },
+    {
+      name: 'recentTransactions',
+      keyPath: 'hash',
+      indexes: [
+        { name: 'userAddress', keyPath: 'userAddress' },
+        { name: 'timestamp', keyPath: 'timestamp' }
       ]
     }
   ]

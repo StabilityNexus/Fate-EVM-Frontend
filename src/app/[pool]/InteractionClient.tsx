@@ -25,6 +25,8 @@ import { Loading } from '@/components/ui/loading';
 import { formatNumber, formatNumberDown } from '@/utils/format';
 import { validateTransactionInput } from '@/lib/validation';
 import { withErrorHandling, createTransactionError } from '@/lib/errorHandler';
+import { getPortfolioSnapshot, updatePortfolioSnapshot, addTransaction } from '@/lib/indexeddb/portfolio';
+import { TransactionType } from '@/lib/types';
 
 // Note: ChainlinkAdapterFactories is imported but can be used for future oracle management features
 import TradingViewWidget from '@/components/ui/TradingViewWidget';
@@ -257,6 +259,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
   const [baseTokenBalance, setBaseTokenBalance] = useState<bigint>(BigInt(0));
   const [allowance, setAllowance] = useState<bigint>(BigInt(0));
   const [pendingApproval, setPendingApproval] = useState<{ amount: string; type: 'buy' | 'sell' } | null>(null);
+  const [lastTx, setLastTx] = useState<{type: 'buy' | 'sell', amount: string} | null>(null);
 
   // Get base token balance for MAX calculation
   const { data: baseTokenBalanceData } = useReadContracts({
@@ -349,6 +352,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
       throw createTransactionError(errorMessage);
     }
 
+    setLastTx({ type: 'buy', amount: buyAmount });
     const amountWei = parseUnits(validatedInput.amount.toString(), 18);
     
     // Check user's base token balance
@@ -396,6 +400,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
     let loadingToast: string | number | undefined;
     
     try {
+      setLastTx({ type: 'sell', amount: sellAmount });
       const amountWei = parseUnits(sellAmount, 18);
       
       // Check user's token balance
@@ -411,7 +416,6 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
         functionName: 'sell',
         args: [amountWei],
       });
-      setSellAmount('');
       
       // Wait for the transaction to be confirmed
       // The hash will be available in the data property after the transaction is submitted
@@ -437,6 +441,92 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
       }
     }
   }, [isConfirmed, isTransactionPending, pendingApproval, handlePoll, handleBuyTransaction, poolData.id.id]);
+
+  useEffect(() => {
+    if (isConfirmed && hash) {
+      const handleTransactionCaching = async () => {
+        if (!address || !poolData?.id?.id || !lastTx) return;
+
+        const { type: txType, amount } = lastTx;
+        const isBuy = txType === 'buy';
+        const type = isBuy ? TransactionType.Buy : TransactionType.Sell;
+
+        const priceBigInt = parseUnits(price.toString(), 18);
+
+        let tokenAmount: bigint;
+        let baseTokenAmount: bigint;
+
+        if (isBuy) {
+          baseTokenAmount = parseUnits(amount, 18);
+          tokenAmount = baseTokenAmount * parseUnits("1", 18) / priceBigInt;
+        } else { // isSell
+          tokenAmount = parseUnits(amount, 18);
+          baseTokenAmount = tokenAmount * priceBigInt / parseUnits("1", 18);
+        }
+
+        const transaction = {
+          hash,
+          userAddress: address,
+          poolId: poolData.id.id as Address,
+          type,
+          bullTokenAmount: isBull ? tokenAmount : BigInt(0),
+          bearTokenAmount: !isBull ? tokenAmount : BigInt(0),
+          baseTokenAmount: baseTokenAmount,
+          timestamp: Date.now(),
+          price: price,
+        };
+
+        await addTransaction(transaction);
+
+        const snapshot = await getPortfolioSnapshot(address) ?? {
+          userAddress: address,
+          totalValue: BigInt(0),
+          holdings: {},
+          lastUpdated: 0,
+        };
+
+        const holding = snapshot.holdings[tokenAddress as Address] ?? {
+          tokenId: tokenAddress as Address,
+          poolId: poolData.id.id as Address,
+          balance: BigInt(0),
+          costBasis: BigInt(0),
+          realizedPnl: BigInt(0),
+          lastUpdated: 0,
+          totalCapitalInvested: BigInt(0),
+        };
+
+        if (isBuy) {
+          holding.balance += tokenAmount;
+          holding.costBasis += baseTokenAmount;
+          holding.totalCapitalInvested = (holding.totalCapitalInvested || BigInt(0)) + baseTokenAmount;
+        } else {
+          if (holding.balance > 0) { // Avoid division by zero
+            const proportionSold = Number(tokenAmount) / Number(holding.balance);
+            const costBasisOfSold = BigInt(Math.floor(Number(holding.costBasis) * proportionSold));
+            
+            holding.realizedPnl += baseTokenAmount - costBasisOfSold;
+            holding.costBasis -= costBasisOfSold;
+            holding.balance -= tokenAmount;
+          } else {
+            // This case should ideally not happen if balance checks are correct
+            holding.balance -= tokenAmount;
+          }
+        }
+
+        holding.lastUpdated = Date.now();
+        snapshot.holdings[tokenAddress as Address] = holding;
+        snapshot.lastUpdated = Date.now();
+
+        await updatePortfolioSnapshot(snapshot);
+        toast.success("Portfolio updated!");
+        setLastTx(null);
+        setBuyAmount('');
+        setSellAmount('');
+      };
+
+      handleTransactionCaching();
+    }
+  }, [isConfirmed, hash, address, poolData, isBull, tokenAddress, price, lastTx]);
 
   const vaultTitle = isBull ? 'Bull Vault' : 'Bear Vault';
   const vaultIcon = isBull ? (

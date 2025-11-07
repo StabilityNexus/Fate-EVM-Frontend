@@ -1,4 +1,4 @@
-export const PredictionPoolABI=[
+export const PredictionPoolABI = [
   {
     "type": "constructor",
     "inputs": [
@@ -539,7 +539,7 @@ export const PredictionPoolABI=[
       }
     ]
   }
-]
+] as const;
 
 
 

@@ -1,4 +1,4 @@
-export const CoinABI=[
+export const CoinABI = [
   {
     "type": "constructor",
     "inputs": [
@@ -965,7 +965,5 @@ export const CoinABI=[
     "name": "ZeroAddress",
     "inputs": []
   }
-]
-
-
+] as const;
 
