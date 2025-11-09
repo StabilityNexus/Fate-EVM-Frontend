@@ -29,16 +29,18 @@ import { useState, useEffect, useMemo } from "react";
 import { useAccount } from "wagmi";
 import { formatUnits, Address } from "viem";
 import { useRouter } from "next/navigation";
-import { getPortfolioSnapshot, getRecentTransactions, updatePortfolioSnapshot } from "@/lib/indexeddb/portfolio";
+import { getPortfolioSnapshot, getRecentTransactions, updatePortfolioSnapshot, addTransaction } from "@/lib/indexeddb/portfolio";
 import { PortfolioSnapshot, CachedTransaction, PortfolioHolding } from "@/lib/types";
 import { PredictionPoolABI } from "@/utils/abi/PredictionPool";
 import { CoinABI } from "@/utils/abi/Coin";
+import { ERC20ABI } from "@/utils/abi/ERC20";
 import { FatePoolFactories } from "@/utils/addresses";
 import { getChainConfig } from "@/utils/chainConfig";
 import { PredictionPoolFactoryABI } from "@/utils/abi/PredictionPoolFactory";
 import { createPublicClient, http, formatUnits as fromWei } from "viem";
 import { IOracleABI } from "@/utils/abi/IOracle";
 import { getPriceFeedName } from "@/utils/supportedChainFeed";
+import { fetchRecentTransactions } from "@/lib/transactions";
 
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as const;
@@ -873,7 +875,7 @@ const PositionChart = ({
 };
 
 // Function to build the portfolio snapshot from RPC
-const buildSnapshotFromRPC = async (userAddress: Address, chainId: number): Promise<{snapshot: PortfolioSnapshot, poolInfo: Record<Address, { name: string; bullCoin: Address; bearCoin: Address; oracle: Address }>}> => {
+const buildSnapshotFromRPC = async (userAddress: Address, chainId: number): Promise<{snapshot: PortfolioSnapshot, poolInfo: Record<Address, { name: string; bullCoin: Address; bearCoin: Address; oracle: Address; baseToken: Address }>}> => {
   const chainConfig = getChainConfig(chainId);
   if (!chainConfig) {
     throw new Error(`Unsupported chainId: ${chainId}`);
@@ -903,19 +905,21 @@ const buildSnapshotFromRPC = async (userAddress: Address, chainId: number): Prom
       { address: poolAddress, abi: PredictionPoolABI, functionName: 'bullCoin' },
       { address: poolAddress, abi: PredictionPoolABI, functionName: 'bearCoin' },
       { address: poolAddress, abi: PredictionPoolABI, functionName: 'oracle' },
+      { address: poolAddress, abi: PredictionPoolABI, functionName: 'baseToken' },
     ])),
   });
 
-  const poolInfo: Record<Address, { name: string; bullCoin: Address; bearCoin: Address; oracle: Address }> = {};
+  const poolInfo: Record<Address, { name: string; bullCoin: Address; bearCoin: Address; oracle: Address; baseToken: Address }> = {};
   const tokenAddresses: { address: Address, pool: Address, type: 'bull' | 'bear' }[] = [];
 
   filteredPools.forEach((poolAddress, i) => {
-    const nameResult = poolInfoResults[i * 4];
-    const bullCoinResult = poolInfoResults[i * 4 + 1];
-    const bearCoinResult = poolInfoResults[i * 4 + 2];
-    const oracleResult = poolInfoResults[i * 4 + 3];
+    const nameResult = poolInfoResults[i * 5];
+    const bullCoinResult = poolInfoResults[i * 5 + 1];
+    const bearCoinResult = poolInfoResults[i * 5 + 2];
+    const oracleResult = poolInfoResults[i * 5 + 3];
+    const baseTokenResult = poolInfoResults[i * 5 + 4];
 
-    if (nameResult.status === 'success' && bullCoinResult.status === 'success' && bearCoinResult.status === 'success' && oracleResult.status === 'success') {
+    if (nameResult.status === 'success' && bullCoinResult.status === 'success' && bearCoinResult.status === 'success' && oracleResult.status === 'success' && baseTokenResult.status === 'success') {
       const bullCoinAddress = bullCoinResult.result as Address;
       const bearCoinAddress = bearCoinResult.result as Address;
       poolInfo[poolAddress] = {
@@ -923,6 +927,7 @@ const buildSnapshotFromRPC = async (userAddress: Address, chainId: number): Prom
         bullCoin: bullCoinAddress,
         bearCoin: bearCoinAddress,
         oracle: oracleResult.result as Address,
+        baseToken: baseTokenResult.result as Address,
       };
       tokenAddresses.push({ address: bullCoinAddress, pool: poolAddress, type: 'bull' });
       tokenAddresses.push({ address: bearCoinAddress, pool: poolAddress, type: 'bear' });
@@ -973,7 +978,8 @@ export default function PortfolioPage() {
   const [showBearDistribution, setShowBearDistribution] = useState(false);
   const [snapshot, setSnapshot] = useState<PortfolioSnapshot | null>(null);
   const [transactions, setTransactions] = useState<CachedTransaction[]>([]);
-  const [poolInfo, setPoolInfo] = useState<Record<Address, { name: string; bullCoin: Address; bearCoin: Address; oracle: Address }>>({});
+  const [poolInfo, setPoolInfo] = useState<Record<Address, { name: string; bullCoin: Address; bearCoin: Address; oracle: Address; baseToken: Address }>>({});
+  const [baseTokenDetails, setBaseTokenDetails] = useState<Record<Address, { name: string; symbol: string }>>({});
   const [oraclePrices, setOraclePrices] = useState<Record<Address, number>>({});
   const [poolStats, setPoolStats] = useState<Record<Address, { bullReserves: bigint; bearReserves: bigint; bullTotalSupply: bigint; bearTotalSupply: bigint }>>({});
   const [isLoading, setIsLoading] = useState(true);
@@ -994,24 +1000,31 @@ export default function PortfolioPage() {
     if (address && chainId) {
       const loadData = async () => {
         setIsLoading(true);
-        const [snapshotData, transactionsData] = await Promise.all([
+        let [snapshotData, transactionsData] = await Promise.all([
           getPortfolioSnapshot(address),
-          getRecentTransactions(address)
+          getRecentTransactions(address),
         ]);
+
+        if (transactionsData.length === 0) {
+          const rpcTransactions = await fetchRecentTransactions(address, chainId);
+          if (rpcTransactions.length > 0) {
+            await Promise.all(rpcTransactions.map(addTransaction));
+            transactionsData = await getRecentTransactions(address);
+          }
+        }
+
         if (snapshotData) {
           setSnapshot(snapshotData);
           setTransactions(transactionsData);
-          setIsLoading(false);
         } else {
-          // If no snapshot exists, fetch from RPC, build snapshot, and save it.
           console.log("No snapshot found, fetching from RPC...");
           const { snapshot: newSnapshot, poolInfo: newPoolInfo } = await buildSnapshotFromRPC(address, chainId);
           await updatePortfolioSnapshot(newSnapshot);
           setSnapshot(newSnapshot);
           setPoolInfo(newPoolInfo);
-          setTransactions([]);
-          setIsLoading(false);
+          setTransactions(transactionsData);
         }
+        setIsLoading(false);
       };
       loadData();
     }
@@ -1040,21 +1053,24 @@ export default function PortfolioPage() {
                         { address: poolId, abi: PredictionPoolABI, functionName: 'bullCoin' },
                         { address: poolId, abi: PredictionPoolABI, functionName: 'bearCoin' },
                         { address: poolId, abi: PredictionPoolABI, functionName: 'oracle' },
+                        { address: poolId, abi: PredictionPoolABI, functionName: 'baseToken' },
                     ])),
                 });
 
-                const info: Record<Address, { name: string; bullCoin: Address; bearCoin: Address; oracle: Address }> = {};
+                const info: Record<Address, { name: string; bullCoin: Address; bearCoin: Address; oracle: Address; baseToken: Address }> = {};
                 uniquePoolIds.forEach((poolId, i) => {
-                    const nameResult = poolInfoResults[i * 4];
-                    const bullCoinResult = poolInfoResults[i * 4 + 1];
-                    const bearCoinResult = poolInfoResults[i * 4 + 2];
-                    const oracleResult = poolInfoResults[i * 4 + 3];
-                    if (nameResult.status === 'success' && bullCoinResult.status === 'success' && bearCoinResult.status === 'success' && oracleResult.status === 'success') {
+                    const nameResult = poolInfoResults[i * 5];
+                    const bullCoinResult = poolInfoResults[i * 5 + 1];
+                    const bearCoinResult = poolInfoResults[i * 5 + 2];
+                    const oracleResult = poolInfoResults[i * 5 + 3];
+                    const baseTokenResult = poolInfoResults[i * 5 + 4];
+                    if (nameResult.status === 'success' && bullCoinResult.status === 'success' && bearCoinResult.status === 'success' && oracleResult.status === 'success' && baseTokenResult.status === 'success') {
                         info[poolId] = {
                             name: nameResult.result as string,
                             bullCoin: bullCoinResult.result as Address,
                             bearCoin: bearCoinResult.result as Address,
                             oracle: oracleResult.result as Address,
+                            baseToken: baseTokenResult.result as Address,
                         };
                     }
                 });
@@ -1152,6 +1168,50 @@ export default function PortfolioPage() {
     }
   }, [poolInfo, chainId]);
 
+  useEffect(() => {
+    if (Object.keys(poolInfo).length > 0 && chainId) {
+        const fetchBaseTokenDetails = async () => {
+            const baseTokenAddresses = Object.values(poolInfo).map(p => p.baseToken);
+            const uniqueBaseTokenAddresses = [...new Set(baseTokenAddresses)];
+
+            if (uniqueBaseTokenAddresses.length === 0) return;
+
+            const chainConfig = getChainConfig(chainId);
+            if (!chainConfig) return;
+
+            const publicClient = createPublicClient({
+                chain: chainConfig.chain,
+                transport: http(),
+            });
+
+            try {
+                const tokenDetailsResults = await publicClient.multicall({
+                    contracts: uniqueBaseTokenAddresses.flatMap(tokenAddress => ([
+                        { address: tokenAddress, abi: ERC20ABI, functionName: 'name' },
+                        { address: tokenAddress, abi: ERC20ABI, functionName: 'symbol' },
+                    ])),
+                });
+
+                const details: Record<Address, { name: string; symbol: string }> = {};
+                uniqueBaseTokenAddresses.forEach((tokenAddress, i) => {
+                    const nameResult = tokenDetailsResults[i * 2];
+                    const symbolResult = tokenDetailsResults[i * 2 + 1];
+                    if (nameResult.status === 'success' && symbolResult.status === 'success') {
+                        details[tokenAddress] = {
+                            name: nameResult.result as string,
+                            symbol: symbolResult.result as string,
+                        };
+                    }
+                });
+                setBaseTokenDetails(details);
+            } catch (error) {
+                console.error("Failed to fetch base token details:", error);
+            }
+        };
+        fetchBaseTokenDetails();
+    }
+  }, [poolInfo, chainId]);
+
   const poolsData = useMemo(() => {
     if (!snapshot || Object.keys(poolInfo).length === 0) return [];
 
@@ -1198,6 +1258,7 @@ export default function PortfolioPage() {
       const totalReturnPercentage = totalCostBasis > 0 ? (totalPnL / totalCostBasis) * 100 : 0;
 
       const info = poolInfo[poolId as Address];
+      const baseTokenInfo = info ? baseTokenDetails[info.baseToken] : null;
 
       return {
         id: poolId,
@@ -1229,9 +1290,9 @@ export default function PortfolioPage() {
         bearTokenAddress: info?.bearCoin || "0x...",
         chainId: chainId || 1,
         priceFeed: getPriceFeedName(info?.oracle, chainId || 1),
-        baseToken: "0x...",
-        baseTokenSymbol: "WETH",
-        baseTokenName: "Wrapped Ether",
+        baseToken: info?.baseToken || "0x...",
+        baseTokenSymbol: baseTokenInfo?.symbol || "UNKNOWN",
+        baseTokenName: baseTokenInfo?.name || "UNKNOWN",
         bullTokenName: "BULL",
         bearTokenName: "BEAR",
         bullTokenSymbol: "BULL",
@@ -1247,7 +1308,7 @@ export default function PortfolioPage() {
         isCreator: false,
       } as PoolData;
     });
-  }, [snapshot, chainId, poolInfo, oraclePrices, poolStats]);
+  }, [snapshot, chainId, poolInfo, oraclePrices, poolStats, baseTokenDetails]);
 
   const {
     activePoolsData,

@@ -1,16 +1,22 @@
 import { IndexedDBDatabase } from './database';
 import { PortfolioSnapshot, Transaction, CachedTransaction } from '../types';
 import { Address } from 'viem';
+import { logger } from '../logger';
 
 const MAX_TRANSACTIONS = 10;
 
 const db = new IndexedDBDatabase();
 
 async function getDB() {
-  if (!db.isReady()) {
-    await db.init();
+  try {
+    if (!db.isReady()) {
+      await db.init();
+    }
+    return db;
+  } catch (error) {
+    logger.logError("Failed to initialize IndexedDB:", error);
+    throw error;
   }
-  return db;
 }
 
 export async function getPortfolioSnapshot(userAddress: Address): Promise<PortfolioSnapshot | null> {
@@ -24,18 +30,31 @@ export async function updatePortfolioSnapshot(snapshot: PortfolioSnapshot): Prom
 }
 
 export async function getRecentTransactions(userAddress: Address): Promise<CachedTransaction[]> {
-  const db = await getDB();
-  return db.getAll<CachedTransaction>('recentTransactions', 'userAddress', userAddress);
+  try {
+    const db = await getDB();
+    const transactions = await db.getAll<CachedTransaction>('recentTransactions', 'userAddress', userAddress);
+    logger.info(`Found ${transactions.length} recent transactions for ${userAddress}`, { transactions });
+    return transactions;
+  } catch (error) {
+    logger.logError(`Failed to get recent transactions for ${userAddress}:`, error);
+    return [];
+  }
 }
 
 export async function addTransaction(transaction: Transaction): Promise<void> {
-  const db = await getDB();
-  const tx: CachedTransaction = { ...transaction, cachedAt: Date.now() };
-  await db.put('recentTransactions', tx);
+  try {
+    const db = await getDB();
+    const tx: CachedTransaction = { ...transaction, cachedAt: Date.now() };
+    await db.put('recentTransactions', tx);
+    logger.info("Added new transaction", { transaction: tx });
 
-  const allTransactions = await db.getAll<CachedTransaction>('recentTransactions', 'userAddress', transaction.userAddress);
-  if (allTransactions.length > MAX_TRANSACTIONS) {
-    const oldestTransaction = allTransactions.sort((a, b) => a.timestamp - b.timestamp)[0];
-    await db.delete('recentTransactions', oldestTransaction.hash);
+    const allTransactions = await db.getAll<CachedTransaction>('recentTransactions', 'userAddress', transaction.userAddress);
+    if (allTransactions.length > MAX_TRANSACTIONS) {
+      const oldestTransaction = allTransactions.sort((a, b) => a.timestamp - b.timestamp)[0];
+      await db.delete('recentTransactions', oldestTransaction.hash);
+      logger.info("Removed oldest transaction", { transaction: oldestTransaction });
+    }
+  } catch (error) {
+    logger.logError("Failed to add transaction", error);
   }
 }

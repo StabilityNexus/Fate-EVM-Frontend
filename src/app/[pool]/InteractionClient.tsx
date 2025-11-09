@@ -372,7 +372,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
         address: poolData.asset_address as `0x${string}`,
         abi: ERC20ABI,
         functionName: 'approve',
-        args: [tokenAddress, amountWei],
+        args: [tokenAddress as Address, amountWei],
       });
       toast.dismiss(approvalToast);
       return;
@@ -451,17 +451,37 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
         const isBuy = txType === 'buy';
         const type = isBuy ? TransactionType.Buy : TransactionType.Sell;
 
-        const priceBigInt = parseUnits(price.toString(), 18);
-
         let tokenAmount: bigint;
         let baseTokenAmount: bigint;
 
-        if (isBuy) {
-          baseTokenAmount = parseUnits(amount, 18);
-          tokenAmount = baseTokenAmount * parseUnits("1", 18) / priceBigInt;
-        } else { // isSell
-          tokenAmount = parseUnits(amount, 18);
-          baseTokenAmount = tokenAmount * priceBigInt / parseUnits("1", 18);
+        try {
+          const reserve = isBull ? poolData.bull_reserve : poolData.bear_reserve;
+          const supply = isBull ? poolData.bull_token.fields.total_supply : poolData.bear_token.fields.total_supply;
+
+          if (supply === BigInt(0) || reserve === BigInt(0)) {
+            logger.warn("Token supply or reserve is zero, cannot calculate transaction amounts for caching.", {
+              poolId: poolData.id.id,
+              supply: supply.toString(),
+              reserve: reserve.toString()
+            });
+            return;
+          }
+
+          if (isBuy) {
+            baseTokenAmount = parseUnits(amount, 18);
+            tokenAmount = (baseTokenAmount * supply) / reserve;
+          } else { // isSell
+            tokenAmount = parseUnits(amount, 18);
+            baseTokenAmount = (tokenAmount * reserve) / supply;
+          }
+        } catch (error) {
+          logger.logError("Error calculating transaction amounts for caching", error, {
+            poolId: poolData.id.id,
+            amount,
+            price: price.toString(),
+            txType,
+          });
+          return;
         }
 
         const transaction = {
@@ -499,17 +519,27 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
           holding.balance += tokenAmount;
           holding.costBasis += baseTokenAmount;
           holding.totalCapitalInvested = (holding.totalCapitalInvested || BigInt(0)) + baseTokenAmount;
-        } else {
-          if (holding.balance > 0) { // Avoid division by zero
-            const proportionSold = Number(tokenAmount) / Number(holding.balance);
-            const costBasisOfSold = BigInt(Math.floor(Number(holding.costBasis) * proportionSold));
+        } else { // isSell
+          // Ensure we don't divide by zero and that the balance is positive.
+          if (holding.balance > BigInt(0)) {
+            // Calculate the cost basis of the sold tokens using bigint arithmetic to preserve precision.
+            const costBasisOfSold = (holding.costBasis * tokenAmount) / holding.balance;
             
+            // Update realized P&L.
             holding.realizedPnl += baseTokenAmount - costBasisOfSold;
-            holding.costBasis -= costBasisOfSold;
-            holding.balance -= tokenAmount;
+            
+            // Update cost basis and balance, ensuring they don't go below zero.
+            holding.costBasis = holding.costBasis > costBasisOfSold ? holding.costBasis - costBasisOfSold : BigInt(0);
+            holding.balance = holding.balance > tokenAmount ? holding.balance - tokenAmount : BigInt(0);
           } else {
-            // This case should ideally not happen if balance checks are correct
-            holding.balance -= tokenAmount;
+            // This case should not happen if the user has a balance to sell,
+            // but as a fallback, we'll just update the balance.
+            logger.warn("Sell transaction cached for a holding with zero or negative balance.", {
+              tokenId: tokenAddress,
+              balance: holding.balance.toString()
+            });
+            // We can't calculate P&L correctly here, so we just reduce the balance.
+            holding.balance = holding.balance > tokenAmount ? holding.balance - tokenAmount : BigInt(0);
           }
         }
 

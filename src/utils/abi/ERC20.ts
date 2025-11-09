@@ -1,4 +1,4 @@
-export const ERC20ABI=[
+export const ERC20ABI = [
   {
     "type": "function",
     "name": "allowance",
@@ -307,4 +307,4 @@ export const ERC20ABI=[
       }
     ]
   }
-]
+] as const;
