@@ -15,7 +15,7 @@
     "@radix-ui/react-separator": "^1.1.2",
     "@radix-ui/react-slot": "^1.1.2",
     "@radix-ui/react-tooltip": "^1.1.8",
-    "@rainbow-me/rainbowkit": "^2.2.6",
+    "@rainbow-me/rainbowkit": "^2.2.9",
     "@tabler/icons-react": "^3.30.0",
     "@tanstack/react-query": "^5.80.7",
     "class-variance-authority": "^0.7.1",
@@ -32,8 +32,8 @@
     "sonner": "^2.0.6",
     "tailwind-merge": "^3.0.1",
     "tailwindcss-animate": "^1.0.7",
-    "viem": "^2.31.0",
-    "wagmi": "^2.15.6"
+    "viem": "^2.40.3",
+    "wagmi": "^2.19.5"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
