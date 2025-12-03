@@ -115,24 +115,24 @@ export default function Footer({ className = "" }: FooterProps) {
       <div className="px-4 sm:px-8  py-6 space-y-6">
         {/* Logo and Social Links */}
         <div className="flex flex-col  md:flex-row ">
-          <div className="w-full flex mb-4 md:mb-0 justify-between"><Link
-            href="https://stability.nexus/"
-            target="_blank"
-            className="cursor-pointer"
-          >
-            <Image
-              src="/logo-animated.gif"
-              alt="Fate Protocol"
-              width={80}
-              height={80}
-              className="p-2"
-              priority
-            />
-          </Link>
-            <h5 className="text-md sm:hidden md:hidden flex justify-center items-center">
+          <div className="w-full flex mb-4 md:mb-0 justify-between">
+            <Link
+              href="https://stability.nexus/"
+              target="_blank"
+              className="cursor-pointer"
+            >
+              <Image
+                src="/logo-animated.gif"
+                alt="Fate Protocol"
+                width={80}
+                height={80}
+                className="p-2"
+                priority
+              />
+            </Link>
+            <h5 className="text-md sm:hidden md:hidden flex justify-center items-center text-gray-900 dark:text-white">
               A Project by Stability Nexus
             </h5>
-
           </div>
           <div className="flex items-center space-x-3 sm:space-x-4">
             {navigation.map((item) => (
@@ -143,7 +143,7 @@ export default function Footer({ className = "" }: FooterProps) {
                 className="rounded-full bg-white/10 dark:bg-black/10 p-2 hover:bg-white/20 dark:hover:bg-black/20 transition-colors"
               >
                 <span className="sr-only">{item.name}</span>
-                <item.icon className="size-6 text-black dark:text-white" aria-hidden="true" />
+                <item.icon className="size-6 text-white-900 dark:text-white" aria-hidden="true" />
               </Link>
             ))}
           </div>
@@ -154,28 +154,28 @@ export default function Footer({ className = "" }: FooterProps) {
           <Link
             href="https://stability.nexus/protocols"
             target="_blank"
-            className="text-black dark:text-white hover:underline hover:decoration-2"
+            className="text-white-900 dark:text-white hover:text-yellow-500 dark:hover:text-yellow-400 hover:underline hover:decoration-2"
           >
             Other Protocols
           </Link>
           <Link
             href="https://stability.nexus/research"
             target="_blank"
-            className="text-black dark:text-white hover:underline hover:decoration-2"
+            className="text-white-900 dark:text-white hover:text-yellow-500 dark:hover:text-yellow-400 hover:underline hover:decoration-2"
           >
             Research
           </Link>
           <Link
             href="https://news.stability.nexus/"
             target="_blank"
-            className="text-black dark:text-white hover:underline hover:decoration-2"
+            className="text-white-900 dark:text-white hover:text-yellow-500 dark:hover:text-yellow-400 hover:underline hover:decoration-2"
           >
             News
           </Link>
           <Link
             href="https://docs.stability.nexus/"
             target="_blank"
-            className="text-black dark:text-white hover:underline hover:decoration-2"
+            className="text-white-900 dark:text-white hover:text-yellow-500 dark:hover:text-yellow-400 hover:underline hover:decoration-2"
           >
             Docs
           </Link>
