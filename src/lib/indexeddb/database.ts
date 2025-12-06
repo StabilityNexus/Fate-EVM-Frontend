@@ -22,7 +22,7 @@ export class IndexedDBDatabase {
         return;
       }
 
-      const request = indexedDB.open(this.config.name, this.config.version);
+      const request = window.indexedDB.open(this.config.name, this.config.version);
 
       request.onerror = () => {
         const error = new Error(`Failed to open database: ${request.error?.message}`);
