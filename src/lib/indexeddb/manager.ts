@@ -27,56 +27,85 @@ export class FatePoolsIndexedDBManager {
     await this.db.init(this.handleUpgrade.bind(this));
   }
 
-  private async handleUpgrade(db: IDBDatabase, transaction: IDBTransaction, oldVersion: number, newVersion: number): Promise<void> {
+  private handleUpgrade(db: IDBDatabase, transaction: IDBTransaction, oldVersion: number, newVersion: number): void {
     console.log(`Upgrading database from version ${oldVersion} to ${newVersion}`);
     if (oldVersion < 4) {
-      await this.migrateToV4(db, transaction);
+      this.migrateToV4(db, transaction);
     }
   }
 
-  private async migrateToV4(db: IDBDatabase, transaction: IDBTransaction): Promise<void> {
-    logger.info('Starting migration to v4...');
-    try {
-      const positionStore = transaction.objectStore('portfolioPositions');
-      const request = positionStore.getAll();
+  private migrateToV4(db: IDBDatabase, transaction: IDBTransaction): Promise<void> {
+    return new Promise((resolve, reject) => {
+      try {
+        const positionStore = transaction.objectStore('portfolioPositions');
+        const request = positionStore.getAll();
 
-      request.onsuccess = () => {
-        const positions = request.result as PortfolioPosition[];
-        if (!positions || positions.length === 0) {
-          logger.info('No positions to migrate.');
-          return;
-        }
+        request.onsuccess = () => {
+          const positions = request.result as PortfolioPosition[];
+          if (!positions || positions.length === 0) {
+            logger.info('No positions to migrate.');
+            resolve();
+            return;
+          }
 
-        positions.forEach(position => {
+          let pending = positions.length;
+          let hasError = false;
 
-          // Let's initialize to 0. The app logic should handle "if totalInvested is 0 but we have balance -> re-fetch history"
-          const upgradedPosition: PortfolioPosition = {
-            ...position,
-            totalBought: 0,
-            totalSold: 0,
-            totalInvested: 0,
-            totalReceived: 0,
-            avgBuyPrice: 0,
-            realizedPnL: 0,
-            unrealizedPnL: 0
-          };
+          positions.forEach(position => {
+            const upgradedPosition: PortfolioPosition = {
+              ...position,
+              totalBought: 0,
+              totalSold: 0,
+              totalInvested: 0,
+              totalReceived: 0,
+              avgBuyPrice: 0,
+              realizedPnL: 0,
+              unrealizedPnL: 0
+            };
 
-          positionStore.put(upgradedPosition);
-        });
-        logger.info(`Migrated ${positions.length} positions to v4 schema.`);
-      };
+            const putRequest = positionStore.put(upgradedPosition);
 
-      request.onerror = () => {
-        logger.error('Failed to read positions for migration');
-      };
+            putRequest.onsuccess = () => {
+              pending--;
+              if (pending === 0 && !hasError) {
+                logger.info(`Migrated ${positions.length} positions to v4 schema.`);
 
+                // Also wait for transaction to complete for extra safety
+                transaction.oncomplete = () => {
+                  resolve();
+                };
 
-      // Transaction pruning is handled by the app on next write (30 transactions limit)
+                transaction.onerror = () => {
+                  reject(transaction.error || new Error('Transaction error after migration'));
+                };
 
-    } catch (error) {
-      logger.error('Migration to v4 failed:', error instanceof Error ? error : new Error(String(error)));
-      // Consider clearing data if migration fails?
-    }
+                transaction.onabort = () => {
+                  reject(transaction.error || new Error('Transaction aborted after migration'));
+                };
+              }
+            };
+
+            putRequest.onerror = () => {
+              if (!hasError) {
+                hasError = true;
+                reject(new Error('Failed to update position during migration'));
+              }
+            };
+          });
+        };
+
+        request.onerror = () => {
+          logger.error('Failed to read positions for migration');
+          reject(new Error('Failed to read positions for migration'));
+        };
+
+        // Transaction pruning is handled by the app on next write (30 transactions limit)
+
+      } catch (error) {
+        logger.error('Migration to v4 failed:', error instanceof Error ? error : new Error(String(error)));
+        reject(error instanceof Error ? error : new Error(String(error)));
+      }
+    });
   }
 
   async close(): Promise<void> {

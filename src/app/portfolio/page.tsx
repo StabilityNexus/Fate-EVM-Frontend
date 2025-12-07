@@ -354,7 +354,7 @@ const calculateTokenMetricsWithEvents = async (
           price: tx.price,
           value: tx.amountAsset,
           fees: tx.feePaid || 0,
-          transactionHash: tx.transactionHash || `tx-${Date.now()}-${Math.random()}`,
+          transactionHash: tx.transactionHash || `${poolAddress}-${type}-${tx.blockNumber}-${tx.amountCoin.toFixed(6)}`,
           blockNumber: Number(tx.blockNumber),
           timestamp: tx.timestamp || Date.now()
         };
@@ -543,6 +543,32 @@ const fetchUserTransactions = async (tokenAddress: string, userAddress: string, 
       sellEvents: sellLogs.length
     });
 
+    // Batch fetch block timestamps for accuracy
+    const allLogs = [...buyLogs, ...sellLogs];
+    const uniqueBlockNumbers = [...new Set(allLogs.map(log => log.blockNumber))];
+
+    const blockTimestamps = new Map<bigint, number>();
+
+    // Fetch all unique blocks in parallel
+    try {
+      const blocks = await Promise.all(
+        uniqueBlockNumbers.map(blockNumber =>
+          publicClient.getBlock({ blockNumber }).catch(() => null)
+        )
+      );
+
+      blocks.forEach((block, index) => {
+        if (block) {
+          // Convert block timestamp to milliseconds
+          blockTimestamps.set(uniqueBlockNumbers[index], Number(block.timestamp) * 1000);
+        }
+      });
+
+      console.debug(`Fetched timestamps for ${blockTimestamps.size} blocks`);
+    } catch (error) {
+      console.warn('Failed to fetch some block timestamps, using fallback', error);
+    }
+
     const transactions: Array<{
       type: 'buy' | 'sell';
       blockNumber: bigint;
@@ -574,7 +600,7 @@ const fetchUserTransactions = async (tokenAddress: string, userAddress: string, 
         price,
         transactionHash: log.transactionHash,
         feePaid: Number(formatUnits(log.args.feePaid || BigInt(0), 18)),
-        timestamp: Date.now()
+        timestamp: blockTimestamps.get(log.blockNumber) || Date.now()
       });
     }
 
@@ -598,7 +624,7 @@ const fetchUserTransactions = async (tokenAddress: string, userAddress: string, 
         price,
         transactionHash: log.transactionHash,
         feePaid: Number(formatUnits(log.args.feePaid || BigInt(0), 18)),
-        timestamp: Date.now()
+        timestamp: blockTimestamps.get(log.blockNumber) || Date.now()
       });
     }
 

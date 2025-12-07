@@ -23,7 +23,7 @@ export class IndexedDBDatabase {
         resolve();
       };
 
-      request.onupgradeneeded = async (event) => {
+      request.onupgradeneeded = (event) => {
         const db = request.result;
         const transaction = request.transaction!;
         const oldVersion = event.oldVersion;
@@ -33,7 +33,7 @@ export class IndexedDBDatabase {
           this.createStores(db, transaction);
 
           if (onUpgrade) {
-            await onUpgrade(db, transaction, oldVersion, newVersion);
+            onUpgrade(db, transaction, oldVersion, newVersion);
           }
         } catch (error) {
           logger.error('Database upgrade failed:', error as Error);
