@@ -29,7 +29,8 @@ import { useAccount, useReadContracts } from "wagmi";
 import { formatUnits, Address, isAddress } from "viem";
 import { useRouter } from "next/navigation";
 import { useFatePoolsStorage } from "@/lib/fatePoolHook";
-import { SupportedChainId, PortfolioCache, PortfolioPosition } from "@/lib/indexeddb/config";
+import { PortfolioPosition, PortfolioTransaction, SupportedChainId, PortfolioCache } from "@/lib/indexeddb/config";
+import { UseFatePoolsStorageReturn } from "@/lib/fatePoolHook";
 import { FatePoolsIndexedDBManager } from "@/lib/indexeddb/manager";
 import { PredictionPoolABI } from "@/utils/abi/PredictionPool";
 import { CoinABI } from "@/utils/abi/Coin";
@@ -96,14 +97,54 @@ const calculateTokenMetricsWithEvents = async (
   tokenAddress: string,
   userAddress: string,
   chainId: number,
+  poolAddress: string,
+  type: 'bull' | 'bear',
+  baseTokenSymbol: string,
+  storage: UseFatePoolsStorageReturn
 ) => {
   const currentPrice = safeNumber(supply > 0 ? reserve / supply : 0);
   const currentValue = userTokens * currentPrice;
 
   try {
-    // Get detailed transactions from events (both Buy/Sell and DetailedBuy/DetailedSell)
-    const transactions = await fetchUserTransactions(tokenAddress, userAddress, chainId);
-    
+    let transactions: any[] = [];
+    let minBlock = 0;
+    // 1. Load cached transactions from IndexedDB
+    try {
+      const allTransactions = await storage.getPortfolioTransactions(userAddress, chainId as SupportedChainId);
+
+      // Filter for this specific pool and token type
+      transactions = allTransactions
+        .filter((tx: PortfolioTransaction) => tx.poolAddress === poolAddress && tx.tokenType === type)
+        .map(t => ({
+          type: t.action,  // Map 'action' to 'type' for consistency
+          blockNumber: BigInt(t.blockNumber),
+          amountAsset: t.value,
+          amountCoin: t.amount,
+          price: t.price,
+          transactionHash: t.transactionHash,
+          feePaid: t.fees,
+          timestamp: t.timestamp
+        }));
+      // Get the highest block number from cached transactions
+      if (transactions.length > 0) {
+        minBlock = Math.max(...transactions.map(t => Number(t.blockNumber)));
+        console.debug(`Loaded ${transactions.length} cached transactions for ${type}, highest block: ${minBlock}`);
+      }
+    } catch (e) {
+      console.warn('Failed to load cached transactions:', e);
+    }
+    // 2. Fetch NEW transactions from blockchain (incremental)
+    const newTransactions = await fetchUserTransactions(tokenAddress, userAddress, chainId, minBlock);
+
+    // 3. Merge and deduplicate
+    const existingHashes = new Set(transactions.map(t => t.transactionHash));
+    for (const tx of newTransactions) {
+      if (!tx.transactionHash || !existingHashes.has(tx.transactionHash)) {
+        transactions.push(tx);
+        if (tx.transactionHash) existingHashes.add(tx.transactionHash);
+      }
+    }
+
     if (transactions.length === 0) {
       // Fallback to current price if no transactions found
       const costBasis = userTokens * currentPrice;
@@ -124,7 +165,14 @@ const calculateTokenMetricsWithEvents = async (
     let totalFeesPaid = 0;
     let realizedPnL = 0;
     let grossInvestment = 0;
-    const buyQueue: Array<{ 
+
+    // v4 Aggregated metrics for caching
+    let totalBought = 0;
+    let totalSold = 0;
+    let totalInvested = 0;
+    let totalReceived = 0;
+
+    const buyQueue: Array<{
       amount: number;              // remaining tokens
       initialAmount: number;       // original tokens bought
       price: number;
@@ -139,18 +187,22 @@ const calculateTokenMetricsWithEvents = async (
 
     // Process transactions chronologically
     const sortedTxns = transactions.sort((a: any, b: any) => Number(a.blockNumber) - Number(b.blockNumber));
-    
+
     for (const tx of sortedTxns) {
       if (tx.type === 'buy') {
         // CORRECTED: Track net investment (excluding fees) as cost basis
         const feePaid = (tx as any).feePaid || 0;
         const netInvestment = tx.amountAsset - feePaid; // Actual investment amount
-        
+
         grossInvestment += tx.amountAsset; // Total paid (including fees)
         totalFeesPaid += feePaid;
         totalCostBasis += netInvestment; // Net investment (excluding fees)
-        
-        buyQueue.push({ 
+
+        // Track v4 aggregated metrics
+        totalBought += tx.amountCoin;
+        totalInvested += netInvestment;
+
+        buyQueue.push({
           amount: tx.amountCoin,
           initialAmount: tx.amountCoin,
           price: tx.price,
@@ -160,7 +212,7 @@ const calculateTokenMetricsWithEvents = async (
           timestamp: (tx as any).timestamp || 0,
           blockNumber: Number(tx.blockNumber)
         });
-        
+
         console.debug(`Buy: ${tx.amountCoin} tokens @ ${tx.price} WETH/token, Net invested: ${netInvestment} WETH (fees: ${feePaid} WETH)`, {
           amountCoin: tx.amountCoin,
           price: tx.price,
@@ -173,6 +225,10 @@ const calculateTokenMetricsWithEvents = async (
         let costOfSold = 0;
         const feesOnThisSale = (tx as any).feePaid || 0;
 
+        // Track v4 aggregated metrics
+        totalSold += tx.amountCoin;
+        totalReceived += sellValue;
+
         console.debug(`Sell: ${tx.amountCoin} tokens for ${tx.amountAsset} WETH, Fees: ${feesOnThisSale} WETH`, {
           amountCoin: tx.amountCoin,
           amountAsset: tx.amountAsset,
@@ -183,30 +239,30 @@ const calculateTokenMetricsWithEvents = async (
         while (remainingToSell > 0 && buyQueue.length > 0) {
           const oldestBuy = buyQueue[0];
           const amountFromThisBuy = Math.min(remainingToSell, oldestBuy.amount);
-          
+
           // CORRECTED: Use net amount (excluding fees) for cost basis calculation
           const costPerToken = oldestBuy.netAmount / oldestBuy.initialAmount;
           costOfSold += amountFromThisBuy * costPerToken;
-          
+
           remainingToSell -= amountFromThisBuy;
           oldestBuy.amount -= amountFromThisBuy;
-          
+
           console.debug(`FIFO: Sold ${amountFromThisBuy} @ ${costPerToken} WETH/token (net) = ${amountFromThisBuy * costPerToken} WETH cost`, {
             amountFromThisBuy,
             costPerToken,
             totalCost: amountFromThisBuy * costPerToken
           });
-          
+
           if (oldestBuy.amount === 0) {
             buyQueue.shift();
           }
         }
-        
+
         // Calculate realized P&L (sell value - gross cost basis)
         const thisSaleRealizedPnL = sellValue - costOfSold;
         realizedPnL += thisSaleRealizedPnL;
         totalFeesPaid += feesOnThisSale;
-        
+
         console.debug(`Sale P&L: ${thisSaleRealizedPnL} WETH (${sellValue} received - ${costOfSold} net cost)`, {
           realizedPnL: thisSaleRealizedPnL,
           sellValue,
@@ -220,17 +276,17 @@ const calculateTokenMetricsWithEvents = async (
       const costPerToken = buy.netAmount / buy.initialAmount;
       return sum + buy.amount * costPerToken;
     }, 0);
-    
+
     // Check if there were any sell transactions (not based on mutated queue)
     const hadSell = transactions.some((t: any) => t.type === 'sell');
-    
+
     // Use totalCostBasis if no sells, otherwise remainingCostBasis
     const actualCostBasis = hadSell ? remainingCostBasis : totalCostBasis;
-    
+
     const unrealizedPnL = currentValue - actualCostBasis;
     const totalPnL = realizedPnL + unrealizedPnL;
     const netInvestment = grossInvestment - totalFeesPaid;
-    
+
     const returns = actualCostBasis > 0 ? (totalPnL / actualCostBasis) * 100 : 0;
 
     console.debug(`CORRECTED FIFO Results:`, {
@@ -250,19 +306,67 @@ const calculateTokenMetricsWithEvents = async (
     });
     console.debug(`User tokens: ${userTokens}`);
 
-    // For sold positions (userTokens = 0), return comprehensive data
-    if (userTokens === 0) {
-      console.debug(`Position fully sold - showing realized P&L only`);
-      return {
-        price: currentPrice,
-        currentValue: 0,
-        costBasis: totalCostBasis,
-        pnL: realizedPnL,
-        returns: totalCostBasis > 0 ? (realizedPnL / totalCostBasis) * 100 : 0,
+    // 4. Save updated position and transactions to IndexedDB
+    try {
+      let maxBlockNumber = 0;
+      for (const tx of sortedTxns) {
+        const bn = Number(tx.blockNumber);
+        if (bn > maxBlockNumber) maxBlockNumber = bn;
+      }
+      const position: PortfolioPosition = {
+        id: `${userAddress}-${tokenAddress}-${chainId}`,
+        userAddress,
+        tokenAddress,
+        poolAddress,
+        chainId: chainId as SupportedChainId,
+        tokenType: type,
+        currentBalance: userTokens,
+        currentValue,
+        costBasis: actualCostBasis,
+        pnL: totalPnL,
+        returns: actualCostBasis > 0 ? (totalPnL / actualCostBasis) * 100 : 0,
         totalFeesPaid,
-        netInvestment,
-        grossInvestment
+        netInvestment: grossInvestment - totalFeesPaid,
+        grossInvestment,
+        lastUpdated: Date.now(),
+        blockNumber: maxBlockNumber > 0 ? maxBlockNumber : minBlock,
+        baseTokenSymbol: baseTokenSymbol || 'UNKNOWN',
+        // v4 aggregated metrics
+        totalBought,
+        totalSold,
+        totalInvested,
+        totalReceived,
+        avgBuyPrice: totalBought > 0 ? totalInvested / totalBought : 0,
+        realizedPnL,
+        unrealizedPnL
       };
+      await storage.savePortfolioPosition(position);
+      // Save only the 30 most recent transactions
+      const recentTxns = sortedTxns.slice(-30);
+      for (const tx of recentTxns) {
+        const portfolioTx: Omit<PortfolioTransaction, 'id'> = {
+          userAddress,
+          poolAddress,
+          chainId: chainId as SupportedChainId,
+          tokenType: type,
+          action: tx.type as 'buy' | 'sell',
+          amount: tx.amountCoin,
+          price: tx.price,
+          value: tx.amountAsset,
+          fees: tx.feePaid || 0,
+          transactionHash: tx.transactionHash || `tx-${Date.now()}-${Math.random()}`,
+          blockNumber: Number(tx.blockNumber),
+          timestamp: tx.timestamp || Date.now()
+        };
+
+        await storage.savePortfolioTransaction({
+          ...portfolioTx,
+          id: `${userAddress}-${poolAddress}-${tx.transactionHash}`
+        } as PortfolioTransaction);
+      }
+      console.debug(`✅ Saved position and ${recentTxns.length} transactions to cache`);
+    } catch (e) {
+      console.error('Failed to save to cache:', e);
     }
 
     return {
@@ -294,14 +398,14 @@ const calculateTokenMetricsWithEvents = async (
 };
 
 // Fetch user transactions from blockchain events
-const fetchUserTransactions = async (tokenAddress: string, userAddress: string, chainId: number) => {
+const fetchUserTransactions = async (tokenAddress: string, userAddress: string, chainId: number, minBlock: number = 0) => {
   try {
     console.debug(`Fetching transactions for token: ${tokenAddress}, user: ${userAddress}, chain: ${chainId}`, {
       tokenAddress,
       userAddress,
       chainId
     });
-    
+
     const chainConfig = getChainConfig(chainId);
     if (!chainConfig) {
       console.warn('No chain config found for chainId:', { chainId });
@@ -346,19 +450,31 @@ const fetchUserTransactions = async (tokenAddress: string, userAddress: string, 
       const chunkSize = BigInt(5000);
       const allLogs: any[] = [];
       const lookback = chainId === 11155111 ? BigInt(100000) : BigInt(50000);
-      const startBlock = currentBlock > lookback ? currentBlock - lookback : BigInt(0);
-      
+
+      // Use minBlock for incremental fetching
+      let startBlock: bigint;
+      if (minBlock > 0) {
+        startBlock = BigInt(minBlock) + BigInt(1);  // Start from next block after cached
+      } else {
+        startBlock = currentBlock > lookback ? currentBlock - lookback : BigInt(0);
+      }
+
+      // If startBlock is beyond currentBlock, no new transactions
+      if (startBlock > currentBlock) {
+        return [];
+      }
+
       console.debug(`Scanning from block ${startBlock} to ${currentBlock} (${currentBlock - startBlock} blocks)`, {
         startBlock,
         currentBlock,
         blockRange: currentBlock - startBlock
       });
-      
+
       for (let fromBlock = startBlock; fromBlock <= currentBlock; fromBlock += chunkSize) {
-        const toBlock = fromBlock + chunkSize - BigInt(1) > currentBlock 
-          ? currentBlock 
+        const toBlock = fromBlock + chunkSize - BigInt(1) > currentBlock
+          ? currentBlock
           : fromBlock + chunkSize - BigInt(1);
-        
+
         try {
           const logs = await publicClient.getLogs({
             address: tokenAddress as Address,
@@ -367,7 +483,7 @@ const fetchUserTransactions = async (tokenAddress: string, userAddress: string, 
             fromBlock,
             toBlock
           });
-          
+
           allLogs.push(...logs);
           if (logs.length > 0) {
             console.debug(`Fetched ${logs.length} logs from block ${fromBlock} to ${toBlock}`, {
@@ -382,17 +498,17 @@ const fetchUserTransactions = async (tokenAddress: string, userAddress: string, 
             toBlock,
             error: error?.shortMessage || error?.message
           });
-          
+
           // If we get a block range error, try with smaller chunks
           if (error?.message?.includes('range') || error?.message?.includes('blocks')) {
             console.debug('Retrying with smaller chunk size...');
             try {
               const smallerChunkSize = BigInt(1000);
               for (let smallFromBlock = fromBlock; smallFromBlock <= toBlock; smallFromBlock += smallerChunkSize) {
-                const smallToBlock = smallFromBlock + smallerChunkSize - BigInt(1) > toBlock 
-                  ? toBlock 
+                const smallToBlock = smallFromBlock + smallerChunkSize - BigInt(1) > toBlock
+                  ? toBlock
                   : smallFromBlock + smallerChunkSize - BigInt(1);
-                
+
                 const smallLogs = await publicClient.getLogs({
                   address: tokenAddress as Address,
                   event: eventABI,
@@ -400,7 +516,7 @@ const fetchUserTransactions = async (tokenAddress: string, userAddress: string, 
                   fromBlock: smallFromBlock,
                   toBlock: smallToBlock
                 });
-                
+
                 allLogs.push(...smallLogs);
               }
             } catch {
@@ -412,7 +528,7 @@ const fetchUserTransactions = async (tokenAddress: string, userAddress: string, 
           }
         }
       }
-      
+
       return allLogs;
     };
 
@@ -433,6 +549,9 @@ const fetchUserTransactions = async (tokenAddress: string, userAddress: string, 
       amountAsset: number;
       amountCoin: number;
       price: number;
+      transactionHash?: string;
+      feePaid?: number;
+      timestamp?: number;
     }> = [];
 
     // Process buy events
@@ -440,19 +559,22 @@ const fetchUserTransactions = async (tokenAddress: string, userAddress: string, 
       const amountAsset = Number(formatUnits(log.args.amountAsset!, 18));
       const amountCoin = Number(formatUnits(log.args.amountCoin!, 18));
       const price = amountCoin > 0 ? amountAsset / amountCoin : 0;
-      
+
       console.debug(`BUY: ${amountCoin} tokens for ${amountAsset} WETH (price: ${price})`, {
         amountCoin,
         amountAsset,
         price
       });
-      
+
       transactions.push({
         type: 'buy',
         blockNumber: log.blockNumber,
         amountAsset,
         amountCoin,
         price,
+        transactionHash: log.transactionHash,
+        feePaid: Number(formatUnits(log.args.feePaid || BigInt(0), 18)),
+        timestamp: Date.now()
       });
     }
 
@@ -461,19 +583,22 @@ const fetchUserTransactions = async (tokenAddress: string, userAddress: string, 
       const amountAsset = Number(formatUnits(log.args.amountAsset!, 18));
       const amountCoin = Number(formatUnits(log.args.amountCoin!, 18));
       const price = amountCoin > 0 ? amountAsset / amountCoin : 0;
-      
+
       console.debug(`SELL: ${amountCoin} tokens for ${amountAsset} WETH (price: ${price})`, {
         amountCoin,
         amountAsset,
         price
       });
-      
+
       transactions.push({
         type: 'sell',
         blockNumber: log.blockNumber,
         amountAsset,
         amountCoin,
         price,
+        transactionHash: log.transactionHash,
+        feePaid: Number(formatUnits(log.args.feePaid || BigInt(0), 18)),
+        timestamp: Date.now()
       });
     }
 
@@ -638,19 +763,17 @@ const HistoricalInvestmentsTable: React.FC<{
                     <div className="text-xs text-neutral-500 dark:text-neutral-400 mb-1">
                       Total P&L
                     </div>
-                    <div className={`text-xl font-bold ${
-                      pool.totalPnL >= 0 
-                        ? 'text-green-600 dark:text-green-400' 
-                        : 'text-red-600 dark:text-red-400'
-                    }`}>
+                    <div className={`text-xl font-bold ${pool.totalPnL >= 0
+                      ? 'text-green-600 dark:text-green-400'
+                      : 'text-red-600 dark:text-red-400'
+                      }`}>
                       {pool.totalPnL >= 0 ? '+' : ''}{pool.totalPnL.toFixed(4)} {pool.baseTokenSymbol}
                     </div>
                     <div className="flex items-center justify-end space-x-2">
-                      <div className={`text-sm ${
-                        pool.totalPnL >= 0 
-                          ? 'text-green-600 dark:text-green-400' 
-                          : 'text-red-600 dark:text-red-400'
-                      }`}>
+                      <div className={`text-sm ${pool.totalPnL >= 0
+                        ? 'text-green-600 dark:text-green-400'
+                        : 'text-red-600 dark:text-red-400'
+                        }`}>
                         {pool.totalReturnPercentage >= 0 ? '+' : ''}{pool.totalReturnPercentage.toFixed(1)}%
                       </div>
                       {pool.totalReturnPercentage >= 0 ? (
@@ -706,11 +829,10 @@ const HistoricalInvestmentsTable: React.FC<{
             </div>
             <div>
               <div className="text-xs text-neutral-500 dark:text-neutral-400">Net P&L</div>
-              <div className={`text-sm font-bold ${
-                historicalPools.reduce((sum, pool) => sum + pool.totalPnL, 0) >= 0 
-                  ? 'text-green-600 dark:text-green-400' 
-                  : 'text-red-600 dark:text-red-400'
-              }`}>
+              <div className={`text-sm font-bold ${historicalPools.reduce((sum, pool) => sum + pool.totalPnL, 0) >= 0
+                ? 'text-green-600 dark:text-green-400'
+                : 'text-red-600 dark:text-red-400'
+                }`}>
                 {historicalPools.reduce((sum, pool) => sum + pool.totalPnL, 0) >= 0 ? '+' : ''}
                 {historicalPools.reduce((sum, pool) => sum + pool.totalPnL, 0).toFixed(4)} {historicalPools[0]?.baseTokenSymbol || 'UNKNOWN'}
               </div>
@@ -747,7 +869,7 @@ const HistoryCard: React.FC<{ pool: PoolData }> = ({ pool }) => {
           </div>
         </div>
       </div>
-      
+
       <div className="grid grid-cols-2 gap-4 text-xs">
         {/* Bull Position */}
         {pool.hasBullPosition && (
@@ -764,7 +886,7 @@ const HistoryCard: React.FC<{ pool: PoolData }> = ({ pool }) => {
             </div>
           </div>
         )}
-        
+
         {/* Bear Position */}
         {pool.hasBearPosition && (
           <div className="space-y-1">
@@ -781,7 +903,7 @@ const HistoryCard: React.FC<{ pool: PoolData }> = ({ pool }) => {
           </div>
         )}
       </div>
-      
+
       <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-600 flex justify-between text-xs text-gray-500 dark:text-gray-400">
         <span>Original Investment: {pool.totalCostBasis.toFixed(4)} {pool.baseTokenSymbol}</span>
         <span>Chain: {pool.chainId === 11155111 ? 'Sepolia' : 'Unknown'}</span>
@@ -812,34 +934,31 @@ const SummaryCard = ({
       </CardTitle>
       <div className="relative">
         <div
-          className={`absolute inset-0 rounded-full blur-sm opacity-20 ${
-            trend === "up"
-              ? "bg-green-400"
-              : trend === "down"
+          className={`absolute inset-0 rounded-full blur-sm opacity-20 ${trend === "up"
+            ? "bg-green-400"
+            : trend === "down"
               ? "bg-red-400"
               : "bg-neutral-400"
-          }`}
+            }`}
         />
         <Icon
-          className={`relative h-5 w-5 transition-all duration-300 group-hover:scale-110 ${
-            trend === "up"
-              ? "text-green-500 dark:text-green-400"
-              : trend === "down"
+          className={`relative h-5 w-5 transition-all duration-300 group-hover:scale-110 ${trend === "up"
+            ? "text-green-500 dark:text-green-400"
+            : trend === "down"
               ? "text-red-500 dark:text-red-400"
               : "text-neutral-500 dark:text-neutral-400"
-          }`}
+            }`}
         />
-        </div>
+      </div>
     </CardHeader>
     <CardContent>
       <div
-        className={`text-2xl font-bold transition-all duration-300 group-hover:scale-105 ${
-          trend === "up"
-            ? "text-green-600 dark:text-green-400"
-            : trend === "down"
+        className={`text-2xl font-bold transition-all duration-300 group-hover:scale-105 ${trend === "up"
+          ? "text-green-600 dark:text-green-400"
+          : trend === "down"
             ? "text-red-600 dark:text-red-400"
             : "text-neutral-900 dark:text-neutral-100"
-        }`}
+          }`}
       >
         {value}
       </div>
@@ -914,11 +1033,10 @@ const PositionCard = ({ pool }: { pool: PoolData }) => {
             {pool.baseTokenSymbol}
           </div>
           <div
-            className={`text-xs font-medium px-2 py-1 rounded-full ${
-              pool.totalPnL >= 0
-                ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
-                : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
-            }`}
+            className={`text-xs font-medium px-2 py-1 rounded-full ${pool.totalPnL >= 0
+              ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+              : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+              }`}
           >
             {pool.totalPnL > 0 ? "+" : ""}
             {pool.totalPnL.toLocaleString(undefined, {
@@ -928,12 +1046,12 @@ const PositionCard = ({ pool }: { pool: PoolData }) => {
             {pool.baseTokenSymbol} (
             {pool.totalCostBasis > 0
               ? ((pool.totalPnL / pool.totalCostBasis) * 100).toLocaleString(
-                  undefined,
-                  {
-                    minimumFractionDigits: 0,
-                    maximumFractionDigits: 2,
-                  }
-                )
+                undefined,
+                {
+                  minimumFractionDigits: 0,
+                  maximumFractionDigits: 2,
+                }
+              )
               : "0"}
             % )
           </div>
@@ -951,11 +1069,10 @@ const PositionCard = ({ pool }: { pool: PoolData }) => {
             })}
           </span>
         </div>
-        <div className={`font-medium ${
-          pool.priceChangePercent >= 0 
-            ? 'text-green-600 dark:text-green-400' 
-            : 'text-red-600 dark:text-red-400'
-        }`}>
+        <div className={`font-medium ${pool.priceChangePercent >= 0
+          ? 'text-green-600 dark:text-green-400'
+          : 'text-red-600 dark:text-red-400'
+          }`}>
           {pool.priceChangePercent >= 0 ? '+' : ''}
           {pool.priceChangePercent.toLocaleString(undefined, {
             minimumFractionDigits: 2,
@@ -1061,9 +1178,8 @@ const PositionChart = ({
             <div>
               <CardTitle className="text-xl text-neutral-900 dark:text-neutral-100 mb-2 flex items-center gap-2">
                 <div
-                  className={`w-3 h-3 rounded-full ${
-                    type === "bull" ? "bg-gray-800" : "bg-gray-300"
-                  }`}
+                  className={`w-3 h-3 rounded-full ${type === "bull" ? "bg-gray-800" : "bg-gray-300"
+                    }`}
                 />
                 {title}
               </CardTitle>
@@ -1098,9 +1214,8 @@ const PositionChart = ({
             <div>
               <CardTitle className="text-xl text-neutral-900 dark:text-neutral-100 mb-2 flex items-center gap-2">
                 <div
-                  className={`w-3 h-3 rounded-full ${
-                    type === "bull" ? "bg-gray-800" : "bg-gray-300"
-                  }`}
+                  className={`w-3 h-3 rounded-full ${type === "bull" ? "bg-gray-800" : "bg-gray-300"
+                    }`}
                 />
                 {title}
               </CardTitle>
@@ -1132,9 +1247,8 @@ const PositionChart = ({
           <div>
             <CardTitle className="text-xl text-neutral-900 dark:text-neutral-100 mb-2 flex items-center gap-2">
               <div
-                className={`w-3 h-3 rounded-full ${
-                  type === "bull" ? "bg-gray-800" : "bg-gray-300"
-                }`}
+                className={`w-3 h-3 rounded-full ${type === "bull" ? "bg-gray-800" : "bg-gray-300"
+                  }`}
               />
               {title}
             </CardTitle>
@@ -1161,89 +1275,89 @@ const PositionChart = ({
       <CardContent>
         <div style={{ width: '100%', height: '300px', minHeight: '300px', position: 'relative' }}>
           <ResponsiveContainer width="100%" height="100%" minHeight={300}>
-          {showDistribution ? (
-            <BarChart data={data}>
-              <CartesianGrid
-                strokeDasharray="3 3"
-                stroke="#e5e5e5"
-                strokeOpacity={0.3}
-              />
-              <XAxis
-                dataKey={nameKey}
-                stroke="#737373"
-                fontSize={12}
-                tickFormatter={(name) =>
-                  name.length > 10 ? `${name.substring(0, 10)}...` : name
-                }
-              />
-              <YAxis stroke="#737373" fontSize={12} />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: "rgba(255, 255, 255, 0.95)",
-                  border: "1px solid #e5e5e5",
-                  borderRadius: "8px",
-                  boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)",
-                  color: "#000",
-                }}
-                formatter={(value: number) => [
-                  `${value.toLocaleString(undefined, {
-                    minimumFractionDigits: 0,
-                    maximumFractionDigits: 4,
-                  })} ${data[0]?.baseTokenSymbol || 'UNKNOWN'}`,
+            {showDistribution ? (
+              <BarChart data={data}>
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="#e5e5e5"
+                  strokeOpacity={0.3}
+                />
+                <XAxis
+                  dataKey={nameKey}
+                  stroke="#737373"
+                  fontSize={12}
+                  tickFormatter={(name) =>
+                    name.length > 10 ? `${name.substring(0, 10)}...` : name
+                  }
+                />
+                <YAxis stroke="#737373" fontSize={12} />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: "rgba(255, 255, 255, 0.95)",
+                    border: "1px solid #e5e5e5",
+                    borderRadius: "8px",
+                    boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)",
+                    color: "#000",
+                  }}
+                  formatter={(value: number) => [
+                    `${value.toLocaleString(undefined, {
+                      minimumFractionDigits: 0,
+                      maximumFractionDigits: 4,
+                    })} ${data[0]?.baseTokenSymbol || 'UNKNOWN'}`,
                     type === "bull" ? "Bull Value" : "Bear Value",
-                ]}
-              />
-              <Bar dataKey={dataKey} radius={[6, 6, 0, 0]}>
-                {data.map((entry, index) => (
-                  <Cell
-                    key={`cell-${index}`}
-                    fill={colors[index % colors.length]}
-                  />
-                ))}
-              </Bar>
-            </BarChart>
-          ) : (
-            <PieChart>
-              <Pie
-                data={data}
-                cx="50%"
-                cy="50%"
-                innerRadius={60}
-                outerRadius={120}
-                paddingAngle={2}
-                dataKey={dataKey}
-                stroke="#000"
-                strokeWidth={2}
-                legendType="circle"
-              >
-                {data.map((entry, index) => (
-                  <Cell
-                    key={`cell-${index}`}
-                    fill={colors[index % colors.length]}
-                  />
-                ))}
-              </Pie>
-              <Tooltip
-                formatter={(value: number) => [
-                  `${value.toLocaleString(undefined, {
-                    minimumFractionDigits: 0,
-                    maximumFractionDigits: 4,
-                  })} ${data[0]?.baseTokenSymbol || 'UNKNOWN'}`,
+                  ]}
+                />
+                <Bar dataKey={dataKey} radius={[6, 6, 0, 0]}>
+                  {data.map((entry, index) => (
+                    <Cell
+                      key={`cell-${index}`}
+                      fill={colors[index % colors.length]}
+                    />
+                  ))}
+                </Bar>
+              </BarChart>
+            ) : (
+              <PieChart>
+                <Pie
+                  data={data}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={60}
+                  outerRadius={120}
+                  paddingAngle={2}
+                  dataKey={dataKey}
+                  stroke="#000"
+                  strokeWidth={2}
+                  legendType="circle"
+                >
+                  {data.map((entry, index) => (
+                    <Cell
+                      key={`cell-${index}`}
+                      fill={colors[index % colors.length]}
+                    />
+                  ))}
+                </Pie>
+                <Tooltip
+                  formatter={(value: number) => [
+                    `${value.toLocaleString(undefined, {
+                      minimumFractionDigits: 0,
+                      maximumFractionDigits: 4,
+                    })} ${data[0]?.baseTokenSymbol || 'UNKNOWN'}`,
                     type === "bull" ? "Bull Value" : "Bear Value",
-                ]}
-                contentStyle={{
-                  backgroundColor: "rgba(255, 255, 255, 0.95)",
-                  border: "1px solid #e5e5e5",
-                  borderRadius: "8px",
-                  boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)",
-                  stroke: "#000",
-                  color: "#000",
-                  strokeWidth: 2,
-                }}
-              />
-            </PieChart>
-          )}
-        </ResponsiveContainer>
+                  ]}
+                  contentStyle={{
+                    backgroundColor: "rgba(255, 255, 255, 0.95)",
+                    border: "1px solid #e5e5e5",
+                    borderRadius: "8px",
+                    boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)",
+                    stroke: "#000",
+                    color: "#000",
+                    strokeWidth: 2,
+                  }}
+                />
+              </PieChart>
+            )}
+          </ResponsiveContainer>
         </div>
         <div className="flex justify-center gap-6 mt-4 flex-wrap">
           {data.map((item, index) => (
@@ -1277,6 +1391,8 @@ const EnhancedPoolDataLoader = ({
   chainId: number;
   onDataLoad: (data: PoolData) => void;
 }) => {
+  // Initialize storage hook for caching
+  const storage = useFatePoolsStorage();
   // Step 1: Get basic pool information
   const { data: poolBasicData } = useReadContracts({
     contracts: [
@@ -1387,7 +1503,7 @@ const EnhancedPoolDataLoader = ({
       const userBullTokens = Number(formatUnits((userBalanceData?.[0]?.result as bigint) ?? BigInt(0), 18));
       const userBearTokens = Number(formatUnits((userBalanceData?.[1]?.result as bigint) ?? BigInt(0), 18));
       const userBaseTokenBalance = Number(formatUnits((userBalanceData?.[2]?.result as bigint) ?? BigInt(0), baseTokenDecimals));
-      
+
       console.log(`🔍 Pool ${poolAddress} user balances:`, {
         userBullTokens,
         userBearTokens,
@@ -1428,7 +1544,11 @@ const EnhancedPoolDataLoader = ({
           userBullTokens,
           bullTokenAddress,
           userAddress,
-          chainId
+          chainId,
+          poolAddress,
+          'bull',
+          baseTokenSymbol,
+          storage
         );
 
         bearMetrics = await calculateTokenMetricsWithEvents(
@@ -1437,14 +1557,18 @@ const EnhancedPoolDataLoader = ({
           userBearTokens,
           bearTokenAddress,
           userAddress,
-          chainId
+          chainId,
+          poolAddress,
+          'bear',
+          baseTokenSymbol,
+          storage
         );
       } catch (error) {
         console.error('Error calculating metrics with events, using fallback:', error instanceof Error ? error : new Error(String(error)));
         // Fallback to legacy calculation
         const bullAvgPrice = bullSupply > 0 ? bullReserve / bullSupply : 0;
         const bearAvgPrice = bearSupply > 0 ? bearReserve / bearSupply : 0;
-        
+
         bullMetrics = calculateTokenMetrics(bullReserve, bullSupply, userBullTokens, bullAvgPrice);
         bearMetrics = calculateTokenMetrics(bearReserve, bearSupply, userBearTokens, bearAvgPrice);
       }
@@ -1521,7 +1645,7 @@ const EnhancedPoolDataLoader = ({
     };
 
     processPoolData();
-  }, [poolBasicData, tokenData, reserveData, userBalanceData, underlyingOracleData, feeData, poolAddress, onDataLoad, userAddress, chainId, index, baseToken, bearTokenAddress, bullTokenAddress, currentPrice, oracleAddress, poolName, previousPrice]);
+  }, [poolBasicData, tokenData, reserveData, userBalanceData, underlyingOracleData, feeData, poolAddress, onDataLoad, userAddress, chainId, index, baseToken, bearTokenAddress, bullTokenAddress, currentPrice, oracleAddress, poolName, previousPrice, storage]);
 
   return null;
 };
@@ -1535,17 +1659,17 @@ export default function PortfolioPage() {
   const [poolsData, setPoolsData] = useState<PoolData[]>([]);
   const [isLoadingPools, setIsLoadingPools] = useState(false); // Start with false to show empty state immediately
   const [isLoadingFromBlockchain, setIsLoadingFromBlockchain] = useState(false);
-  
+
   // IndexedDB storage hook (for portfolio cache only)
-  const { 
-    isInitialized: isDBInitialized, 
+  const {
+    isInitialized: isDBInitialized,
     savePortfolioCache,
     getPortfolioCache
   } = useFatePoolsStorage();
 
   // Direct IndexedDB manager for pool details (more reliable)
   const [indexedDB, setIndexedDB] = useState<FatePoolsIndexedDBManager | null>(null);
-  
+
   // Initialize IndexedDB manager
   useEffect(() => {
     const initDB = async () => {
@@ -1587,9 +1711,9 @@ export default function PortfolioPage() {
 
   const availablePools = useMemo(() => {
     const pools = allPoolsData?.[0]?.result as string[] || [];
-    console.debug(`Found ${pools.length} pools from factory:`, { 
-      pools, 
-      factoryAddress, 
+    console.debug(`Found ${pools.length} pools from factory:`, {
+      pools,
+      factoryAddress,
       chainId,
       chainName: getChainConfig(chainId || 1)?.name || `Chain ${chainId || 1}`
     });
@@ -1611,7 +1735,7 @@ export default function PortfolioPage() {
         return [...prev, data];
       }
     });
-    
+
     // Update cache status to fresh
   }, []);
 
@@ -1633,7 +1757,7 @@ export default function PortfolioPage() {
         const grouped = new Map<string, PoolData>();
         const filteredPositions = cachedData.positions.filter(p => p.chainId === (chainId as SupportedChainId));
         console.log("Filtered positions:", filteredPositions.length);
-        
+
         for (const pos of filteredPositions) {
           // Debug: Log position data
           console.log("🔍 Processing position:", {
@@ -1643,14 +1767,14 @@ export default function PortfolioPage() {
             pnL: pos.pnL,
             poolAddress: pos.poolAddress
           });
-          
+
           // Find the corresponding pool details
           const poolDetails = allPoolDetails.find((p: any) => p.id === pos.poolAddress);
-          
+
           const existing = grouped.get(pos.poolAddress);
           const base = existing ?? {
             id: pos.poolAddress,
-            name: poolDetails?.name || `Pool ${pos.poolAddress.slice(0,6)}...`,
+            name: poolDetails?.name || `Pool ${pos.poolAddress.slice(0, 6)}...`,
             bullBalance: 0, bearBalance: 0,
             bullCurrentValue: 0, bearCurrentValue: 0,
             totalValue: 0, totalCostBasis: 0,
@@ -1664,27 +1788,27 @@ export default function PortfolioPage() {
             bullSupply: poolDetails ? Number(poolDetails.bullToken.totalSupply) : 0,
             bearSupply: poolDetails ? Number(poolDetails.bearToken.totalSupply) : 0,
             chainId: pos.chainId, priceFeed: poolDetails?.priceFeedAddress || 'Cached',
-            baseToken: poolDetails?.assetAddress || '', 
+            baseToken: poolDetails?.assetAddress || '',
             baseTokenSymbol: pos.baseTokenSymbol || poolDetails?.baseTokenSymbol || 'UNKNOWN',
             baseTokenName: poolDetails?.baseTokenName || 'Unknown Token',
-            bullTokenAddress: poolDetails?.bullToken.id || '', 
+            bullTokenAddress: poolDetails?.bullToken.id || '',
             bearTokenAddress: poolDetails?.bearToken.id || '',
-            bullTokenName: poolDetails?.bullToken.name || 'Bull Token', 
+            bullTokenName: poolDetails?.bullToken.name || 'Bull Token',
             bearTokenName: poolDetails?.bearToken.name || 'Bear Token',
-            bullTokenSymbol: poolDetails?.bullToken.symbol || 'BULL', 
+            bullTokenSymbol: poolDetails?.bullToken.symbol || 'BULL',
             bearTokenSymbol: poolDetails?.bearToken.symbol || 'BEAR',
-            oracleAddress: poolDetails?.oracleAddress || '', 
+            oracleAddress: poolDetails?.oracleAddress || '',
             underlyingOracleAddress: undefined,
-            currentPrice: poolDetails?.currentPrice || 0, 
+            currentPrice: poolDetails?.currentPrice || 0,
             previousPrice: 0,
             priceChange: 0,
             priceChangePercent: 0,
-            vaultCreator: poolDetails?.vaultCreator || '', 
-            fees: { 
-              mintFee: poolDetails?.mintFee || 0, 
-              burnFee: poolDetails?.burnFee || 0, 
-              creatorFee: poolDetails?.creatorFee || 0, 
-              treasuryFee: poolDetails?.treasuryFee || 0 
+            vaultCreator: poolDetails?.vaultCreator || '',
+            fees: {
+              mintFee: poolDetails?.mintFee || 0,
+              burnFee: poolDetails?.burnFee || 0,
+              creatorFee: poolDetails?.creatorFee || 0,
+              treasuryFee: poolDetails?.treasuryFee || 0
             },
             baseTokenBalance: 0, isCreator: false
           } as PoolData;
@@ -1695,7 +1819,7 @@ export default function PortfolioPage() {
             const bearReserveNum = Number(poolDetails.bearReserve);
             const bullSupplyNum = Number(poolDetails.bullToken.totalSupply);
             const bearSupplyNum = Number(poolDetails.bearToken.totalSupply);
-            
+
             // Calculate prices: reserve / supply (same as InteractionClient)
             base.bullPrice = bullSupplyNum > 0 ? bullReserveNum / bullSupplyNum : 1;
             base.bearPrice = bearSupplyNum > 0 ? bearReserveNum / bearSupplyNum : 1;
@@ -1728,7 +1852,7 @@ export default function PortfolioPage() {
               newBearCurrentValue: base.bearCurrentValue
             });
           }
-          
+
           base.totalValue = base.bullCurrentValue + base.bearCurrentValue;
           base.totalPnL = base.bullPnL + base.bearPnL;
           base.totalCostBasis = base.totalValue - base.totalPnL;
@@ -1738,7 +1862,7 @@ export default function PortfolioPage() {
         }
         const mappedData = Array.from(grouped.values());
         console.log("✅ Mapped cached data:", mappedData.length, "positions");
-        
+
         // Debug: Log final pool data
         if (mappedData.length > 0) {
           console.log("📊 Final pool data sample:", {
@@ -1752,7 +1876,7 @@ export default function PortfolioPage() {
             bearPrice: mappedData[0].bearPrice
           });
         }
-        
+
         setPoolsData(mappedData);
 
         // Force UI update and ensure loading state is cleared
@@ -1776,7 +1900,7 @@ export default function PortfolioPage() {
   // Save data to cache
   const saveDataToCache = useCallback(async (data: PoolData[]) => {
     if (!address || !chainId || !isDBInitialized || data.length === 0) return;
-    
+
     try {
       const cacheData = {
         userAddress: address,
@@ -1803,6 +1927,13 @@ export default function PortfolioPage() {
               lastUpdated: Date.now(),
               blockNumber: 0,
               baseTokenSymbol: pool.baseTokenSymbol || 'UNKNOWN',
+              totalBought: 0,
+              totalSold: 0,
+              totalInvested: 0,
+              totalReceived: 0,
+              avgBuyPrice: 0,
+              realizedPnL: 0,
+              unrealizedPnL: pool.bullPnL
             });
           }
 
@@ -1825,6 +1956,13 @@ export default function PortfolioPage() {
               lastUpdated: Date.now(),
               blockNumber: 0,
               baseTokenSymbol: pool.baseTokenSymbol,
+              totalBought: 0,
+              totalSold: 0,
+              totalInvested: 0,
+              totalReceived: 0,
+              avgBuyPrice: 0,
+              realizedPnL: 0,
+              unrealizedPnL: pool.bearPnL
             });
           }
 
@@ -1841,7 +1979,7 @@ export default function PortfolioPage() {
         expiresAt: Date.now() + (2 * 60 * 1000),
         id: `${address}_${chainId}`
       } as Omit<PortfolioCache, 'userAddress'> & { userAddress: string };
-      
+
       await savePortfolioCache(cacheData);
 
       // Also save pool details to IndexedDB for future use
@@ -1849,40 +1987,40 @@ export default function PortfolioPage() {
         for (const pool of data) {
           try {
             await indexedDB!.savePoolDetails({
-            id: pool.id,
-            name: pool.name,
-            description: `Prediction pool for ${pool.priceFeed}`,
-            assetAddress: pool.baseToken,
-            baseTokenSymbol: pool.baseTokenSymbol,
-            baseTokenName: pool.baseTokenName,
-            oracleAddress: pool.oracleAddress,
-            currentPrice: pool.currentPrice,
-            bullReserve: pool.bullReserve.toString(),
-            bearReserve: pool.bearReserve.toString(),
-            bullToken: {
-              id: pool.bullTokenAddress,
-              symbol: pool.bullTokenSymbol,
-              name: pool.bullTokenName,
-              totalSupply: pool.bullSupply.toString()
-            },
-            bearToken: {
-              id: pool.bearTokenAddress,
-              symbol: pool.bearTokenSymbol,
-              name: pool.bearTokenName,
-              totalSupply: pool.bearSupply.toString()
-            },
-            vaultCreator: pool.vaultCreator,
-            creatorFee: pool.fees.creatorFee,
-            mintFee: pool.fees.mintFee,
-            burnFee: pool.fees.burnFee,
-            treasuryFee: pool.fees.treasuryFee,
-            bullPercentage: pool.bullReserve > 0 ? (pool.bullReserve / (pool.bullReserve + pool.bearReserve)) * 100 : 0,
-            bearPercentage: pool.bearReserve > 0 ? (pool.bearReserve / (pool.bullReserve + pool.bearReserve)) * 100 : 0,
-            chainId: pool.chainId as SupportedChainId,
-            creator: pool.vaultCreator,
-            chainName: getChainName(pool.chainId),
-            priceFeedAddress: pool.priceFeed
-          });
+              id: pool.id,
+              name: pool.name,
+              description: `Prediction pool for ${pool.priceFeed}`,
+              assetAddress: pool.baseToken,
+              baseTokenSymbol: pool.baseTokenSymbol,
+              baseTokenName: pool.baseTokenName,
+              oracleAddress: pool.oracleAddress,
+              currentPrice: pool.currentPrice,
+              bullReserve: pool.bullReserve.toString(),
+              bearReserve: pool.bearReserve.toString(),
+              bullToken: {
+                id: pool.bullTokenAddress,
+                symbol: pool.bullTokenSymbol,
+                name: pool.bullTokenName,
+                totalSupply: pool.bullSupply.toString()
+              },
+              bearToken: {
+                id: pool.bearTokenAddress,
+                symbol: pool.bearTokenSymbol,
+                name: pool.bearTokenName,
+                totalSupply: pool.bearSupply.toString()
+              },
+              vaultCreator: pool.vaultCreator,
+              creatorFee: pool.fees.creatorFee,
+              mintFee: pool.fees.mintFee,
+              burnFee: pool.fees.burnFee,
+              treasuryFee: pool.fees.treasuryFee,
+              bullPercentage: pool.bullReserve > 0 ? (pool.bullReserve / (pool.bullReserve + pool.bearReserve)) * 100 : 0,
+              bearPercentage: pool.bearReserve > 0 ? (pool.bearReserve / (pool.bullReserve + pool.bearReserve)) * 100 : 0,
+              chainId: pool.chainId as SupportedChainId,
+              creator: pool.vaultCreator,
+              chainName: getChainName(pool.chainId),
+              priceFeedAddress: pool.priceFeed
+            });
           } catch (error) {
             console.error(`Failed to save pool details for ${pool.id}:`, error);
           }
@@ -1985,16 +2123,16 @@ export default function PortfolioPage() {
     totalCostBasis: number;
   } => {
     // Active pools have current balances > 0
-    const activePoolsData = poolsData.filter((pool) => 
+    const activePoolsData = poolsData.filter((pool) =>
       pool.bullBalance > 0 || pool.bearBalance > 0
     );
-    
+
     // Historical pools have P&L but no current balance
-    const historicalPoolsData = poolsData.filter((pool) => 
-      (pool.bullBalance === 0 && pool.bearBalance === 0) && 
+    const historicalPoolsData = poolsData.filter((pool) =>
+      (pool.bullBalance === 0 && pool.bearBalance === 0) &&
       (pool.bullPnL !== 0 || pool.bearPnL !== 0)
     );
-    
+
     // Transform data for charts - show all pools, not just ones with positions
     const bullPositionsData: Array<{
       name: string;
@@ -2038,7 +2176,7 @@ export default function PortfolioPage() {
 
     // Calculate totals including both active and historical
     const allPoolsWithPositions = poolsData.filter((pool) => pool.hasPositions);
-    
+
     const totalPortfolioValue = activePoolsData.reduce(
       (sum, pool) => sum + pool.totalValue,
       0
@@ -2093,13 +2231,13 @@ export default function PortfolioPage() {
           <div className="mb-6">
             <Wallet className="h-12 w-12 mx-auto text-yellow-500 dark:text-yellow-400 mb-4" />
             <CardTitle className="text-xl mb-2 text-neutral-900 dark:text-neutral-100">
-            Connect Your Wallet
+              Connect Your Wallet
             </CardTitle>
             <p className="text-neutral-600 dark:text-neutral-400 mb-6">
               Connect your wallet to view your portfolio and manage your
               positions
             </p>
-            <Button 
+            <Button
               onClick={() => router.push('/')}
               className="bg-black hover:bg-gray-800 dark:bg-white dark:hover:bg-gray-200 text-white dark:text-black"
             >
@@ -2185,12 +2323,11 @@ export default function PortfolioPage() {
               />
               <SummaryCard
                 title="Total Return %"
-                value={`${
-                  totalReturnPercentage >= 0 ? "+" : ""
-                }${totalReturnPercentage.toLocaleString(undefined, {
-                  minimumFractionDigits: 0,
-                  maximumFractionDigits: 2,
-                })}%`}
+                value={`${totalReturnPercentage >= 0 ? "+" : ""
+                  }${totalReturnPercentage.toLocaleString(undefined, {
+                    minimumFractionDigits: 0,
+                    maximumFractionDigits: 2,
+                  })}%`}
                 icon={Activity}
                 trend={totalReturnPercentage >= 0 ? "up" : "down"}
               />
@@ -2210,7 +2347,7 @@ export default function PortfolioPage() {
                   <div className="h-48 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse"></div>
                 </div>
               </div>
-              
+
               {/* Positions List Skeleton */}
               <div className="xl:col-span-2 bg-white dark:bg-neutral-900 border border-gray-200 dark:border-neutral-700 rounded-xl p-6 shadow-sm">
                 <div className="space-y-4">
@@ -2259,7 +2396,7 @@ export default function PortfolioPage() {
                   }
                 />
               )}
-              
+
               {/* Positions List */}
               <Card className={`border-black ${bullPositionsData.length > 0 && bearPositionsData.length > 0 ? 'xl:col-span-1' : 'xl:col-span-2'} dark:border-neutral-700/60 dark:bg-gradient-to-br dark:from-neutral-800/50 dark:to-neutral-900/50 backdrop-blur-sm shadow-xl`}>
                 <CardHeader>
@@ -2267,7 +2404,7 @@ export default function PortfolioPage() {
                     {activePoolsData.length > 0 ? 'Active Positions' : 'Available Pools'}
                   </CardTitle>
                   <p className="text-sm text-neutral-600 dark:text-neutral-400">
-                    {activePoolsData.length > 0 
+                    {activePoolsData.length > 0
                       ? `${activePoolsData.length} active position${activePoolsData.length !== 1 ? 's' : ''} across ${availablePools.length} pool${availablePools.length !== 1 ? 's' : ''}`
                       : `${poolsData.length} pool${poolsData.length !== 1 ? 's' : ''} available to trade`
                     }
@@ -2277,13 +2414,13 @@ export default function PortfolioPage() {
                   <div className="space-y-4 max-h-[400px] overflow-y-auto overflow-x-hidden">
                     {activePoolsData.length > 0 ? (
                       activePoolsData.map((pool, index) => (
-                      <div
-                        key={pool.id}
-                        className="animate-in slide-in-from-bottom-4 duration-300"
-                        style={{ animationDelay: `${index * 100}ms` }}
-                      >
-                        <PositionCard pool={pool} />
-                      </div>
+                        <div
+                          key={pool.id}
+                          className="animate-in slide-in-from-bottom-4 duration-300"
+                          style={{ animationDelay: `${index * 100}ms` }}
+                        >
+                          <PositionCard pool={pool} />
+                        </div>
                       ))
                     ) : (
                       poolsData.map((pool, index) => (
@@ -2299,7 +2436,7 @@ export default function PortfolioPage() {
                   </div>
                 </CardContent>
               </Card>
-              
+
               {/* Bear Positions Chart */}
               {bearPositionsData.length > 0 && (
                 <PositionChart
@@ -2316,7 +2453,7 @@ export default function PortfolioPage() {
 
             {/* Historical Investments Section - Show below active positions */}
             {historicalPoolsData.length > 0 && (
-              <HistoricalInvestmentsTable 
+              <HistoricalInvestmentsTable
                 historicalPools={historicalPoolsData}
                 userAddress={address}
                 chainId={chainId}
@@ -2354,7 +2491,7 @@ export default function PortfolioPage() {
 
             {/* Historical Investments Section - Show when no active positions */}
             {historicalPoolsData.length > 0 && (
-              <HistoricalInvestmentsTable 
+              <HistoricalInvestmentsTable
                 historicalPools={historicalPoolsData}
                 userAddress={address}
                 chainId={chainId}
@@ -2368,36 +2505,36 @@ export default function PortfolioPage() {
                   Contracts Not Deployed
                 </CardTitle>
                 <p className="text-yellow-700 dark:text-yellow-300 mb-4">
-                   The Fate Protocol contracts are not yet deployed on {getChainName(chainId || 1)}.
+                  The Fate Protocol contracts are not yet deployed on {getChainName(chainId || 1)}.
                 </p>
                 <p className="text-yellow-600 dark:text-yellow-400 mb-6">
-                   You can test the protocol on Sepolia testnet (contracts are deployed there) or wait for mainnet deployment.
+                  You can test the protocol on Sepolia testnet (contracts are deployed there) or wait for mainnet deployment.
                 </p>
                 <div className="flex gap-4 justify-center flex-wrap">
-                  <Button 
+                  <Button
                     onClick={() => router.push('/explorePools')}
                     className="bg-yellow-600 hover:bg-yellow-700 text-white"
                   >
                     Check Available Networks
                   </Button>
-                  <Button 
+                  <Button
                     onClick={() => router.push('/createPool')}
                     variant="outline"
                     className="border-yellow-600 text-yellow-600 hover:bg-yellow-600 hover:text-white"
                   >
-                     Create Pool (Testnet)
+                    Create Pool (Testnet)
                   </Button>
                 </div>
                 <div className="mt-4 p-4 bg-yellow-100 dark:bg-yellow-800/30 rounded-lg">
                   <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                     <strong>Available Networks:</strong> Sepolia Testnet (Chain ID: 11155111)
+                    <strong>Available Networks:</strong> Sepolia Testnet (Chain ID: 11155111)
                   </p>
                   <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-1">
-                     Switch to Sepolia testnet to interact with deployed contracts
+                    Switch to Sepolia testnet to interact with deployed contracts
                   </p>
                   <div className="mt-2 p-2 bg-yellow-200 dark:bg-yellow-700/50 rounded text-xs">
                     <p className="text-yellow-800 dark:text-yellow-200">
-                       <strong>Debug Info:</strong> Current chain: {getChainName(chainId || 1)} (ID: {chainId})
+                      <strong>Debug Info:</strong> Current chain: {getChainName(chainId || 1)} (ID: {chainId})
                     </p>
                     <p className="text-yellow-700 dark:text-yellow-300">
                       Factory address: {factoryAddress || 'Not configured'}
@@ -2406,25 +2543,25 @@ export default function PortfolioPage() {
                 </div>
               </Card>
             )}
-            
-             {/* No active positions message */}
-             {factoryAddress && (
+
+            {/* No active positions message */}
+            {factoryAddress && (
               <Card className="border-neutral-200 dark:border-neutral-700 dark:bg-neutral-800 p-8 text-center">
                 <CardTitle className="text-neutral-900 dark:text-neutral-100 mb-2">
-                   {poolsData.length === 0 ? 'No Pools Found' : (historicalPoolsData.length > 0 ? 'No Active Positions' : 'No Positions Yet')}
+                  {poolsData.length === 0 ? 'No Pools Found' : (historicalPoolsData.length > 0 ? 'No Active Positions' : 'No Positions Yet')}
                 </CardTitle>
                 <p className="text-neutral-600 dark:text-neutral-400 mb-6">
-                   {poolsData.length === 0 
-                     ? (chainId === 11155111 
-                       ? 'No prediction pools have been created on Sepolia testnet yet. Be the first to create one!'
-                       : 'No prediction pools found on this network. Try switching to a different network or check back later.')
-                     : (historicalPoolsData.length > 0 
-                       ? 'You don\'t have any active positions, but you can see your trading history above.'
-                       : 'You don\'t have any positions in prediction pools yet.')
-                   }
+                  {poolsData.length === 0
+                    ? (chainId === 11155111
+                      ? 'No prediction pools have been created on Sepolia testnet yet. Be the first to create one!'
+                      : 'No prediction pools found on this network. Try switching to a different network or check back later.')
+                    : (historicalPoolsData.length > 0
+                      ? 'You don\'t have any active positions, but you can see your trading history above.'
+                      : 'You don\'t have any positions in prediction pools yet.')
+                  }
                 </p>
                 <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                  <Button 
+                  <Button
                     onClick={() => router.push('/explorePools')}
                     className="bg-black hover:bg-gray-800 dark:bg-white dark:hover:bg-gray-200 text-white dark:text-black"
                   >
@@ -2433,9 +2570,9 @@ export default function PortfolioPage() {
                 </div>
               </Card>
             )}
-                </div>
+          </div>
         ) : null}
+      </div>
     </div>
-  </div>
   );
 }

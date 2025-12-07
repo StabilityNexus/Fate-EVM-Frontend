@@ -3,10 +3,10 @@
 
 import { logger } from '@/lib/logger';
 import { IndexedDBDatabase } from './database';
-import { 
-  type PoolDetails, 
-  type TokenDetails, 
-  type ChainStatus, 
+import {
+  type PoolDetails,
+  type TokenDetails,
+  type ChainStatus,
   type CacheMetadata,
   type PortfolioPosition,
   type PortfolioTransaction,
@@ -24,7 +24,59 @@ export class FatePoolsIndexedDBManager {
   }
 
   async init(): Promise<void> {
-    await this.db.init();
+    await this.db.init(this.handleUpgrade.bind(this));
+  }
+
+  private async handleUpgrade(db: IDBDatabase, transaction: IDBTransaction, oldVersion: number, newVersion: number): Promise<void> {
+    console.log(`Upgrading database from version ${oldVersion} to ${newVersion}`);
+    if (oldVersion < 4) {
+      await this.migrateToV4(db, transaction);
+    }
+  }
+
+  private async migrateToV4(db: IDBDatabase, transaction: IDBTransaction): Promise<void> {
+    logger.info('Starting migration to v4...');
+    try {
+      const positionStore = transaction.objectStore('portfolioPositions');
+      const request = positionStore.getAll();
+
+      request.onsuccess = () => {
+        const positions = request.result as PortfolioPosition[];
+        if (!positions || positions.length === 0) {
+          logger.info('No positions to migrate.');
+          return;
+        }
+
+        positions.forEach(position => {
+
+          // Let's initialize to 0. The app logic should handle "if totalInvested is 0 but we have balance -> re-fetch history"
+          const upgradedPosition: PortfolioPosition = {
+            ...position,
+            totalBought: 0,
+            totalSold: 0,
+            totalInvested: 0,
+            totalReceived: 0,
+            avgBuyPrice: 0,
+            realizedPnL: 0,
+            unrealizedPnL: 0
+          };
+
+          positionStore.put(upgradedPosition);
+        });
+        logger.info(`Migrated ${positions.length} positions to v4 schema.`);
+      };
+
+      request.onerror = () => {
+        logger.error('Failed to read positions for migration');
+      };
+
+
+      // Transaction pruning is handled by the app on next write (30 transactions limit)
+
+    } catch (error) {
+      logger.error('Migration to v4 failed:', error instanceof Error ? error : new Error(String(error)));
+      // Consider clearing data if migration fails?
+    }
   }
 
   async close(): Promise<void> {
@@ -154,7 +206,7 @@ export class FatePoolsIndexedDBManager {
 
   async getCache(key: string): Promise<unknown | null> {
     const cacheData = await this.db.get<CacheMetadata>('cacheMetadata', key);
-    
+
     if (!cacheData) {
       return null;
     }
@@ -176,7 +228,7 @@ export class FatePoolsIndexedDBManager {
   async cleanupExpiredCache(): Promise<void> {
     const now = Date.now();
     const allCache = await this.db.getAll<CacheMetadata>('cacheMetadata');
-    
+
     for (const cache of allCache) {
       if (now > cache.expiresAt) {
         await this.deleteCache(cache.key);
@@ -232,14 +284,14 @@ export class FatePoolsIndexedDBManager {
       ...cache,
       lastUpdated: now
     };
-    
+
     // Use composite key for multi-chain support
     const cacheKey = `${cache.userAddress}-${cache.chainId}`;
     const cacheWithKey = {
       ...cacheData,
       userAddress: cacheKey // Override userAddress with composite key
     };
-    
+
     await this.db.put('portfolioCache', cacheWithKey);
     logger.debug('Portfolio cache saved for user:', { userAddress: cache.userAddress, chainId: cache.chainId });
   }
@@ -248,17 +300,17 @@ export class FatePoolsIndexedDBManager {
     // First try to get by userAddress + chainId combination
     const cacheKey = `${userAddress}-${chainId}`;
     const cache = await this.db.get<PortfolioCache>('portfolioCache', cacheKey);
-    
+
     if (cache) {
       return cache;
     }
-    
+
     // Fallback: get by userAddress and filter by chainId
     const allCache = await this.db.get<PortfolioCache>('portfolioCache', userAddress);
     if (allCache && allCache.chainId === chainId) {
       return allCache;
     }
-    
+
     return null;
   }
 
@@ -272,28 +324,28 @@ export class FatePoolsIndexedDBManager {
   async deletePortfolioPositions(userAddress: string, chainId: SupportedChainId): Promise<void> {
     // Get all positions for the user
     const allPositions = await this.db.getAll<PortfolioPosition>('portfolioPositions', 'userAddress', userAddress);
-    
+
     // Filter positions for the specific chain and delete them
     const positionsToDelete = allPositions.filter(pos => pos.chainId === chainId);
-    
+
     for (const position of positionsToDelete) {
       await this.db.delete('portfolioPositions', position.id);
     }
-    
+
     logger.debug('Portfolio positions deleted for user:', { userAddress, chainId, deletedCount: positionsToDelete.length });
   }
 
   async deletePortfolioTransactions(userAddress: string, chainId: SupportedChainId): Promise<void> {
     // Get all transactions for the user
     const allTransactions = await this.db.getAll<PortfolioTransaction>('portfolioTransactions', 'userAddress', userAddress);
-    
+
     // Filter transactions for the specific chain and delete them
     const transactionsToDelete = allTransactions.filter(tx => tx.chainId === chainId);
-    
+
     for (const transaction of transactionsToDelete) {
       await this.db.delete('portfolioTransactions', transaction.id);
     }
-    
+
     logger.debug('Portfolio transactions deleted for user:', { userAddress, chainId, deletedCount: transactionsToDelete.length });
   }
 
@@ -301,7 +353,7 @@ export class FatePoolsIndexedDBManager {
   async clearAllData(): Promise<void> {
     // Dynamically get store names from DATABASE_CONFIG
     const storeNames = DATABASE_CONFIG.stores.map(store => store.name);
-    
+
     for (const storeName of storeNames) {
       await this.db.clear(storeName);
     }

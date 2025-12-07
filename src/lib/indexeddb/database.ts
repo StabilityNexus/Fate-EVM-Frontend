@@ -6,45 +6,45 @@ import { DATABASE_CONFIG, type DatabaseConfig } from './config';
 
 export class IndexedDBDatabase {
   private db: IDBDatabase | null = null;
-  private config: DatabaseConfig;
+  private config: DatabaseConfig = DATABASE_CONFIG;
 
-  constructor(config: DatabaseConfig = DATABASE_CONFIG) {
-    this.config = config;
-  }
-
-  async init(): Promise<void> {
+  async init(onUpgrade?: (db: IDBDatabase, transaction: IDBTransaction, oldVersion: number, newVersion: number) => Promise<void> | void): Promise<void> {
     return new Promise((resolve, reject) => {
-      // Check if we're in a browser environment
-      if (typeof window === 'undefined' || !window.indexedDB) {
-        const error = new Error('IndexedDB is not available in this environment');
-        logger.error('IndexedDB initialization failed:', error);
-        reject(error);
-        return;
-      }
-
-      const request = window.indexedDB.open(this.config.name, this.config.version);
+      const request = indexedDB.open(this.config.name, this.config.version);
 
       request.onerror = () => {
         const error = new Error(`Failed to open database: ${request.error?.message}`);
-        logger.error('Database open failed:', error);
+        logger.error('Database initialization failed:', error);
         reject(error);
       };
 
       request.onsuccess = () => {
         this.db = request.result;
-        logger.info('IndexedDB database initialized successfully');
         resolve();
       };
 
-      request.onupgradeneeded = (event) => {
-        const db = (event.target as IDBOpenDBRequest).result;
-        this.createStores(db);
-        logger.info('Database schema upgraded successfully');
+      request.onupgradeneeded = async (event) => {
+        const db = request.result;
+        const transaction = request.transaction!;
+        const oldVersion = event.oldVersion;
+        const newVersion = event.newVersion || this.config.version;
+
+        try {
+          this.createStores(db, transaction);
+
+          if (onUpgrade) {
+            await onUpgrade(db, transaction, oldVersion, newVersion);
+          }
+        } catch (error) {
+          logger.error('Database upgrade failed:', error as Error);
+          transaction.abort();
+          reject(error);
+        }
       };
     });
   }
 
-  private createStores(db: IDBDatabase): void {
+  private createStores(db: IDBDatabase, transaction: IDBTransaction): void {
     this.config.stores.forEach(storeConfig => {
       if (!db.objectStoreNames.contains(storeConfig.name)) {
         // Create new object store
@@ -63,9 +63,9 @@ export class IndexedDBDatabase {
         });
       } else {
         // Store exists, check for missing indexes
-        const transaction = db.transaction(storeConfig.name, 'versionchange');
+        // Use existing transaction instead of trying to open a new one
         const store = transaction.objectStore(storeConfig.name);
-        
+
         // Check and create missing indexes
         storeConfig.indexes?.forEach(indexConfig => {
           if (!store.indexNames.contains(indexConfig.name)) {
@@ -137,7 +137,7 @@ export class IndexedDBDatabase {
     return new Promise((resolve, reject) => {
       const transaction = this.db!.transaction([storeName], 'readonly');
       const store = transaction.objectStore(storeName);
-      
+
       // Validate index existence before accessing
       let source: IDBObjectStore | IDBIndex;
       if (indexName) {
@@ -151,7 +151,7 @@ export class IndexedDBDatabase {
       } else {
         source = store;
       }
-      
+
       const request = source.getAll(query);
 
       request.onsuccess = () => {
@@ -211,7 +211,7 @@ export class IndexedDBDatabase {
     return new Promise((resolve, reject) => {
       const transaction = this.db!.transaction([storeName], 'readonly');
       const store = transaction.objectStore(storeName);
-      
+
       // Validate index existence before accessing
       let source: IDBObjectStore | IDBIndex;
       if (indexName) {
@@ -225,7 +225,7 @@ export class IndexedDBDatabase {
       } else {
         source = store;
       }
-      
+
       const request = source.count(query);
 
       request.onsuccess = () => resolve(request.result);
@@ -245,7 +245,7 @@ export class IndexedDBDatabase {
     return new Promise((resolve, reject) => {
       const transaction = this.db!.transaction([storeName], 'readonly');
       const store = transaction.objectStore(storeName);
-      
+
       // Check if index exists before using it
       if (!store.indexNames.contains(indexName)) {
         const error = new Error(`Index '${indexName}' does not exist in store '${storeName}'`);
@@ -253,7 +253,7 @@ export class IndexedDBDatabase {
         reject(error);
         return;
       }
-      
+
       const index = store.index(indexName);
       const request = index.get(key);
 
