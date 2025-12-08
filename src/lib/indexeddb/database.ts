@@ -8,7 +8,7 @@ export class IndexedDBDatabase {
   private db: IDBDatabase | null = null;
   private config: DatabaseConfig = DATABASE_CONFIG;
 
-  async init(onUpgrade?: (db: IDBDatabase, transaction: IDBTransaction, oldVersion: number, newVersion: number) => void): Promise<void> {
+  async init(onUpgrade?: (db: IDBDatabase, transaction: IDBTransaction, oldVersion: number, newVersion: number) => Promise<void> | void): Promise<void> {
     return new Promise((resolve, reject) => {
       const request = indexedDB.open(this.config.name, this.config.version);
 
