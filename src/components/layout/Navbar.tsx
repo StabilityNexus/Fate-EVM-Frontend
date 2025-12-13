@@ -156,30 +156,32 @@ const Navbar: React.FC<NavbarProps> = ({ className = "" }) => {
         </div>
       </div>
 
-      {/* Mobile/Tablet Menu Dropdown */}
+      {/* Mobile/Tablet Menu Dropdown - SOLID BACKGROUND, NO TRANSPARENCY */}
       <div
         className={cn(
           "lg:hidden fixed inset-x-0 top-[72px] sm:top-[80px] bottom-0 z-40",
-          "bg-white/95 dark:bg-black/95 backdrop-blur-xl",
-          "border-t border-gray-200/50 dark:border-gray-800/50",
-          "transition-all duration-300 ease-in-out",
+          "bg-white dark:bg-black",
+          "border-t border-gray-200 dark:border-gray-800",
+          "transition-all duration-300 ease-in-out transform",
+          "overflow-y-auto",
           isMobileMenuOpen
-            ? "opacity-100 pointer-events-auto"
-            : "opacity-0 pointer-events-none"
+            ? "translate-y-0 opacity-100 pointer-events-auto"
+            : "-translate-y-2 opacity-0 pointer-events-none"
         )}
       >
-        <nav className="flex flex-col p-6 space-y-2 sm:space-y-3">
+        <nav className="flex flex-col p-6 space-y-3 sm:space-y-4">
           {navLinks.map((link) => (
             <Link
               key={link.href}
               href={link.href}
+              onClick={() => setIsMobileMenuOpen(false)}
               className={cn(
-                "px-6 py-4 rounded-xl text-lg sm:text-xl font-medium transition-all duration-300",
-                "border border-gray-200/50 dark:border-gray-800/50",
+                "px-6 py-5 rounded-xl text-xl sm:text-2xl font-semibold transition-all duration-200",
+                "border-2 shadow-lg active:scale-95",
                 "font-[var(--font-bebas-nueue)]",
                 pathname === link.href
-                  ? "bg-yellow-500/10 dark:bg-yellow-400/10 text-yellow-600 dark:text-yellow-400 border-yellow-500/30 dark:border-yellow-400/30 shadow-sm"
-                  : "bg-gray-50/50 dark:bg-gray-900/50 text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-yellow-600 dark:hover:text-yellow-400 hover:border-yellow-500/20 dark:hover:border-yellow-400/20"
+                  ? "bg-yellow-500 dark:bg-yellow-600 text-white border-yellow-600 dark:border-yellow-500 shadow-yellow-500/30"
+                  : "bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 text-gray-900 dark:text-white border-gray-300 dark:border-gray-700 hover:from-yellow-50 hover:to-yellow-100 dark:hover:from-yellow-900/20 dark:hover:to-yellow-800/20 hover:border-yellow-400 dark:hover:border-yellow-600 hover:shadow-xl"
               )}
             >
               {link.label}
@@ -187,16 +189,18 @@ const Navbar: React.FC<NavbarProps> = ({ className = "" }) => {
           ))}
           
           {/* Wallet Button in Mobile Menu */}
-          <div className="pt-4 border-t border-gray-200/50 dark:border-gray-800/50">
-            <WalletButton />
+          <div className="pt-6 mt-2 border-t-2 border-gray-200 dark:border-gray-800">
+            <div className="transform scale-105">
+              <WalletButton />
+            </div>
           </div>
         </nav>
       </div>
 
-      {/* Overlay for mobile menu */}
+      {/* Overlay for mobile menu - Click to close */}
       {isMobileMenuOpen && (
         <div
-          className="lg:hidden fixed inset-0 bg-black/20 dark:bg-black/40 z-30 backdrop-blur-sm"
+          className="lg:hidden fixed inset-0 bg-black/50 dark:bg-black/70 z-30 backdrop-blur-sm"
           onClick={() => setIsMobileMenuOpen(false)}
           aria-hidden="true"
         />
