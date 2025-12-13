@@ -134,7 +134,9 @@ const calculateTokenMetricsWithEvents = async (
       console.warn('Failed to load cached transactions:', e);
     }
     // 2. Fetch NEW transactions from blockchain (incremental)
-    const newTransactions = await fetchUserTransactions(tokenAddress, userAddress, chainId, minBlock);
+    // Use buffer to avoid missing transactions at block boundaries (reorgs, timing issues)
+    const fetchFromBlock = minBlock > 100 ? minBlock - 100 : 0;
+    const newTransactions = await fetchUserTransactions(tokenAddress, userAddress, chainId, fetchFromBlock);
 
     // 3. Merge and deduplicate
     const existingHashes = new Set(transactions.map(t => t.transactionHash));
@@ -276,6 +278,26 @@ const calculateTokenMetricsWithEvents = async (
       const costPerToken = buy.netAmount / buy.initialAmount;
       return sum + buy.amount * costPerToken;
     }, 0);
+
+    // FIFO Queue Validation: Ensure cost basis matches current holdings
+    const queueTotalTokens = buyQueue.reduce((sum, buy) => sum + buy.amount, 0);
+    const queueTotalCost = buyQueue.reduce((sum, buy) => {
+      const costPerToken = buy.netAmount / buy.initialAmount;
+      return sum + buy.amount * costPerToken;
+    }, 0);
+
+    // Validate queue integrity
+    const queueValid = Math.abs(queueTotalTokens - userTokens) < 0.001; // Allow small floating point errors
+    if (!queueValid) {
+      console.warn(`FIFO queue validation warning: Queue has ${queueTotalTokens} tokens but position has ${userTokens} tokens`, {
+        queueTokens: queueTotalTokens,
+        positionTokens: userTokens,
+        difference: Math.abs(queueTotalTokens - userTokens),
+        queueLength: buyQueue.length
+      });
+    } else {
+      console.debug(`FIFO queue validated: ${queueTotalTokens} tokens = ${queueTotalCost} ${baseTokenSymbol} cost basis`);
+    }
 
     // Check if there were any sell transactions (not based on mutated queue)
     const hadSell = transactions.some((t: any) => t.type === 'sell');

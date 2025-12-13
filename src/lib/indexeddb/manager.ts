@@ -24,6 +24,11 @@ export class FatePoolsIndexedDBManager {
   }
 
   async init(): Promise<void> {
+    // SSR Guard: IndexedDB is only available in browser environment
+    if (typeof window === 'undefined') {
+      logger.warn('IndexedDB not available in SSR context');
+      return;
+    }
     await this.db.init(this.handleUpgrade.bind(this));
   }
 
@@ -38,10 +43,11 @@ export class FatePoolsIndexedDBManager {
     return new Promise((resolve, reject) => {
       try {
         const positionStore = transaction.objectStore('portfolioPositions');
-        const request = positionStore.getAll();
+        const txStore = transaction.objectStore('portfolioTransactions');
+        const positionsRequest = positionStore.getAll();
 
-        request.onsuccess = () => {
-          const positions = request.result as PortfolioPosition[];
+        positionsRequest.onsuccess = () => {
+          const positions = positionsRequest.result as PortfolioPosition[];
           if (!positions || positions.length === 0) {
             logger.info('No positions to migrate.');
             resolve();
@@ -52,49 +58,120 @@ export class FatePoolsIndexedDBManager {
           let hasError = false;
 
           positions.forEach(position => {
-            const upgradedPosition: PortfolioPosition = {
-              ...position,
-              totalBought: 0,
-              totalSold: 0,
-              totalInvested: 0,
-              totalReceived: 0,
-              avgBuyPrice: 0,
-              realizedPnL: 0,
-              unrealizedPnL: 0
+            // Get transactions for this position to calculate real metrics
+            const txRequest = txStore.index('poolAddress').getAll(position.poolAddress);
+            
+            txRequest.onsuccess = () => {
+              const allTxs = txRequest.result as PortfolioTransaction[];
+              
+              // Filter transactions for this specific token type
+              const txs = allTxs.filter(tx => 
+                tx.userAddress === position.userAddress &&
+                tx.tokenType === position.tokenType &&
+                tx.chainId === position.chainId
+              );
+
+              // Calculate v4 metrics from transaction history
+              let totalBought = 0;
+              let totalSold = 0;
+              let totalInvested = 0;
+              let totalReceived = 0;
+              let realizedPnL = 0;
+
+              // FIFO queue for cost basis calculation
+              const buyQueue: Array<{ amount: number; cost: number }> = [];
+
+              // Process transactions chronologically
+              txs.sort((a, b) => a.blockNumber - b.blockNumber).forEach(tx => {
+                if (tx.action === 'buy') {
+                  totalBought += tx.amount;
+                  totalInvested += tx.value - tx.fees;  // Net investment
+                  buyQueue.push({ amount: tx.amount, cost: tx.value - tx.fees });
+                } else if (tx.action === 'sell') {
+                  totalSold += tx.amount;
+                  totalReceived += tx.value - tx.fees;  // Net received
+                  
+                  // Calculate realized P&L using FIFO
+                  let remainingToSell = tx.amount;
+                  let costOfSold = 0;
+
+                  while (remainingToSell > 0 && buyQueue.length > 0) {
+                    const oldest = buyQueue[0];
+                    const amountToUse = Math.min(oldest.amount, remainingToSell);
+                    const costPerToken = oldest.cost / oldest.amount;
+                    
+                    costOfSold += amountToUse * costPerToken;
+                    oldest.amount -= amountToUse;
+                    remainingToSell -= amountToUse;
+                    
+                    if (oldest.amount <= 0) {
+                      buyQueue.shift();
+                    }
+                  }
+
+                  realizedPnL += (tx.value - tx.fees) - costOfSold;
+                }
+              });
+
+              // Calculate average buy price from remaining queue
+              const totalQueueCost = buyQueue.reduce((sum, b) => sum + b.cost, 0);
+              const totalQueueAmount = buyQueue.reduce((sum, b) => sum + b.amount, 0);
+              const avgBuyPrice = totalQueueAmount > 0 ? totalQueueCost / totalQueueAmount : 0;
+
+              // Calculate unrealized P&L
+              const currentValue = position.currentValue || 0;
+              const unrealizedPnL = currentValue - totalQueueCost;
+
+              const upgradedPosition: PortfolioPosition = {
+                ...position,
+                totalBought,
+                totalSold,
+                totalInvested,
+                totalReceived,
+                avgBuyPrice,
+                realizedPnL,
+                unrealizedPnL
+              };
+
+              const putRequest = positionStore.put(upgradedPosition);
+
+              putRequest.onsuccess = () => {
+                pending--;
+                if (pending === 0 && !hasError) {
+                  logger.info(`Migrated ${positions.length} positions to v4 schema with calculated metrics.`);
+
+                  transaction.oncomplete = () => {
+                    resolve();
+                  };
+
+                  transaction.onerror = () => {
+                    reject(transaction.error || new Error('Transaction error after migration'));
+                  };
+
+                  transaction.onabort = () => {
+                    reject(transaction.error || new Error('Transaction aborted after migration'));
+                  };
+                }
+              };
+
+              putRequest.onerror = () => {
+                if (!hasError) {
+                  hasError = true;
+                  reject(new Error('Failed to update position during migration'));
+                }
+              };
             };
 
-            const putRequest = positionStore.put(upgradedPosition);
-
-            putRequest.onsuccess = () => {
-              pending--;
-              if (pending === 0 && !hasError) {
-                logger.info(`Migrated ${positions.length} positions to v4 schema.`);
-
-                // Also wait for transaction to complete for extra safety
-                transaction.oncomplete = () => {
-                  resolve();
-                };
-
-                transaction.onerror = () => {
-                  reject(transaction.error || new Error('Transaction error after migration'));
-                };
-
-                transaction.onabort = () => {
-                  reject(transaction.error || new Error('Transaction aborted after migration'));
-                };
-              }
-            };
-
-            putRequest.onerror = () => {
+            txRequest.onerror = () => {
               if (!hasError) {
                 hasError = true;
-                reject(new Error('Failed to update position during migration'));
+                reject(new Error('Failed to fetch transactions for migration'));
               }
             };
           });
         };
 
-        request.onerror = () => {
+        positionsRequest.onerror = () => {
           logger.error('Failed to read positions for migration');
           reject(new Error('Failed to read positions for migration'));
         };
