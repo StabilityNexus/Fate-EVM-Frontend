@@ -14,6 +14,7 @@ import { logger } from "@/lib/logger";
 import type { FormData } from "../FormData";
 import { useAccount, useChainId } from "wagmi";
 import { HEBESWAP_PAIRS } from "@/utils/hebeswapConfig";
+import { useState, useEffect } from "react";
 
 interface PoolConfigurationStepProps {
   formData: FormData;
@@ -30,6 +31,32 @@ const PoolConfigurationStep: React.FC<PoolConfigurationStepProps> = ({
 }) => {
   const { address } = useAccount();
   const chainId = useChainId();
+  const [tokenList, setTokenList] = useState<Array<{ address: string; name: string; symbol: string; chainId?: number }>>([]);
+
+  useEffect(() => {
+    // Fetch the StabilityNexus TokenList (raw GitHub JSON). If the structure differs, fall back gracefully.
+    const url = "https://raw.githubusercontent.com/StabilityNexus/TokenList/main/tokens.json";
+    let cancelled = false;
+    fetch(url)
+      .then((res) => res.json())
+      .then((data) => {
+        if (cancelled) return;
+        const tokens = Array.isArray(data) ? data : data.tokens || data.default || [];
+        if (!Array.isArray(tokens)) return;
+        // If chainId is present on tokens, filter by current chainId; otherwise include all
+        const filtered = tokens.filter((t: any) => {
+          if (!t) return false;
+          if (typeof t.address !== 'string') return false;
+          if (!t.chainId) return true;
+          return chainId ? t.chainId === chainId : true;
+        }).map((t: any) => ({ address: t.address, name: t.name || t.symbol || t.address, symbol: t.symbol || '' }));
+        setTokenList(filtered.slice(0, 200)); // limit to first 200 for performance
+      })
+      .catch(() => {
+        // ignore fetch errors; token select will simply not populate
+      });
+    return () => { cancelled = true; };
+  }, [chainId]);
 
   React.useEffect(() => {
     if (address && address !== formData.creatorAddress) {
@@ -135,6 +162,22 @@ const PoolConfigurationStep: React.FC<PoolConfigurationStepProps> = ({
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
+          </div>
+          {/* Known token selector (optional) */}
+          <div>
+            <label className="sr-only">Select known token</label>
+            <select
+              value={formData.baseTokenAddress || ""}
+              onChange={(e) => updateFormData({ baseTokenAddress: e.target.value })}
+              className="w-full mb-2 px-3 py-2 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-black dark:text-white"
+            >
+              <option value="">Select a supported token (or enter a custom address below)</option>
+              {tokenList.map((t) => (
+                <option key={t.address} value={t.address} className="text-black dark:text-white">
+                  {t.name} {t.symbol ? `(${t.symbol})` : ''} - {t.address.slice(0,6)}...{t.address.slice(-4)}
+                </option>
+              ))}
+            </select>
           </div>
           <Input
             type="text"
