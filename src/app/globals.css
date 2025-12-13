@@ -79,11 +79,13 @@ body {
 .mode-toggle-button-dark {
   background-color: #000000;
   border: 2px solid white;
+  color: white;
 }
 
 .mode-toggle-button-light {
   background-color: white;
   border: 2px solid black;
+  color: black;
 }
 
 .mode-toggle-icon {
