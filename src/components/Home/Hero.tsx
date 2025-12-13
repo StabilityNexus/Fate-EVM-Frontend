@@ -115,18 +115,19 @@ const Hero = () => {
       {/* Background Content */}
       <div className="absolute inset-0 flex flex-col items-center justify-center bg-black dark:bg-white">
         <h1
-          className="text-white dark:text-black text-4xl md:text-8xl font-bold text-center font-italiannoRegular"
+          className="text-white dark:text-black text-4xl sm:text-6xl md:text-8xl font-bold text-center font-italiannoRegular px-4"
           onMouseEnter={() => setIsHovered(true)}
           onMouseLeave={() => setIsHovered(false)}
         >
           Fate Protocol
         </h1>
         <p
-          className="text-white dark:text-black text-md md:text-2xl mt-4 text-center"
+          className="text-white dark:text-black text-sm sm:text-lg md:text-2xl mt-4 text-center px-4"
           onMouseEnter={() => setIsHovered(true)}
           onMouseLeave={() => setIsHovered(false)}
         >
-          Decentralized perpetual prediction pools. <br />
+          Decentralized perpetual prediction pools. <br className="hidden sm:block" />
+          <span className="sm:hidden"> </span>
           Buy and sell bullCoins and bearCoins to dynamically hedge against price risks.
         </p>
 
@@ -155,18 +156,19 @@ const Hero = () => {
         }}
       >
         <h1
-          className="text-black dark:text-white text-4xl md:text-8xl font-bold text-center font-italiannoRegular"
+          className="text-black dark:text-white text-4xl sm:text-6xl md:text-8xl font-bold text-center font-italiannoRegular px-4"
           onMouseEnter={() => setIsHovered(true)}
           onMouseLeave={() => setIsHovered(false)}
         >
           Fate Protocol
         </h1>
         <p
-          className="text-black dark:text-white text-md md:text-2xl mt-4 text-center"
+          className="text-black dark:text-white text-sm sm:text-lg md:text-2xl mt-4 text-center px-4"
           onMouseEnter={() => setIsHovered(true)}
           onMouseLeave={() => setIsHovered(false)}
         >
-          Decentralized perpetual prediction pools. <br />
+          Decentralized perpetual prediction pools. <br className="hidden sm:block" />
+          <span className="sm:hidden"> </span>
           Buy and sell bullCoins and bearCoins to dynamically hedge against price risks.
         </p>
 
@@ -219,7 +221,7 @@ const ButtonGroup = ({
   handleSubmit: () => void;
   isForeground?: boolean;
 }) => (
-  <div className="flex flex-col w-2/3 sm:flex-row md:flex-row gap-4 justify-center mt-8">
+  <div className="flex flex-col w-full max-w-md sm:max-w-none sm:w-2/3 sm:flex-row md:flex-row gap-4 justify-center mt-8 px-4">
     <Link href="/createPool">
       <button
         className={cn(
@@ -259,26 +261,26 @@ const ButtonGroup = ({
     </button>
 
          {isModalOpen && (
-       <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg w-96">
-          <h2 className="text-xl font-semibold mb-4 text-black dark:text-white">Enter Pool Address</h2>
+       <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50 p-4">
+        <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-lg shadow-lg w-full max-w-md">
+          <h2 className="text-lg sm:text-xl font-semibold mb-4 text-black dark:text-white">Enter Pool Address</h2>
           <input
             type="text"
             value={vaultAddress}
             onChange={(e) => setVaultAddress(e.target.value)}
-            className="w-full p-2 border border-gray-300 rounded mb-4 dark:bg-gray-700 dark:text-white"
+            className="w-full p-2 sm:p-3 text-sm sm:text-base border border-gray-300 rounded mb-4 dark:bg-gray-700 dark:text-white"
             placeholder="0x123...abc"
           />
-          <div className="flex justify-end space-x-2">
+          <div className="flex flex-col sm:flex-row justify-end gap-2 sm:gap-2">
             <button
               onClick={() => setIsModalOpen(false)}
-              className="px-4 py-2 bg-gray-300 dark:bg-gray-600 text-black dark:text-white rounded"
+              className="px-4 py-2 text-sm sm:text-base bg-gray-300 dark:bg-gray-600 text-black dark:text-white rounded"
             >
               Cancel
             </button>
             <button
               onClick={handleSubmit}
-              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+              className="px-4 py-2 text-sm sm:text-base bg-blue-600 text-white rounded hover:bg-blue-700"
             >
               Continue
             </button>

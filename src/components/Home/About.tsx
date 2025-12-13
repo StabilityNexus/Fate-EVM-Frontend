@@ -58,12 +58,12 @@ export default function AboutSection() {
       {/* Subtle Background Gradient */}
       <div className="absolute inset-0 bg-gradient-to-br from-white to-gray-300 dark:from-black dark:via-gray-900 dark:to-gray-800 opacity-60 blur-2xl pointer-events-none" />
 
-      <div className="container mx-auto px-10">
-        <h2 className="text-2xl md:text-4xl font-bold text-center mb-12 text-black dark:text-white tracking-widest">
+      <div className="container mx-auto px-4 sm:px-6 md:px-10">
+        <h2 className="text-xl sm:text-2xl md:text-4xl font-bold text-center mb-8 sm:mb-12 text-black dark:text-white tracking-widest">
           Redefining Prediction Markets
         </h2>
 
-        <div className="grid grid-cols-1 text-center md:text-left md:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 text-center md:text-left md:grid-cols-3 gap-6 sm:gap-8">
           {features.map((feature, index) => (
             <motion.div
               key={index}

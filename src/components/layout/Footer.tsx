@@ -107,14 +107,18 @@ const navigation = [
 
 interface FooterProps {
   className?: string;
+  onKyaClick?: () => void;
+  onShareClick?: () => void;
 }
 
-export default function Footer({ className = "" }: FooterProps) {
+export default function Footer({ className = "", onKyaClick, onShareClick }: FooterProps) {
+  const currentYear = new Date().getFullYear();
+
   return (
     <footer className={`w-full rounded-lg backdrop-blur-md bg-white/10 dark:bg-black shadow-lg border border-white/10 dark:border-black/10 ${className}`}>
-      <div className="px-4 sm:px-8  py-6 space-y-6">
+      <div className="px-4 sm:px-8 py-6 space-y-6">
         {/* Logo and Social Links */}
-        <div className="flex flex-col  md:flex-row ">
+        <div className="flex flex-col md:flex-row">
           <div className="w-full flex mb-4 md:mb-0 justify-between">
             <Link
               href="https://stability.nexus/"
@@ -179,6 +183,29 @@ export default function Footer({ className = "" }: FooterProps) {
           >
             Docs
           </Link>
+          {onKyaClick && (
+            <button
+              onClick={onKyaClick}
+              className="text-white-900 dark:text-white hover:text-yellow-500 dark:hover:text-yellow-400 hover:underline hover:decoration-2"
+            >
+              KYA
+            </button>
+          )}
+          {onShareClick && (
+            <button
+              onClick={onShareClick}
+              className="text-white-900 dark:text-white hover:text-yellow-500 dark:hover:text-yellow-400 hover:underline hover:decoration-2"
+            >
+              Share
+            </button>
+          )}
+        </div>
+
+        {/* Copyright */}
+        <div className="text-center pt-4 border-t border-white/10 dark:border-black/10">
+          <p className="text-xs text-gray-600 dark:text-gray-400">
+            &copy; {currentYear} The Stable Order. All rights reserved.
+          </p>
         </div>
       </div>
     </footer>
