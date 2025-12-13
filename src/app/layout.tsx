@@ -147,7 +147,7 @@ export default function RootLayout({
               "screenshot": "https://evm.fate.stability.nexus/og-image.png",
               "softwareVersion": "1.0.0",
               "datePublished": "2025-06-06",
-              "dateModified": new Date().toISOString().split('T')[0]
+              "dateModified": "2025-12-14"
             })
           }}
         />

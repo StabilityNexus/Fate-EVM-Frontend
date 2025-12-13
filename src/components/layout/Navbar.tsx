@@ -47,7 +47,32 @@ const Navbar: React.FC<NavbarProps> = ({ className = "" }) => {
     };
   }, [isMobileMenuOpen]);
 
-  if (!isThemeReady) return null;
+  // Use mounted state to prevent hydration mismatch
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) {
+    // Return a placeholder with same structure to prevent hydration mismatch
+    return (
+      <header className={cn("justify-between z-50", className)}>
+        <div className="mx-auto flex items-center justify-between relative dark:bg-black px-5 py-2">
+          <div className="flex-shrink-0">
+            <Link href="/">
+              <div className="text-center">
+                <div className="w-20 h-20 p-2" /> {/* Placeholder for logo */}
+              </div>
+            </Link>
+          </div>
+          <div className="flex items-center space-x-4">
+            <div className="w-10 h-10" /> {/* Placeholder for mode toggle */}
+            <div className="w-24 h-10" /> {/* Placeholder for wallet button */}
+          </div>
+        </div>
+      </header>
+    );
+  }
 
   const navLinks = [
     { href: "/explorePools", label: "Explore" },
