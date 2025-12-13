@@ -2088,7 +2088,7 @@ export default function PortfolioPage() {
 
   if (!isConnected) {
     return (
-      <div className="min-h-screen bg-white dark:bg-black flex items-center justify-center p-4 pt-28 min-[900px]:pt-32">
+      <div className="min-h-screen bg-white dark:bg-black flex items-center justify-center p-4 pt-24 sm:pt-28 lg:pt-32">
         <Card className="p-8 text-center max-w-md border-black dark:border-neutral-700/60 shadow-xl bg-white/80 dark:bg-neutral-800/80 backdrop-blur-sm">
           <div className="mb-6">
             <Wallet className="h-12 w-12 mx-auto text-yellow-500 dark:text-yellow-400 mb-4" />
@@ -2113,7 +2113,7 @@ export default function PortfolioPage() {
   }
 
   return (
-    <div className="min-h-screen bg-white dark:bg-black text-neutral-900 dark:text-white p-4 pt-28 min-[900px]:p-6 min-[900px]:pt-32">
+    <div className="min-h-screen bg-white dark:bg-black text-neutral-900 dark:text-white p-4 pt-24 sm:pt-28 sm:p-5 lg:p-6 lg:pt-32">
       <div className="max-w-7xl mx-auto space-y-8">
         {/* Enhanced Pool Data Loaders - Only loads pools where user has positions */}
         {availablePools.map((poolAddress, index) => (
