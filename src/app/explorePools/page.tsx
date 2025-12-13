@@ -546,17 +546,18 @@ function ExploreFatePoolsClient() {
   }, [isConnected, router, walletClient, isConnectedChainSupported]);
 
   const handleUsePool = useCallback((poolId: string): void => {
-    if (!isConnected) { 
-      toast.error("Please connect your wallet to use this pool."); 
-      return; 
-    }
-    
     // Validate address format before proceeding
     if (!isAddress(poolId)) {
       toast.error("Invalid pool address format. Please try again.");
       return;
     }
-    
+
+    // If the user is not connected, show an informational toast
+    // but still allow navigation to the pool detail page.
+    if (!isConnected) {
+      toast.info("You are not connected. Connect your wallet to interact with this pool.");
+    }
+
     router.push(`/pool?id=${poolId}`);
   }, [isConnected, router]);
 
