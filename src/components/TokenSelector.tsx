@@ -131,6 +131,12 @@ const TokenSelector: React.FC<TokenSelectorProps> = ({
 
   return (
     <div className="w-full space-y-2">
+      {label && (
+        <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block">
+          {label}
+          {required && <span className="text-red-500 ml-1">*</span>}
+        </label>
+      )}
       <div className="flex gap-2">
         <div className="flex-1 relative">
           {selectedToken && !isManualInput ? (

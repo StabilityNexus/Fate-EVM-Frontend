@@ -84,7 +84,7 @@ const KyaModal: FC<KyaModalProps> = ({ isOpen, onClose, onUnderstand }) => {
                   No one can change or update the smart contracts deployed on the blockchain.
                 </li>
                 <li>
-                  The smart contracts are executed autonomously by the blockchain's block validators.
+                  The smart contracts are executed autonomously by the blockchain&apos;s block validators.
                 </li>
               </ul>
             </li>
@@ -130,8 +130,8 @@ const KyaModal: FC<KyaModalProps> = ({ isOpen, onClose, onUnderstand }) => {
               confirmation of your transactions.
             </li>
             <li>
-              If you are interacting with a centralized blockchain (a.k.a. "L2", "sidechain",
-              "Proof-of-Authority blockchain", ...), the block validators may decide to stop
+              If you are interacting with a centralized blockchain (a.k.a. &quot;L2&quot;, &quot;sidechain&quot;,
+              &quot;Proof-of-Authority blockchain&quot;, ...), the block validators may decide to stop
               operating the blockchain.
             </li>
             <li>
