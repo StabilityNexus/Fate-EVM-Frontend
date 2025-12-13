@@ -147,7 +147,7 @@ export default function RootLayout({
               "screenshot": "https://evm.fate.stability.nexus/og-image.png",
               "softwareVersion": "1.0.0",
               "datePublished": "2025-06-06",
-              "dateModified": new Date().toISOString().split('T')[0]
+              "dateModified": "2025-12-14"
             })
           }}
         />
@@ -160,16 +160,16 @@ export default function RootLayout({
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         <ErrorBoundary>
           <ClientProviders>
-          {/* Absolute positioned navbar to avoid affecting hero positioning */}
-          <Navbar className="fixed top-0 left-0 right-0 z-50 bg-white/80 dark:bg-black/80 backdrop-blur-md" />
+          {/* Sticky navbar with responsive design */}
+          <Navbar />
           
-          <main>
+          <main className="min-h-screen">
             <ErrorBoundary>
               {children}
             </ErrorBoundary>
           </main>
           
-          <Footer className="pb-20 lg:pb-4" />
+          <Footer />
           </ClientProviders>
         </ErrorBoundary>
       </body>
