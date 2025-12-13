@@ -22,7 +22,7 @@ export interface Token {
 const normalizeTokens = (tokens: Token[]): Token[] => {
   return tokens.map(token => ({
     ...token,
-    contract_address: token.contract_address.toLowerCase(),
+    contract_address: (token.contract_address ?? "").toLowerCase(),
   }));
 };
 

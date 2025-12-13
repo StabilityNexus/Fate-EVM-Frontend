@@ -48,7 +48,7 @@ const TokenSelectorModal: React.FC<TokenSelectorModalProps> = ({
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
       <DialogContent className="bg-white dark:bg-gray-800 max-w-md max-h-[80vh] flex flex-col p-0">
         {/* Header */}
         <DialogHeader className="p-4 border-b border-gray-200 dark:border-gray-700">
@@ -87,6 +87,7 @@ const TokenSelectorModal: React.FC<TokenSelectorModalProps> = ({
             <div className="space-y-1">
               {filteredTokens.map((token) => (
                 <button
+                  type="button"
                   key={token.contract_address}
                   onClick={() => handleTokenSelect(token)}
                   className={`w-full flex items-center gap-3 p-3 rounded-lg transition-all hover:bg-gray-100 dark:hover:bg-gray-700 ${
