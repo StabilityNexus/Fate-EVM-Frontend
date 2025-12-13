@@ -3,7 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ClientProviders } from "@/components/layout/Layout";
 import Navbar from "@/components/layout/Navbar";
-import Footer from "@/components/layout/Footer";
+import ClientFooter from "@/components/layout/ClientFooter";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 
@@ -37,11 +37,15 @@ export const metadata: Metadata = {
     "Ethereum",
     "Polygon",
     "BSC",
-    "Base"
+    "Base",
+    "Stability Nexus",
+    "The Stable Order"
   ],
-  authors: [{ name: "Fate Protocol Team" }],
-  creator: "Fate Protocol",
-  publisher: "Fate Protocol",
+  authors: [{ name: "The Stable Order", url: "https://stability.nexus" }],
+  creator: "The Stable Order",
+  publisher: "The Stable Order",
+  applicationName: "Fate Protocol",
+  category: "Finance",
   formatDetection: {
     email: false,
     address: false,
@@ -53,7 +57,7 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: "Fate Protocol | Decentralized Prediction Markets",
-    description: "Trade prediction markets on Fate Protocol - the decentralized platform for perpetual prediction pools. Buy bullCoins and bearCoins to predict price movements.",
+    description: "Trade prediction markets on Fate Protocol - the decentralized platform for perpetual prediction pools. Buy bullCoins and bearCoins to predict price movements across Ethereum, Polygon, BSC, and Base.",
     url: "https://evm.fate.stability.nexus",
     siteName: "Fate Protocol",
     images: [
@@ -62,6 +66,7 @@ export const metadata: Metadata = {
         width: 1200,
         height: 630,
         alt: "Fate Protocol - Decentralized Prediction Markets",
+        type: "image/png",
       },
     ],
     locale: "en_US",
@@ -70,9 +75,10 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "Fate Protocol | Decentralized Prediction Markets",
-    description: "Trade prediction markets on Fate Protocol - the decentralized platform for perpetual prediction pools.",
+    description: "Trade prediction markets on Fate Protocol - the decentralized platform for perpetual prediction pools. Buy bullCoins and bearCoins to predict price movements.",
     images: ["https://evm.fate.stability.nexus/og-image.png"],
-    creator: "@FateProtocol",
+    creator: "@StabilityNexus",
+    site: "@StabilityNexus",
   },
   robots: {
     index: true,
@@ -84,6 +90,14 @@ export const metadata: Metadata = {
       "max-image-preview": "large",
       "max-snippet": -1,
     },
+  },
+  verification: {
+    google: "google-site-verification-code",
+  },
+  other: {
+    "og:image:width": "1200",
+    "og:image:height": "630",
+    "og:image:type": "image/png",
   },
 };
 
@@ -169,7 +183,7 @@ export default function RootLayout({
             </ErrorBoundary>
           </main>
           
-          <Footer className="pb-20 lg:pb-4" />
+          <ClientFooter className="pb-20 lg:pb-4" />
           </ClientProviders>
         </ErrorBoundary>
       </body>
