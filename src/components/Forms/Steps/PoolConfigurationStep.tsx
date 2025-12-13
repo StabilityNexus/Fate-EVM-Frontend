@@ -14,6 +14,7 @@ import { logger } from "@/lib/logger";
 import type { FormData } from "../FormData";
 import { useAccount, useChainId } from "wagmi";
 import { HEBESWAP_PAIRS } from "@/utils/hebeswapConfig";
+import TokenSelector from "@/components/TokenSelector";
 
 interface PoolConfigurationStepProps {
   formData: FormData;
@@ -130,24 +131,20 @@ const PoolConfigurationStep: React.FC<PoolConfigurationStepProps> = ({
                 </TooltipTrigger>
                 <TooltipContent className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400">
                   <p className="w-64 text-sm">
-                    The contract address of the token used for vault reserves (e.g., USDT, USDC)
+                    The contract address of the token used for vault reserves (e.g., USDT, USDC). You can select from supported tokens or enter a custom address.
                   </p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
           </div>
-          <Input
-            type="text"
-            placeholder="0x123..."
+          <TokenSelector
             value={formData.baseTokenAddress}
-            onChange={(e) => updateFormData({ baseTokenAddress: e.target.value })}
-            className={`transition-all focus:ring-2 focus:ring-black dark:focus:ring-white border-gray-200 dark:border-gray-700 text-black dark:text-white ${
-              errors.baseTokenAddress ? "border-red-500" : ""
-            }`}
+            onChange={(address) => updateFormData({ baseTokenAddress: address })}
+            error={errors.baseTokenAddress}
+            placeholder="0x123..."
+            label=""
+            required={true}
           />
-          {errors.baseTokenAddress && (
-            <p className="text-red-500 text-sm">{errors.baseTokenAddress}</p>
-          )}
         </div>
 
         {/* Creator Address */}
