@@ -1,19 +1,23 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Info, Coins, Wallet } from "lucide-react";
+import { Info, Coins, Wallet, ChevronDown } from "lucide-react";
 import { logger } from "@/lib/logger";
 import type { FormData } from "../FormData";
 import { useAccount, useChainId } from "wagmi";
 import { HEBESWAP_PAIRS } from "@/utils/hebeswapConfig";
+import TokenSelectorModal from "@/components/ui/TokenSelector";
+import TokenImage from "@/components/ui/TokenImage";
+import { loadTokensForChain, findTokenByAddress, type Token } from "@/utils/tokenList";
 
 interface PoolConfigurationStepProps {
   formData: FormData;
@@ -30,15 +34,57 @@ const PoolConfigurationStep: React.FC<PoolConfigurationStepProps> = ({
 }) => {
   const { address } = useAccount();
   const chainId = useChainId();
+  const [isTokenSelectorOpen, setIsTokenSelectorOpen] = useState(false);
+  const [availableTokens, setAvailableTokens] = useState<Token[]>([]);
+  const [selectedToken, setSelectedToken] = useState<Token | null>(null);
+  const [isLoadingTokens, setIsLoadingTokens] = useState(false);
 
-  React.useEffect(() => {
+  // Load tokens when chain changes
+  useEffect(() => {
+    const loadTokens = async () => {
+      setIsLoadingTokens(true);
+      try {
+        const tokens = await loadTokensForChain(chainId);
+        setAvailableTokens(tokens);
+        
+        // If we have a base token address, try to find its token info
+        if (formData.baseTokenAddress && tokens.length > 0) {
+          const token = findTokenByAddress(tokens, formData.baseTokenAddress);
+          setSelectedToken(token || null);
+        }
+      } catch (err) {
+        logger.error('Failed to load tokens:', err instanceof Error ? err : new Error(String(err)));
+      } finally {
+        setIsLoadingTokens(false);
+      }
+    };
+
+    loadTokens();
+  }, [chainId]);
+
+  // Update selected token when base token address changes externally
+  useEffect(() => {
+    if (formData.baseTokenAddress && availableTokens.length > 0) {
+      const token = findTokenByAddress(availableTokens, formData.baseTokenAddress);
+      setSelectedToken(token || null);
+    } else if (!formData.baseTokenAddress) {
+      setSelectedToken(null);
+    }
+  }, [formData.baseTokenAddress, availableTokens]);
+
+  const handleTokenSelect = (token: Token) => {
+    setSelectedToken(token);
+    updateFormData({ baseTokenAddress: token.contract_address });
+  };
+
+  useEffect(() => {
     if (address && address !== formData.creatorAddress) {
       updateFormData({ creatorAddress: address });
     }
   }, [address, formData.creatorAddress, updateFormData]);
 
   // Automatically set oracle type based on connected chain
-  React.useEffect(() => {
+  useEffect(() => {
     if (chainId === 61) {
       // Ethereum Classic - use Hebeswap
       updateFormData({ 
@@ -130,25 +176,93 @@ const PoolConfigurationStep: React.FC<PoolConfigurationStepProps> = ({
                 </TooltipTrigger>
                 <TooltipContent className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400">
                   <p className="w-64 text-sm">
-                    The contract address of the token used for vault reserves (e.g., USDT, USDC)
+                    The contract address of the token used for vault reserves (e.g., USDT, USDC). 
+                    You can select from popular tokens or enter a custom address.
                   </p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
           </div>
-          <Input
-            type="text"
-            placeholder="0x123..."
-            value={formData.baseTokenAddress}
-            onChange={(e) => updateFormData({ baseTokenAddress: e.target.value })}
-            className={`transition-all focus:ring-2 focus:ring-black dark:focus:ring-white border-gray-200 dark:border-gray-700 text-black dark:text-white ${
-              errors.baseTokenAddress ? "border-red-500" : ""
-            }`}
-          />
+
+          {/* Selected Token Display */}
+          {selectedToken && (
+            <div className="mb-2 p-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg">
+              <div className="flex items-center gap-3">
+                <TokenImage
+                  src={selectedToken.image}
+                  alt={selectedToken.name}
+                  symbol={selectedToken.symbol}
+                  size="sm"
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-gray-900 dark:text-white text-sm">
+                      {selectedToken.name}
+                    </span>
+                    <span className="text-xs text-gray-500 dark:text-gray-400 uppercase">
+                      {selectedToken.symbol}
+                    </span>
+                  </div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400 font-mono">
+                    {selectedToken.contract_address}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Input with Token Selector Button */}
+          <div className="flex gap-2">
+            <div className="flex-1">
+              <Input
+                type="text"
+                placeholder="0x123... or select a token"
+                value={formData.baseTokenAddress}
+                onChange={(e) => updateFormData({ baseTokenAddress: e.target.value })}
+                className={`transition-all focus:ring-2 focus:ring-black dark:focus:ring-white border-gray-200 dark:border-gray-700 text-black dark:text-white ${
+                  errors.baseTokenAddress ? "border-red-500" : ""
+                }`}
+              />
+            </div>
+            <Button
+              type="button"
+              onClick={() => setIsTokenSelectorOpen(true)}
+              disabled={isLoadingTokens || availableTokens.length === 0}
+              variant="default"
+              className="whitespace-nowrap text-black dark:text-white"
+            >
+              <Coins className="h-4 w-4" />
+              <span className="hidden sm:inline">Select Token</span>
+              <span className="sm:hidden">Select</span>
+              <ChevronDown className="h-4 w-4" />
+            </Button>
+          </div>
+
           {errors.baseTokenAddress && (
             <p className="text-red-500 text-sm">{errors.baseTokenAddress}</p>
           )}
+
+          {availableTokens.length === 0 && !isLoadingTokens && (
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              No token list available for this chain. Please enter the token address manually.
+            </p>
+          )}
+
+          {isLoadingTokens && (
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              Loading available tokens...
+            </p>
+          )}
         </div>
+
+        {/* Token Selector Modal */}
+        <TokenSelectorModal
+          isOpen={isTokenSelectorOpen}
+          onClose={() => setIsTokenSelectorOpen(false)}
+          tokens={availableTokens}
+          onSelectToken={handleTokenSelect}
+          selectedAddress={formData.baseTokenAddress}
+        />
 
         {/* Creator Address */}
         <div className="space-y-2">

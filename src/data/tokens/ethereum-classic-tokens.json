@@ -1,0 +1,51 @@
+[
+  {
+    "id": "shiba-classic",
+    "symbol": "shibc",
+    "name": "Shiba Classic",
+    "image": "https://coin-images.coingecko.com/coins/images/27241/large/1BED03B1-D87F-4E91-B24F-CDED9309D003.jpeg?1696526291",
+    "contract_address": "0x1fdc495289b590e78d455cf7faa6cd804de5cbc1"
+  },
+  {
+    "id": "classic-usd",
+    "symbol": "usc",
+    "name": "Classic USD",
+    "image": "https://coin-images.coingecko.com/coins/images/37725/large/logo.png?1715334043",
+    "contract_address": "0xde093684c796204224bc081f937aa059d903c52a"
+  },
+  {
+    "id": "wetc-hebeswap",
+    "symbol": "wetc",
+    "name": "Wrapped ETC",
+    "image": "https://coin-images.coingecko.com/coins/images/27126/large/1321.png?1696526178",
+    "contract_address": "0x82a618305706b14e7bcf2592d4b9324a366b6dad"
+  },
+  {
+    "id": "wrapped-ether",
+    "symbol": "wetc",
+    "name": "Wrapped ETC",
+    "image": "https://coin-images.coingecko.com/coins/images/26639/large/wrapped-ether.png?1726646462",
+    "contract_address": "0x1953cab0e5bfa6d4a9bad6e05fd46c1cc6527a5a"
+  },
+  {
+    "id": "hebeblock",
+    "symbol": "hebe",
+    "name": "HebeBlock",
+    "image": "https://coin-images.coingecko.com/coins/images/10367/large/hebeswap.jpeg?1696510369",
+    "contract_address": "0x88d8c3dc6b5324f34e8cf229a93e197048671abd"
+  },
+  {
+    "id": "etcpow",
+    "symbol": "etcpow",
+    "name": "ETCPOW",
+    "image": "https://coin-images.coingecko.com/coins/images/31770/large/ETCPOW_LOGO_1.png?1696530589",
+    "contract_address": "0x6c3b413c461c42a88160ed1b1b31d6f7b02a1c83"
+  },
+  {
+    "id": "morpho-aave-wrapped-btc",
+    "symbol": "mawbtc",
+    "name": "Morpho-Aave Wrapped BTC",
+    "image": "https://coin-images.coingecko.com/coins/images/29872/large/maWBTC.jpg?1696528797",
+    "contract_address": "0xd508f85f1511aaec63434e26aeb6d10be0188dc7"
+  }
+]
