@@ -18,7 +18,7 @@ export function ModeToggle() {
             onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
         >
             {resolvedTheme === "dark" ? (
-                <Moon className="mode-toggle-icon mode-toggle-icon-dark" />
+                <Moon className="mode-toggle-icon" />
             ) : (
                 <Sun className="mode-toggle-icon" />
             )}
