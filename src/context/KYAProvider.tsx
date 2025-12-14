@@ -5,7 +5,6 @@ import { useKYA } from "@/hooks/useKYA";
 import KYAModal from "@/components/ui/KYAModal";
 
 interface KYAContextType {
-  showKYA: boolean;
   openKYA: () => void;
 }
 
@@ -27,7 +26,7 @@ export function KYAProvider({ children }: KYAProviderProps) {
   const { showKYA, acknowledgeKYA, openKYA } = useKYA();
 
   return (
-    <KYAContext.Provider value={{ showKYA, openKYA }}>
+    <KYAContext.Provider value={{ openKYA }}>
       {children}
       <KYAModal isOpen={showKYA} onClose={acknowledgeKYA} />
     </KYAContext.Provider>

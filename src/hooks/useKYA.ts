@@ -6,7 +6,6 @@ const KYA_STORAGE_KEY = "fate-kya-acknowledged";
 
 export function useKYA() {
   const [showKYA, setShowKYA] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     // Check if user has already acknowledged KYA
@@ -15,8 +14,6 @@ export function useKYA() {
     if (!hasAcknowledged) {
       setShowKYA(true);
     }
-    
-    setIsLoading(false);
   }, []);
 
   const acknowledgeKYA = () => {
@@ -30,7 +27,6 @@ export function useKYA() {
 
   return {
     showKYA,
-    isLoading,
     acknowledgeKYA,
     openKYA,
   };

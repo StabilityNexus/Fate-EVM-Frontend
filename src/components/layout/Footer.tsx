@@ -120,6 +120,7 @@ export default function Footer({ className = "", onKYAClick }: FooterProps) {
             <Link
               href="https://stability.nexus/"
               target="_blank"
+              rel="noopener noreferrer"
               className="cursor-pointer"
             >
               <Image
@@ -131,7 +132,7 @@ export default function Footer({ className = "", onKYAClick }: FooterProps) {
                 priority
               />
             </Link>
-            <h5 className="text-md sm:hidden md:hidden flex justify-center items-center text-gray-900 dark:text-white">
+            <h5 className="text-md sm:hidden md:hidden flex justify-center items-center text-white-900 dark:text-white">
               A Project by Stability Nexus
             </h5>
           </div>
@@ -141,6 +142,7 @@ export default function Footer({ className = "", onKYAClick }: FooterProps) {
                 key={item.name}
                 href={item.href}
                 target="_blank"
+                rel="noopener noreferrer"
                 className="rounded-full bg-white/10 dark:bg-black/10 p-2 hover:bg-white/20 dark:hover:bg-black/20 transition-colors"
               >
                 <span className="sr-only">{item.name}</span>
@@ -155,48 +157,53 @@ export default function Footer({ className = "", onKYAClick }: FooterProps) {
           <Link
             href="https://stability.nexus/protocols"
             target="_blank"
-            className="text-white-900 dark:text-white hover:text-yellow-500 dark:hover:text-yellow-400 hover:underline hover:decoration-2"
+            rel="noopener noreferrer"
+            className="text-white-900 dark:text-white hover:text-yellow-500 dark:hover:text-yellow-400 hover:underline hover:decoration-2 transition-colors"
           >
             Other Protocols
           </Link>
           <Link
             href="https://stability.nexus/research"
             target="_blank"
-            className="text-white-900 dark:text-white hover:text-yellow-500 dark:hover:text-yellow-400 hover:underline hover:decoration-2"
+            rel="noopener noreferrer"
+            className="text-white-900 dark:text-white hover:text-yellow-500 dark:hover:text-yellow-400 hover:underline hover:decoration-2 transition-colors"
           >
             Research
           </Link>
           <Link
             href="https://news.stability.nexus/"
             target="_blank"
-            className="text-white-900 dark:text-white hover:text-yellow-500 dark:hover:text-yellow-400 hover:underline hover:decoration-2"
+            rel="noopener noreferrer"
+            className="text-white-900 dark:text-white hover:text-yellow-500 dark:hover:text-yellow-400 hover:underline hover:decoration-2 transition-colors"
           >
             News
           </Link>
           <Link
             href="https://docs.stability.nexus/"
             target="_blank"
-            className="text-white-900 dark:text-white hover:text-yellow-500 dark:hover:text-yellow-400 hover:underline hover:decoration-2"
+            rel="noopener noreferrer"
+            className="text-white-900 dark:text-white hover:text-yellow-500 dark:hover:text-yellow-400 hover:underline hover:decoration-2 transition-colors"
           >
             Docs
           </Link>
           <button
             onClick={onKYAClick}
-            className="text-white-900 dark:text-white hover:text-yellow-500 dark:hover:text-yellow-400 hover:underline hover:decoration-2 cursor-pointer"
+            className="text-white-900 dark:text-white hover:text-yellow-500 dark:hover:text-yellow-400 hover:underline hover:decoration-2 transition-colors"
           >
             KYA
           </button>
           <Link
             href="https://terms.stability.nexus"
             target="_blank"
-            className="text-white-900 dark:text-white hover:text-yellow-500 dark:hover:text-yellow-400 hover:underline hover:decoration-2"
+            rel="noopener noreferrer"
+            className="text-white-900 dark:text-white hover:text-yellow-500 dark:hover:text-yellow-400 hover:underline hover:decoration-2 transition-colors"
           >
             Terms and Conditions
           </Link>
         </div>
 
         {/* Copyright Statement */}
-        <div className="text-center text-sm text-gray-400 dark:text-gray-300 pt-4 border-t border-white/10 dark:border-black/10">
+        <div className="text-center text-sm text-gray-500 dark:text-gray-300 pt-4 border-t border-white/10 dark:border-black/10">
           <p>© 2025 The Stable Order</p>
         </div>
       </div>

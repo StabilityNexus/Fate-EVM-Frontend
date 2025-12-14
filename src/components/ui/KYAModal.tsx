@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import Link from "next/link";
 
 interface KYAModalProps {
@@ -9,12 +9,6 @@ interface KYAModalProps {
 }
 
 export default function KYAModal({ isOpen, onClose }: KYAModalProps) {
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
   useEffect(() => {
     if (isOpen) {
       // Prevent body scroll when modal is open
@@ -28,7 +22,7 @@ export default function KYAModal({ isOpen, onClose }: KYAModalProps) {
     };
   }, [isOpen]);
 
-  if (!mounted || !isOpen) return null;
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
