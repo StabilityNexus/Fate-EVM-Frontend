@@ -132,7 +132,7 @@ export default function Footer({ className = "", onKYAClick }: FooterProps) {
                 priority
               />
             </Link>
-            <h5 className="text-md sm:hidden md:hidden flex justify-center items-center text-white-900 dark:text-white">
+            <h5 className="text-md sm:hidden md:hidden flex justify-center items-center text-white dark:text-white">
               A Project by Stability Nexus
             </h5>
           </div>
@@ -146,7 +146,7 @@ export default function Footer({ className = "", onKYAClick }: FooterProps) {
                 className="rounded-full bg-white/10 dark:bg-black/10 p-2 hover:bg-white/20 dark:hover:bg-black/20 transition-colors"
               >
                 <span className="sr-only">{item.name}</span>
-                <item.icon className="size-6 text-white-900 dark:text-white" aria-hidden="true" />
+                <item.icon className="size-6 text-white dark:text-white" aria-hidden="true" />
               </Link>
             ))}
           </div>
@@ -158,7 +158,7 @@ export default function Footer({ className = "", onKYAClick }: FooterProps) {
             href="https://stability.nexus/protocols"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-white-900 dark:text-white hover:text-yellow-500 dark:hover:text-yellow-400 hover:underline hover:decoration-2 transition-colors"
+            className="text-white dark:text-white hover:text-yellow-500 dark:hover:text-yellow-400 hover:underline hover:decoration-2 transition-colors"
           >
             Other Protocols
           </Link>
@@ -166,7 +166,7 @@ export default function Footer({ className = "", onKYAClick }: FooterProps) {
             href="https://stability.nexus/research"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-white-900 dark:text-white hover:text-yellow-500 dark:hover:text-yellow-400 hover:underline hover:decoration-2 transition-colors"
+            className="text-white dark:text-white hover:text-yellow-500 dark:hover:text-yellow-400 hover:underline hover:decoration-2 transition-colors"
           >
             Research
           </Link>
@@ -174,7 +174,7 @@ export default function Footer({ className = "", onKYAClick }: FooterProps) {
             href="https://news.stability.nexus/"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-white-900 dark:text-white hover:text-yellow-500 dark:hover:text-yellow-400 hover:underline hover:decoration-2 transition-colors"
+            className="text-white dark:text-white hover:text-yellow-500 dark:hover:text-yellow-400 hover:underline hover:decoration-2 transition-colors"
           >
             News
           </Link>
@@ -182,21 +182,23 @@ export default function Footer({ className = "", onKYAClick }: FooterProps) {
             href="https://docs.stability.nexus/"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-white-900 dark:text-white hover:text-yellow-500 dark:hover:text-yellow-400 hover:underline hover:decoration-2 transition-colors"
+            className="text-white dark:text-white hover:text-yellow-500 dark:hover:text-yellow-400 hover:underline hover:decoration-2 transition-colors"
           >
             Docs
           </Link>
-          <button
-            onClick={onKYAClick}
-            className="text-white-900 dark:text-white hover:text-yellow-500 dark:hover:text-yellow-400 hover:underline hover:decoration-2 transition-colors"
-          >
-            KYA
-          </button>
+          {onKYAClick && (
+            <button
+              onClick={onKYAClick}
+              className="text-white dark:text-white hover:text-yellow-500 dark:hover:text-yellow-400 hover:underline hover:decoration-2 transition-colors"
+            >
+              KYA
+            </button>
+          )}
           <Link
             href="https://terms.stability.nexus"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-white-900 dark:text-white hover:text-yellow-500 dark:hover:text-yellow-400 hover:underline hover:decoration-2 transition-colors"
+            className="text-white dark:text-white hover:text-yellow-500 dark:hover:text-yellow-400 hover:underline hover:decoration-2 transition-colors"
           >
             Terms and Conditions
           </Link>

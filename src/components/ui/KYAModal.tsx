@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect } from "react";
+import { useEffect, useId } from "react";
 import Link from "next/link";
 
 interface KYAModalProps {
@@ -9,6 +9,8 @@ interface KYAModalProps {
 }
 
 export default function KYAModal({ isOpen, onClose }: KYAModalProps) {
+  const titleId = useId();
+
   useEffect(() => {
     if (isOpen) {
       // Prevent body scroll when modal is open
@@ -22,6 +24,17 @@ export default function KYAModal({ isOpen, onClose }: KYAModalProps) {
     };
   }, [isOpen]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   return (
@@ -33,11 +46,16 @@ export default function KYAModal({ isOpen, onClose }: KYAModalProps) {
       />
 
       {/* Modal */}
-      <div className="relative max-w-4xl max-h-[90vh] w-full mx-4 bg-white dark:bg-gray-900 rounded-lg shadow-2xl overflow-hidden border border-gray-200 dark:border-gray-700">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="relative max-w-4xl max-h-[90vh] w-full mx-4 bg-white dark:bg-gray-900 rounded-lg shadow-2xl overflow-hidden border border-gray-200 dark:border-gray-700"
+      >
         {/* Header */}
         <div className="sticky top-0 z-10 bg-gradient-to-r from-yellow-500/10 to-yellow-600/10 dark:from-yellow-500/20 dark:to-yellow-600/20 px-6 py-4 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+            <h2 id={titleId} className="text-2xl font-bold text-gray-900 dark:text-white">
               Know Your Assumptions (KYA)
             </h2>
             <button
