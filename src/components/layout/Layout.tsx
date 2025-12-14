@@ -1,6 +1,7 @@
 'use client';
 import { ThemeProvider } from "@/components/themeProvider";
 import { WalletProvider } from "@/context/walletProvider";
+import { KYAProvider } from "@/context/KYAProvider";
 import { Toaster } from "sonner";
 
 export function ClientProviders({ children }: { children: React.ReactNode }) {
@@ -13,8 +14,10 @@ export function ClientProviders({ children }: { children: React.ReactNode }) {
       storageKey="fate-protocol-theme"
     >
       <WalletProvider>
-        {children}
-        <Toaster position="top-right" richColors />
+        <KYAProvider>
+          {children}
+          <Toaster position="top-right" richColors />
+        </KYAProvider>
       </WalletProvider>
     </ThemeProvider>
   );

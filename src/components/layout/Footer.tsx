@@ -107,9 +107,10 @@ const navigation = [
 
 interface FooterProps {
   className?: string;
+  onKYAClick?: () => void;
 }
 
-export default function Footer({ className = "" }: FooterProps) {
+export default function Footer({ className = "", onKYAClick }: FooterProps) {
   return (
     <footer className={`w-full rounded-lg backdrop-blur-md bg-white/10 dark:bg-black shadow-lg border border-white/10 dark:border-black/10 ${className}`}>
       <div className="px-4 sm:px-8  py-6 space-y-6">
@@ -179,6 +180,24 @@ export default function Footer({ className = "" }: FooterProps) {
           >
             Docs
           </Link>
+          <button
+            onClick={onKYAClick}
+            className="text-white-900 dark:text-white hover:text-yellow-500 dark:hover:text-yellow-400 hover:underline hover:decoration-2 cursor-pointer"
+          >
+            KYA
+          </button>
+          <Link
+            href="https://terms.stability.nexus"
+            target="_blank"
+            className="text-white-900 dark:text-white hover:text-yellow-500 dark:hover:text-yellow-400 hover:underline hover:decoration-2"
+          >
+            Terms and Conditions
+          </Link>
+        </div>
+
+        {/* Copyright Statement */}
+        <div className="text-center text-sm text-gray-400 dark:text-gray-300 pt-4 border-t border-white/10 dark:border-black/10">
+          <p>© 2025 The Stable Order</p>
         </div>
       </div>
     </footer>
