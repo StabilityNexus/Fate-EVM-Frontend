@@ -59,6 +59,7 @@ export default function KYAModal({ isOpen, onClose }: KYAModalProps) {
               Know Your Assumptions (KYA)
             </h2>
             <button
+              type="button"
               onClick={onClose}
               className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
               aria-label="Close modal"
@@ -185,6 +186,7 @@ export default function KYAModal({ isOpen, onClose }: KYAModalProps) {
         {/* Footer */}
         <div className="sticky bottom-0 bg-white dark:bg-gray-900 px-6 py-4 border-t border-gray-200 dark:border-gray-700">
           <button
+            type="button"
             onClick={onClose}
             className="w-full px-6 py-3 bg-yellow-500 hover:bg-yellow-600 dark:bg-yellow-600 dark:hover:bg-yellow-700 text-white font-semibold rounded-lg transition-colors shadow-lg hover:shadow-xl"
           >

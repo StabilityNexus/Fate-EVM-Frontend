@@ -188,6 +188,7 @@ export default function Footer({ className = "", onKYAClick }: FooterProps) {
           </Link>
           {onKYAClick && (
             <button
+              type="button"
               onClick={onKYAClick}
               className="text-white dark:text-white hover:text-yellow-500 dark:hover:text-yellow-400 hover:underline hover:decoration-2 transition-colors"
             >
