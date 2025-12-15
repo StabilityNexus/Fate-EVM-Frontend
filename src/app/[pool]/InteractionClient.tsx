@@ -160,7 +160,7 @@ const usePool = (poolId: Address | undefined, isConnected: boolean) => {
 
       // const userBullBalance = userBalancesData?.[0]?.result as bigint || BigInt(0);
       // const userBearBalance = userBalancesData?.[1]?.result as bigint || BigInt(0);
-      
+
       const newPool = {
         id: { id: poolId },
         name: poolName || "Prediction Pool",
@@ -169,21 +169,21 @@ const usePool = (poolId: Address | undefined, isConnected: boolean) => {
         current_price: totalReserves > 0 ? totalReserves * 1e18 : 0,
         bull_reserve: bullReserve,
         bear_reserve: bearReserve,
-        bull_token: { 
-        id: bullAddr,
-          fields: { 
-            symbol: bullSymbol, 
+        bull_token: {
+          id: bullAddr,
+          fields: {
+            symbol: bullSymbol,
             total_supply: bullSupply,
             name: bullName
-          } 
+          }
         },
-        bear_token: { 
+        bear_token: {
           id: bearAddr,
-          fields: { 
-            symbol: bearSymbol, 
+          fields: {
+            symbol: bearSymbol,
             total_supply: bearSupply,
             name: bearName
-          } 
+          }
         },
         vault_creator: vaultCreator,
         creator_fee: poolFeeData?.[2]?.result ? Number(poolFeeData[2].result) / 1000 : 0,
@@ -192,7 +192,7 @@ const usePool = (poolId: Address | undefined, isConnected: boolean) => {
         treasury_fee: poolFeeData?.[3]?.result ? Number(poolFeeData[3].result) / 1000 : 0,
         bull_percentage: bullPercentage,
         bear_percentage: bearPercentage,
-        chainId: chain?.id || 1,
+        chainId: chain?.id || 11155111,
       };
 
       setPool(newPool);
@@ -295,10 +295,10 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
 
   const handleBuyTransaction = useCallback(async (amount: string) => {
     let loadingToast: string | number | undefined;
-    
+
     try {
       const amountWei = parseUnits(amount, 18);
-      
+
       loadingToast = toast.loading("Processing buy transaction...");
       await writeContract({
         address: tokenAddress! as `0x${string}`,
@@ -306,7 +306,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
         functionName: 'buy',
         args: [address!, amountWei],
       });
-      
+
       // Wait for the transaction to be confirmed and get the hash
       // The hash will be available in the data property after the transaction is submitted
       // For now, we'll handle the cache update in the useEffect when isConfirmed becomes true
@@ -340,7 +340,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
       validatedInput = validateTransactionInput({
         amount: buyAmount,
         poolId: poolData?.asset_address as Address,
-        chainId: poolData?.chainId || 1, // Use pool chain or fallback to mainnet
+        chainId: poolData?.chainId || 11155111, // Use pool chain or fallback to Sepolia
         userAddress: address
       });
     } catch (error) {
@@ -350,7 +350,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
     }
 
     const amountWei = parseUnits(validatedInput.amount.toString(), 18);
-    
+
     // Check user's base token balance
     const userBaseTokenBalance = baseTokenBalance || BigInt(0);
     if (userBaseTokenBalance < amountWei) {
@@ -394,10 +394,10 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
     }
 
     let loadingToast: string | number | undefined;
-    
+
     try {
       const amountWei = parseUnits(sellAmount, 18);
-      
+
       // Check user's token balance
       if (userTokens < amountWei) {
         toast.error(`Insufficient ${symbol} balance. You have ${formatUnits(userTokens, 18)} ${symbol} available.`);
@@ -412,7 +412,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
         args: [amountWei],
       });
       setSellAmount('');
-      
+
       // Wait for the transaction to be confirmed
       // The hash will be available in the data property after the transaction is submitted
       // For now, we'll handle the cache update in the useEffect when isConfirmed becomes true
@@ -515,16 +515,16 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
                   className="w-full"
                   disabled={isTransacting}
                 />
-                <div 
+                <div
                   className="mt-1 text-xs text-gray-500 dark:text-gray-400 cursor-pointer"
                   onClick={() => setBuyAmount(formatNumberDown(Number(formatUnits(baseTokenBalance, 18)), 4))}
                 >
                   Max: {formatNumberDown(Number(formatUnits(baseTokenBalance, 18)), 4)} WETH
                 </div>
               </div>
-              <Button 
-                onClick={() => handleBuy()} 
-                className={`w-full ${buttonColor} text-white`} 
+              <Button
+                onClick={() => handleBuy()}
+                className={`w-full ${buttonColor} text-white`}
                 disabled={!buyAmount || !connected || isTransacting}
               >
                 {isTransacting ? 'Processing...' : `Buy ${symbol} Tokens`}
@@ -545,16 +545,16 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
                   className="w-full"
                   disabled={isTransacting}
                 />
-                <div 
+                <div
                   className="mt-1 text-xs text-gray-500 dark:text-gray-400 cursor-pointer"
                   onClick={() => setSellAmount(formatNumberDown(Number(formatUnits(userTokens, 18)), 4))}
                 >
                   Max: {formatNumberDown(Number(formatUnits(userTokens, 18)), 4)} {symbol}
                 </div>
               </div>
-              <Button 
-                onClick={() => handleSell()} 
-                className="w-full bg-gray-100 hover:bg-gray-200 text-black border border-gray-300" 
+              <Button
+                onClick={() => handleSell()}
+                className="w-full bg-gray-100 hover:bg-gray-200 text-black border border-gray-300"
                 disabled={!sellAmount || !connected || isTransacting}
               >
                 {isTransacting ? 'Processing...' : `Sell ${symbol} Tokens`}
@@ -612,7 +612,7 @@ export default function InteractionClient() {
   const [distributeError, setDistributeError] = useState("");
   // const [lastUpdateTime, setLastUpdateTime] = useState<Date>(new Date());
   const [lastRebalanceTime, setLastRebalanceTime] = useState<Date | null>(null);
-  
+
   // Initialize from localStorage on mount
   useEffect(() => {
     if (poolId) {
@@ -627,7 +627,7 @@ export default function InteractionClient() {
   // const [gasPrice, setGasPrice] = useState<bigint>(BigInt(0));
   const [newOracleAddress, setNewOracleAddress] = useState<string>('');
   const [isFetchingRebalanceEvents, setIsFetchingRebalanceEvents] = useState(false);
-  
+
   // const POLLING_INTERVAL = 5000;
   const [pollingEnabledState, setPollingEnabledState] = useState(true);
 
@@ -647,7 +647,7 @@ export default function InteractionClient() {
       });
 
       logger.debug('fetchLastRebalanceEvent: Created public client for chain:', { chainName: walletClient.chain.name });
-      
+
       // Use the correct Rebalanced event signature from the ABI
       const rebalancedEventABI = {
         type: 'event',
@@ -676,14 +676,14 @@ export default function InteractionClient() {
         });
 
         logger.debug('Approach 1: Found Rebalanced logs:', { logCount: logs.length });
-        
+
         if (logs.length > 0) {
           const latestEvent = logs[logs.length - 1];
           const block = await publicClient.getBlock({ blockNumber: latestEvent.blockNumber });
           const rebalanceTime = new Date(Number(block.timestamp) * 1000);
           setLastRebalanceTime(rebalanceTime);
           localStorage.setItem(`lastRebalance_${poolId}`, rebalanceTime.toISOString());
-          
+
           logger.debug('Success with Approach 1 - Last rebalance event found:', {
             blockNumber: latestEvent.blockNumber,
             timestamp: block.timestamp,
@@ -699,7 +699,7 @@ export default function InteractionClient() {
       // Approach 2: Use event topic hash to find rebalance events
       try {
         logger.debug('Approach 2: Searching by event topic hash...');
-        
+
         // Get the event topic hash (keccak256 of event signature)
         // const eventSignature = 'Rebalanced(address,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256)';
         const allLogs = await publicClient.getLogs({
@@ -709,7 +709,7 @@ export default function InteractionClient() {
         });
 
         logger.debug('Approach 2: Found total logs:', { logCount: allLogs.length });
-        
+
         // Look for rebalance events by checking if they have the expected number of topics
         const rebalanceEvents = allLogs.filter((log: { topics: string[] }) => {
           // Rebalanced event has 2 indexed parameters (caller, blockNumber) + event signature = 3 topics total
@@ -717,14 +717,14 @@ export default function InteractionClient() {
         });
 
         logger.debug('Approach 2: Potential rebalance events (by topic count):', { eventCount: rebalanceEvents.length });
-        
+
         if (rebalanceEvents.length > 0) {
           const latestEvent = rebalanceEvents[rebalanceEvents.length - 1];
           const block = await publicClient.getBlock({ blockNumber: latestEvent.blockNumber });
           const rebalanceTime = new Date(Number(block.timestamp) * 1000);
           setLastRebalanceTime(rebalanceTime);
           localStorage.setItem(`lastRebalance_${poolId}`, rebalanceTime.toISOString());
-          
+
           logger.debug('Success with Approach 2 - Found rebalance event:', {
             blockNumber: latestEvent.blockNumber,
             timestamp: block.timestamp,
@@ -742,7 +742,7 @@ export default function InteractionClient() {
         logger.debug('Approach 3: Checking recent pool activity...');
         const latestBlock = await publicClient.getBlockNumber();
         const startBlock = safeBigIntSubtract(latestBlock, BigInt(10000)); // Check last 10000 blocks, but never go below 0
-        
+
         const recentLogs = await publicClient.getLogs({
           address: poolId as Address,
           fromBlock: startBlock,
@@ -750,7 +750,7 @@ export default function InteractionClient() {
         });
 
         logger.debug('Approach 3: Found recent logs in last 10000 blocks:', { logCount: recentLogs.length });
-        
+
         if (recentLogs.length > 0) {
           // Use the most recent activity as a potential rebalance indicator
           const latestActivity = recentLogs[recentLogs.length - 1];
@@ -758,7 +758,7 @@ export default function InteractionClient() {
           const rebalanceTime = new Date(Number(block.timestamp) * 1000);
           setLastRebalanceTime(rebalanceTime);
           localStorage.setItem(`lastRebalance_${poolId}`, rebalanceTime.toISOString());
-          
+
           logger.debug('Success with Approach 3 - Using latest pool activity:', {
             blockNumber: latestActivity.blockNumber,
             timestamp: block.timestamp,
@@ -776,7 +776,7 @@ export default function InteractionClient() {
       if (!storedTime) {
         setLastRebalanceTime(null);
       }
-      
+
     } catch (error) {
       logger.error('Error fetching rebalance events:', error instanceof Error ? error : undefined);
       // Don't set to null on error, keep existing value
@@ -789,16 +789,16 @@ export default function InteractionClient() {
   useEffect(() => {
     const fetchGasData = async () => {
       if (!walletClient) return;
-      
+
       try {
         // const publicClient = createPublicClient({
         //   chain: walletClient.chain,
         //   transport: http()
         // });
-        
+
         // const gasPrice = await publicClient.getGasPrice();
         // setGasPrice(gasPrice);
-        
+
         // Estimate gas for a typical buy transaction
         if (poolId) {
           try {
@@ -873,13 +873,13 @@ export default function InteractionClient() {
     try {
       setIsDistributeLoading(true);
       setDistributeError("");
-      
+
       // Store the rebalance time immediately when called
       const rebalanceCallTime = new Date();
       setLastRebalanceTime(rebalanceCallTime);
       localStorage.setItem(`lastRebalance_${poolId}`, rebalanceCallTime.toISOString());
       logger.debug('Stored rebalance time in localStorage:', { rebalanceTime: rebalanceCallTime.toLocaleString() });
-      
+
       const loadingToast = toast.loading("Rebalancing pool...");
       await writeContract({
         address: poolId,
@@ -928,43 +928,43 @@ export default function InteractionClient() {
 
   const poolData = useMemo(() => pool
     ? {
-        id: { id: pool.id?.id || "" },
-        name: pool.name || "Prediction Pool",
-        asset_address: pool.asset_address || "0x...",
-        oracle_address: pool.oracle_address || "0x...", // Use actual oracle address
-        current_price: pool.current_price || 0,
-        bull_reserve: pool.bull_reserve || BigInt(0),
-        bear_reserve: pool.bear_reserve || BigInt(0),
-        bull_token: pool.bull_token || { id: "0x...", fields: { symbol: "BULL", total_supply: BigInt(0), name: "Bull Token" } },
-        bear_token: pool.bear_token || { id: "0x...", fields: { symbol: "BEAR", total_supply: BigInt(0), name: "Bear Token" } },
-        vault_creator: pool.vault_creator || "",
-        creator_fee: pool.creator_fee || 0,
-        mint_fee: pool.mint_fee || 0,
-        burn_fee: pool.burn_fee || 0,
-        treasury_fee: pool.treasury_fee || 0,
-        bull_percentage: pool.bull_percentage || 50,
-        bear_percentage: pool.bear_percentage || 50,
-        chainId: pool.chainId || 1,
-      }
+      id: { id: pool.id?.id || "" },
+      name: pool.name || "Prediction Pool",
+      asset_address: pool.asset_address || "0x...",
+      oracle_address: pool.oracle_address || "0x...", // Use actual oracle address
+      current_price: pool.current_price || 0,
+      bull_reserve: pool.bull_reserve || BigInt(0),
+      bear_reserve: pool.bear_reserve || BigInt(0),
+      bull_token: pool.bull_token || { id: "0x...", fields: { symbol: "BULL", total_supply: BigInt(0), name: "Bull Token" } },
+      bear_token: pool.bear_token || { id: "0x...", fields: { symbol: "BEAR", total_supply: BigInt(0), name: "Bear Token" } },
+      vault_creator: pool.vault_creator || "",
+      creator_fee: pool.creator_fee || 0,
+      mint_fee: pool.mint_fee || 0,
+      burn_fee: pool.burn_fee || 0,
+      treasury_fee: pool.treasury_fee || 0,
+      bull_percentage: pool.bull_percentage || 50,
+      bear_percentage: pool.bear_percentage || 50,
+      chainId: pool.chainId || 1,
+    }
     : {
-        id: { id: "" },
-        name: "Loading...",
-        asset_address: "0x...",
-        oracle_address: "0x...",
-        current_price: 0,
-        bull_reserve: BigInt(0),
-        bear_reserve: BigInt(0),
-        bull_token: { id: "0x...", fields: { symbol: "BULL", total_supply: BigInt(0), name: "Bull Token" } },
-        bear_token: { id: "0x...", fields: { symbol: "BEAR", total_supply: BigInt(0), name: "Bear Token" } },
-        vault_creator: "",
-        creator_fee: 0,
-        mint_fee: 0,
-        burn_fee: 0,
-        treasury_fee: 0,
-        bull_percentage: 50,
-        bear_percentage: 50,
-        chainId: 1,
-      }, [pool]);
+      id: { id: "" },
+      name: "Loading...",
+      asset_address: "0x...",
+      oracle_address: "0x...",
+      current_price: 0,
+      bull_reserve: BigInt(0),
+      bear_reserve: BigInt(0),
+      bull_token: { id: "0x...", fields: { symbol: "BULL", total_supply: BigInt(0), name: "Bull Token" } },
+      bear_token: { id: "0x...", fields: { symbol: "BEAR", total_supply: BigInt(0), name: "Bear Token" } },
+      vault_creator: "",
+      creator_fee: 0,
+      mint_fee: 0,
+      burn_fee: 0,
+      treasury_fee: 0,
+      bull_percentage: 50,
+      bear_percentage: 50,
+      chainId: 1,
+    }, [pool]);
 
   const calculations = useMemo(() => {
     const bullReserveNum = Number(formatUnits(poolData.bull_reserve, 18));
@@ -1008,12 +1008,12 @@ export default function InteractionClient() {
 
   // Get the current chain ID from the pool data or use default
   const chainId = poolData.chainId || 1;
-  
+
   // Get the underlying price feed address (the actual Chainlink price feed)
   const underlyingPriceFeedAddress = underlyingPriceFeedData?.[0]?.result as Address;
   const oracleAddress = underlyingPriceFeedAddress || poolData.oracle_address || '';
   const priceFeedName = getPriceFeedName(oracleAddress, chainId);
-  
+
   // Create asset configuration based on the price feed
   const asset = {
     name: priceFeedName,
@@ -1045,25 +1045,25 @@ export default function InteractionClient() {
 
   // Handle rebalance transaction confirmation
   useEffect(() => {
-    logger.debug('Rebalance confirmation effect:', { 
-      isRebalanceConfirmed, 
-      isTransactionPending, 
-      rebalanceHash 
+    logger.debug('Rebalance confirmation effect:', {
+      isRebalanceConfirmed,
+      isTransactionPending,
+      rebalanceHash
     });
-    
+
     if (isRebalanceConfirmed && !isTransactionPending) {
       logger.debug('Rebalance confirmed! Setting current time as last rebalance time...');
       toast.success('Pool rebalanced successfully!');
       setIsDistributeLoading(false);
-      
+
       // Immediately set the current time as the last rebalance time
       const currentTime = new Date();
       setLastRebalanceTime(currentTime);
       localStorage.setItem(`lastRebalance_${poolId}`, currentTime.toISOString());
       logger.debug('Updated last rebalance time to current time:', { rebalanceTime: currentTime.toLocaleString() });
-      
+
       handlePoll();
-      
+
       // Also fetch from blockchain to verify (but don't override if it fails)
       setTimeout(() => {
         logger.debug('Fetching rebalance events from blockchain to verify...');
@@ -1103,365 +1103,362 @@ export default function InteractionClient() {
     );
   }
 
-    return (
+  return (
     <div className="min-h-screen bg-white dark:bg-black text-neutral-900 dark:text-white">
       <Navbar />
 
-        <div className="container mx-auto px-5 py-4">
-          {distributeError && (
-            <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border-2 border-red-200 dark:border-red-800 rounded-lg text-red-700 dark:text-red-300 font-medium">
-              {distributeError}
-        </div>
-          )}
-
-          <div className="border rounded-xl border-black dark:border-neutral-600 p-3 bg-white dark:bg-neutral-900 mb-6 shadow-sm">
-            <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
-              <div className="flex-2 p-1">
-                <div className="flex items-center space-x-3">
-                  <h1 className="text-xl md:text-3xl font-bold text-neutral-900 dark:text-white">
-                    {poolData.name}
-               </h1>
-                 <div className="flex items-center space-x-2">
-                    <div
-                      className={`w-2 h-2 rounded-full ${
-                        pollingEnabledState ? "bg-green-500" : "bg-red-500"
-                      } ${pollingEnabledState ? "animate-pulse" : ""}`}
-                    ></div>
-                    <span className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
-                      {pollingEnabledState ? "Live Updates" : "Updates Paused"}
-                   </span>
-                 </div>
-                 </div>
-                <p className="text-neutral-600 dark:text-neutral-400 text-sm mb-2">
-                  Prediction Pool
-                </p>
-
-                 <div className="flex items-center space-x-2">
-                  <span className="text-sm font-medium text-neutral-600 dark:text-neutral-400">
-                    Price: {priceFeedName || "N/A"}
-                   </span>
-                  <span className="text-sm font-medium text-neutral-600 dark:text-neutral-400">
-                    |
-                    </span>
-                  <span className="text-sm font-medium text-neutral-600 dark:text-neutral-400 flex items-center space-x-1">
-                    <span>Fees</span>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                          <Info className="w-4 h-4 text-neutral-400 dark:text-neutral-600 hover:text-neutral-600 dark:hover:text-neutral-400 cursor-pointer transition-colors" />
-                  </TooltipTrigger>
-                        <TooltipContent side="right" align="center">
-                          <div className="bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 px-3 py-2 rounded-xl shadow-lg text-sm space-y-1">
-                            <div className="flex justify-between">
-                              <span className="font-medium">Creator Fee:</span>
-                              <span>{poolData.creator_fee}%</span>
-                </div>
-                            <div className="flex justify-between">
-                              <span className="font-medium">Treasury Fee:</span>
-                              <span>{poolData.treasury_fee}%</span>
-              </div>
-                            <div className="flex justify-between">
-                              <span className="font-medium">Mint Fee:</span>
-                              <span>{poolData.mint_fee}%</span>
-                </div>
-                            <div className="flex justify-between">
-                              <span className="font-medium">Burn Fee:</span>
-                              <span>{poolData.burn_fee}%</span>
-                </div>
-                </div>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-                  </span>
-                </div>
-                <div className="flex items-center space-x-2 mt-2 text-xs text-neutral-600 dark:text-neutral-400">
-                  <span>
-                    Last rebalanced: {isFetchingRebalanceEvents ? 'Loading...' : (lastRebalanceTime ? lastRebalanceTime.toLocaleString() : 'Never')}
-                   </span>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                        <RefreshCw
-                          className={`w-3 h-3 cursor-pointer ${
-                            isTransactionPending || isFetchingRebalanceEvents ? "animate-spin" : ""
-                          }`}
-                          onClick={() => {
-                            handlePoll();
-                            fetchLastRebalanceEvent();
-                          }}
-                        />
-                  </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Refresh data and rebalance time</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-                </div>
-                </div>
-              <div className="lg:min-w-[300px] mt-1 mr-1">
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-3">
-                  <div className="bg-neutral-200 dark:bg-neutral-800 rounded-lg p-3 justify-center items-center flex flex-col">
-                    <div className="text-xs font-medium text-neutral-600 dark:text-neutral-400 mb-1">
-                      Total Value Locked
-                </div>
-                    <div className="text-sm md:text-lg font-bold transition-all duration-300">
-                      {formatValue(calculations.totalReserves)}
-              </div>
-                    <div className="w-full rounded-full h-2 my-2 flex overflow-hidden bg-neutral-200 dark:bg-neutral-700">
-                      <div
-                        className="h-2 transition-all duration-500 ease-in-out"
-                        style={{
-                          width: `${calculations.bullPercentage}%`,
-                          backgroundColor: theme === "dark" ? "#111" : "#333",
-                        }}
-                      ></div>
-                      <div
-                        className="h-2 transition-all duration-500 ease-in-out"
-                        style={{
-                          width: `${calculations.bearPercentage}%`,
-                          backgroundColor: theme === "dark" ? "gray-500" : "#fff",
-                          borderLeft: theme === "dark" ? "1px solid #888" : "1px solid #ddd",
-                        }}
-                      ></div>
+      <div className="container mx-auto px-5 py-4">
+        {distributeError && (
+          <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border-2 border-red-200 dark:border-red-800 rounded-lg text-red-700 dark:text-red-300 font-medium">
+            {distributeError}
           </div>
-                    <div className="flex justify-between w-full text-xs font-medium">
-                      <span className={`text-black transition-colors duration-300 ${changes.bull_reserve ? "font-bold" : ""}`}>
-                        {calculations.bullPercentage.toFixed(1)}% Bull
-                      </span>
-                      <span className={`text-gray-500 dark:text-white transition-colors duration-300 ${changes.bear_reserve ? "font-bold" : ""}`}>
-                        {calculations.bearPercentage.toFixed(1)}% Bear
+        )}
+
+        <div className="border rounded-xl border-black dark:border-neutral-600 p-3 bg-white dark:bg-neutral-900 mb-6 shadow-sm">
+          <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
+            <div className="flex-2 p-1">
+              <div className="flex items-center space-x-3">
+                <h1 className="text-xl md:text-3xl font-bold text-neutral-900 dark:text-white">
+                  {poolData.name}
+                </h1>
+                <div className="flex items-center space-x-2">
+                  <div
+                    className={`w-2 h-2 rounded-full ${pollingEnabledState ? "bg-green-500" : "bg-red-500"
+                      } ${pollingEnabledState ? "animate-pulse" : ""}`}
+                  ></div>
+                  <span className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
+                    {pollingEnabledState ? "Live Updates" : "Updates Paused"}
                   </span>
-        </div>
+                </div>
               </div>
-                  </div>
-                      </div>
-                        </div>
-                        </div>
-                        
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-16 mt-3">
-            <VaultSection
-              isBull={true}
-              poolData={poolData}
-              userTokens={userBalances.bull_tokens}
-              price={calculations.bullPrice}
-              value={calculations.userBullValue}
-              symbol={poolData.bull_token.fields.symbol}
-              connected={isConnected}
-              handlePoll={handlePoll}
-              reserve={calculations.bullReserveNum}
-              supply={calculations.bullSupplyNum}
-              tokenAddress={poolData.bull_token.id}
-            />
+              <p className="text-neutral-600 dark:text-neutral-400 text-sm mb-2">
+                Prediction Pool
+              </p>
 
-            <div className="lg:col-span-2">
-              <div className="border rounded-xl border-black dark:border-neutral-600 bg-white dark:bg-neutral-900 shadow-sm">
-                <div className="p-6">
-                  <TradingViewWidget
-                    assetId={asset.coinId}
-                    theme={theme === "dark" ? "dark" : "light"}
-                    heightPx={453}
-                    showHeader={true}
-                  />
-
-                  <div className="mt-6 p-4 md:p-6 border rounded-xl border-black dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800">
-                    <h4 className="font-bold mb-3 text-sm md:text-lg text-neutral-900 dark:text-white">
-                      Rebalance Pool
-                    </h4>
-                    <p className="text-xs md:text-sm text-neutral-600 dark:text-neutral-400 mb-4 md:mb-6 leading-relaxed">
-                      Fetch the current oracle price and move funds from the losing vault to the winning vault.
-                    </p>
-                    
-                    {/* Token Information Section */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 mb-4 md:mb-6">
-                      {/* Bull Token */}
-                      <div className="space-y-2">
-                        <h5 className="font-bold text-sm md:text-base text-green-600 dark:text-green-400">Bull Token (BULL)</h5>
-                        <div className="text-xs md:text-sm">
+              <div className="flex items-center space-x-2">
+                <span className="text-sm font-medium text-neutral-600 dark:text-neutral-400">
+                  Price: {priceFeedName || "N/A"}
+                </span>
+                <span className="text-sm font-medium text-neutral-600 dark:text-neutral-400">
+                  |
+                </span>
+                <span className="text-sm font-medium text-neutral-600 dark:text-neutral-400 flex items-center space-x-1">
+                  <span>Fees</span>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Info className="w-4 h-4 text-neutral-400 dark:text-neutral-600 hover:text-neutral-600 dark:hover:text-neutral-400 cursor-pointer transition-colors" />
+                      </TooltipTrigger>
+                      <TooltipContent side="right" align="center">
+                        <div className="bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 px-3 py-2 rounded-xl shadow-lg text-sm space-y-1">
                           <div className="flex justify-between">
-                            <span className="text-neutral-600 dark:text-neutral-400">Current price:</span>
-                            <span className="font-medium text-right">{calculations.bullPrice.toFixed(4)} WETH</span>
+                            <span className="font-medium">Creator Fee:</span>
+                            <span>{poolData.creator_fee}%</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-neutral-600 dark:text-neutral-400">Underlying asset:</span>
-                            <span className="font-medium">BULL</span>
+                            <span className="font-medium">Treasury Fee:</span>
+                            <span>{poolData.treasury_fee}%</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="font-medium">Mint Fee:</span>
+                            <span>{poolData.mint_fee}%</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="font-medium">Burn Fee:</span>
+                            <span>{poolData.burn_fee}%</span>
+                          </div>
+                        </div>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </span>
+              </div>
+              <div className="flex items-center space-x-2 mt-2 text-xs text-neutral-600 dark:text-neutral-400">
+                <span>
+                  Last rebalanced: {isFetchingRebalanceEvents ? 'Loading...' : (lastRebalanceTime ? lastRebalanceTime.toLocaleString() : 'Never')}
+                </span>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <RefreshCw
+                        className={`w-3 h-3 cursor-pointer ${isTransactionPending || isFetchingRebalanceEvents ? "animate-spin" : ""
+                          }`}
+                        onClick={() => {
+                          handlePoll();
+                          fetchLastRebalanceEvent();
+                        }}
+                      />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Refresh data and rebalance time</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+            </div>
+            <div className="lg:min-w-[300px] mt-1 mr-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-3">
+                <div className="bg-neutral-200 dark:bg-neutral-800 rounded-lg p-3 justify-center items-center flex flex-col">
+                  <div className="text-xs font-medium text-neutral-600 dark:text-neutral-400 mb-1">
+                    Total Value Locked
+                  </div>
+                  <div className="text-sm md:text-lg font-bold transition-all duration-300">
+                    {formatValue(calculations.totalReserves)}
+                  </div>
+                  <div className="w-full rounded-full h-2 my-2 flex overflow-hidden bg-neutral-200 dark:bg-neutral-700">
+                    <div
+                      className="h-2 transition-all duration-500 ease-in-out"
+                      style={{
+                        width: `${calculations.bullPercentage}%`,
+                        backgroundColor: theme === "dark" ? "#111" : "#333",
+                      }}
+                    ></div>
+                    <div
+                      className="h-2 transition-all duration-500 ease-in-out"
+                      style={{
+                        width: `${calculations.bearPercentage}%`,
+                        backgroundColor: theme === "dark" ? "gray-500" : "#fff",
+                        borderLeft: theme === "dark" ? "1px solid #888" : "1px solid #ddd",
+                      }}
+                    ></div>
+                  </div>
+                  <div className="flex justify-between w-full text-xs font-medium">
+                    <span className={`text-black transition-colors duration-300 ${changes.bull_reserve ? "font-bold" : ""}`}>
+                      {calculations.bullPercentage.toFixed(1)}% Bull
+                    </span>
+                    <span className={`text-gray-500 dark:text-white transition-colors duration-300 ${changes.bear_reserve ? "font-bold" : ""}`}>
+                      {calculations.bearPercentage.toFixed(1)}% Bear
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-16 mt-3">
+          <VaultSection
+            isBull={true}
+            poolData={poolData}
+            userTokens={userBalances.bull_tokens}
+            price={calculations.bullPrice}
+            value={calculations.userBullValue}
+            symbol={poolData.bull_token.fields.symbol}
+            connected={isConnected}
+            handlePoll={handlePoll}
+            reserve={calculations.bullReserveNum}
+            supply={calculations.bullSupplyNum}
+            tokenAddress={poolData.bull_token.id}
+          />
+
+          <div className="lg:col-span-2">
+            <div className="border rounded-xl border-black dark:border-neutral-600 bg-white dark:bg-neutral-900 shadow-sm">
+              <div className="p-6">
+                <TradingViewWidget
+                  assetId={asset.coinId}
+                  theme={theme === "dark" ? "dark" : "light"}
+                  heightPx={453}
+                  showHeader={true}
+                />
+
+                <div className="mt-6 p-4 md:p-6 border rounded-xl border-black dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800">
+                  <h4 className="font-bold mb-3 text-sm md:text-lg text-neutral-900 dark:text-white">
+                    Rebalance Pool
+                  </h4>
+                  <p className="text-xs md:text-sm text-neutral-600 dark:text-neutral-400 mb-4 md:mb-6 leading-relaxed">
+                    Fetch the current oracle price and move funds from the losing vault to the winning vault.
+                  </p>
+
+                  {/* Token Information Section */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 mb-4 md:mb-6">
+                    {/* Bull Token */}
+                    <div className="space-y-2">
+                      <h5 className="font-bold text-sm md:text-base text-green-600 dark:text-green-400">Bull Token (BULL)</h5>
+                      <div className="text-xs md:text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-neutral-600 dark:text-neutral-400">Current price:</span>
+                          <span className="font-medium text-right">{calculations.bullPrice.toFixed(4)} WETH</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-neutral-600 dark:text-neutral-400">Underlying asset:</span>
+                          <span className="font-medium">BULL</span>
                         </div>
                       </div>
                     </div>
 
-                      {/* Bear Token */}
-                      <div className="space-y-2">
-                        <h5 className="font-bold text-sm md:text-base text-red-600 dark:text-red-400">Bear Token (BEAR)</h5>
-                        <div className="text-xs md:text-sm">
-                          <div className="flex justify-between">
-                            <span className="text-neutral-600 dark:text-neutral-400">Current price:</span>
-                            <span className="font-medium text-right">{calculations.bearPrice.toFixed(4)} WETH</span>
+                    {/* Bear Token */}
+                    <div className="space-y-2">
+                      <h5 className="font-bold text-sm md:text-base text-red-600 dark:text-red-400">Bear Token (BEAR)</h5>
+                      <div className="text-xs md:text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-neutral-600 dark:text-neutral-400">Current price:</span>
+                          <span className="font-medium text-right">{calculations.bearPrice.toFixed(4)} WETH</span>
                         </div>
-                          <div className="flex justify-between">
-                            <span className="text-neutral-600 dark:text-neutral-400">Underlying asset:</span>
-                            <span className="font-medium">BEAR</span>
+                        <div className="flex justify-between">
+                          <span className="text-neutral-600 dark:text-neutral-400">Underlying asset:</span>
+                          <span className="font-medium">BEAR</span>
                         </div>
                       </div>
                     </div>
                   </div>
 
-                    {/* Oracle Price Information */}
-                    <div className="bg-white dark:bg-neutral-900 p-3 md:p-4 rounded-lg border border-black dark:border-neutral-600 mb-4 md:mb-6">
-                      <div className="flex justify-between items-center mb-3">
-                        <h5 className="font-bold text-xs md:text-sm text-neutral-900 dark:text-white">Oracle Price Information</h5>
-                        <RefreshCw 
-                          className="w-4 h-4 text-neutral-600 dark:text-neutral-400 cursor-pointer hover:text-neutral-900 dark:hover:text-white" 
-                          onClick={handlePoll}
-                        />
-                      </div>
+                  {/* Oracle Price Information */}
+                  <div className="bg-white dark:bg-neutral-900 p-3 md:p-4 rounded-lg border border-black dark:border-neutral-600 mb-4 md:mb-6">
+                    <div className="flex justify-between items-center mb-3">
+                      <h5 className="font-bold text-xs md:text-sm text-neutral-900 dark:text-white">Oracle Price Information</h5>
+                      <RefreshCw
+                        className="w-4 h-4 text-neutral-600 dark:text-neutral-400 cursor-pointer hover:text-neutral-900 dark:hover:text-white"
+                        onClick={handlePoll}
+                      />
+                    </div>
                     <div className="space-y-2 text-xs md:text-sm">
                       <div className="flex justify-between items-center">
-                          <span className="text-neutral-600 dark:text-neutral-400">Current price:</span>
-                          <span className="font-medium text-right">
-                            {oraclePriceData?.[0]?.result 
-                              ? (Number(oraclePriceData[0].result) / 1e18).toFixed(4) 
-                              : 'Loading...'
-                            }
+                        <span className="text-neutral-600 dark:text-neutral-400">Current price:</span>
+                        <span className="font-medium text-right">
+                          {oraclePriceData?.[0]?.result
+                            ? (Number(oraclePriceData[0].result) / 1e18).toFixed(4)
+                            : 'Loading...'
+                          }
                         </span>
                       </div>
                       <div className="flex justify-between items-center">
-                          <span className="text-neutral-600 dark:text-neutral-400">Previous price:</span>
-                          <span className="font-medium text-right">
-                            {oraclePriceData?.[1]?.result 
-                              ? (Number(oraclePriceData[1].result) / 1e18).toFixed(4) 
-                              : 'Loading...'
-                            }
+                        <span className="text-neutral-600 dark:text-neutral-400">Previous price:</span>
+                        <span className="font-medium text-right">
+                          {oraclePriceData?.[1]?.result
+                            ? (Number(oraclePriceData[1].result) / 1e18).toFixed(4)
+                            : 'Loading...'
+                          }
                         </span>
                       </div>
                       <div className="flex justify-between items-center">
-                          <span className="text-neutral-600 dark:text-neutral-400">Price change:</span>
-                          <span className={`font-medium text-right flex items-center gap-1 ${
-                            oraclePriceData?.[0]?.result && oraclePriceData?.[1]?.result
-                              ? (Number(oraclePriceData[0].result) > Number(oraclePriceData[1].result) 
-                                  ? 'text-green-600 dark:text-green-400' 
-                                  : 'text-red-600 dark:text-red-400')
-                              : 'text-neutral-600 dark:text-neutral-400'
+                        <span className="text-neutral-600 dark:text-neutral-400">Price change:</span>
+                        <span className={`font-medium text-right flex items-center gap-1 ${oraclePriceData?.[0]?.result && oraclePriceData?.[1]?.result
+                          ? (Number(oraclePriceData[0].result) > Number(oraclePriceData[1].result)
+                            ? 'text-green-600 dark:text-green-400'
+                            : 'text-red-600 dark:text-red-400')
+                          : 'text-neutral-600 dark:text-neutral-400'
                           }`}>
-                            {oraclePriceData?.[0]?.result && oraclePriceData?.[1]?.result ? (
-                              <>
-                                <span>{Number(oraclePriceData[0].result) > Number(oraclePriceData[1].result) ? '▲' : '▼'}</span>
-                                {(((Number(oraclePriceData[0].result) - Number(oraclePriceData[1].result)) / Number(oraclePriceData[1].result)) * 100).toFixed(2)}%
-                              </>
-                            ) : (
-                              'Loading...'
+                          {oraclePriceData?.[0]?.result && oraclePriceData?.[1]?.result ? (
+                            <>
+                              <span>{Number(oraclePriceData[0].result) > Number(oraclePriceData[1].result) ? '▲' : '▼'}</span>
+                              {(((Number(oraclePriceData[0].result) - Number(oraclePriceData[1].result)) / Number(oraclePriceData[1].result)) * 100).toFixed(2)}%
+                            </>
+                          ) : (
+                            'Loading...'
+                          )}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Rebalance Button */}
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="w-full">
+                          <Button
+                            className="w-full bg-black hover:bg-gray-800 dark:bg-white dark:hover:bg-gray-200 text-white dark:text-black font-semibold py-2 md:py-3 text-sm md:text-base transition-all duration-200 shadow-lg hover:shadow-xl"
+                            onClick={handleDistribute}
+                            disabled={
+                              address !== pool?.vault_creator && address !== undefined ||
+                              isDistributeLoading
+                            }
+                          >
+                            {isDistributeLoading && (
+                              <RefreshCw className="w-4 h-4 animate-spin mr-2" />
                             )}
-                    </span>
-                </div>
-                </div>
-                </div>
-            
-                    {/* Rebalance Button */}
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <div className="w-full">
-                <Button
-                              className="w-full bg-black hover:bg-gray-800 dark:bg-white dark:hover:bg-gray-200 text-white dark:text-black font-semibold py-2 md:py-3 text-sm md:text-base transition-all duration-200 shadow-lg hover:shadow-xl"
-                              onClick={handleDistribute}
-                              disabled={
-                                address !== pool?.vault_creator && address !== undefined ||
-                                isDistributeLoading
-                              }
-                            >
-                              {isDistributeLoading && (
-                                <RefreshCw className="w-4 h-4 animate-spin mr-2" />
-                              )}
-                              Rebalance Pool
-                </Button>
-                </div>
-                        </TooltipTrigger>
-                        {address !== pool?.vault_creator && (
-                          <TooltipContent>
-                            <p className="bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 p-2 rounded-md text-xs md:text-sm">
-                              This action can only be performed by the pool creator
-                            </p>
-                          </TooltipContent>
-                        )}
-                      </Tooltip>
-                    </TooltipProvider>
+                            Rebalance Pool
+                          </Button>
+                        </div>
+                      </TooltipTrigger>
+                      {address !== pool?.vault_creator && (
+                        <TooltipContent>
+                          <p className="bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 p-2 rounded-md text-xs md:text-sm">
+                            This action can only be performed by the pool creator
+                          </p>
+                        </TooltipContent>
+                      )}
+                    </Tooltip>
+                  </TooltipProvider>
                 </div>
 
-                </div>
-                </div>
+              </div>
             </div>
-            
-            <VaultSection
-              isBull={false}
-              poolData={poolData}
-              userTokens={userBalances.bear_tokens}
-              price={calculations.bearPrice}
-              value={calculations.userBearValue}
-              symbol={poolData.bear_token.fields.symbol}
-              connected={isConnected}
-              handlePoll={handlePoll}
-              reserve={calculations.bearReserveNum}
-              supply={calculations.bearSupplyNum}
-              tokenAddress={poolData.bear_token.id}
-            />
+          </div>
+
+          <VaultSection
+            isBull={false}
+            poolData={poolData}
+            userTokens={userBalances.bear_tokens}
+            price={calculations.bearPrice}
+            value={calculations.userBearValue}
+            symbol={poolData.bear_token.fields.symbol}
+            connected={isConnected}
+            handlePoll={handlePoll}
+            reserve={calculations.bearReserveNum}
+            supply={calculations.bearSupplyNum}
+            tokenAddress={poolData.bear_token.id}
+          />
         </div>
 
-          {/* Creator Tools Section - Full Width at Bottom */}
-          {address === pool?.vault_creator && (
-            <div className="w-full mt-8 p-6 border rounded-xl border-black dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800">
-              <h4 className="font-bold mb-4 text-lg md:text-xl text-neutral-900 dark:text-white flex items-center gap-2">
-                <Wrench className="w-6 h-6" />
+        {/* Creator Tools Section - Full Width at Bottom */}
+        {address === pool?.vault_creator && (
+          <div className="w-full mt-8 p-6 border rounded-xl border-black dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800">
+            <h4 className="font-bold mb-4 text-lg md:text-xl text-neutral-900 dark:text-white flex items-center gap-2">
+              <Wrench className="w-6 h-6" />
               Creator Tools
-              </h4>
-              <div className="space-y-6">
-                <div>
-                  <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2">
-                    Update Oracle Address
-                  </label>
-                  <div className="flex gap-2 max-w-md">
+            </h4>
+            <div className="space-y-6">
+              <div>
+                <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2">
+                  Update Oracle Address
+                </label>
+                <div className="flex gap-2 max-w-md">
                   <Input
-                      placeholder="New oracle address"
-                      className="flex-1"
+                    placeholder="New oracle address"
+                    className="flex-1"
                     value={newOracleAddress}
                     onChange={(e) => setNewOracleAddress(e.target.value)}
                   />
-                <Button
-                  onClick={handleUpdateOracle}
-                      disabled={!newOracleAddress || isDistributeLoading}
-                      className="bg-black dark:bg-white text-white dark:text-black"
-                >
-                      Update
-                </Button>
+                  <Button
+                    onClick={handleUpdateOracle}
+                    disabled={!newOracleAddress || isDistributeLoading}
+                    className="bg-black dark:bg-white text-white dark:text-black"
+                  >
+                    Update
+                  </Button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
+                <div className="bg-white dark:bg-neutral-900 p-4 rounded-lg border border-black dark:border-neutral-600">
+                  <div className="font-medium text-neutral-600 dark:text-neutral-400 mb-1">Mint Fee</div>
+                  <div className="font-bold text-sm md:text-lg text-neutral-900 dark:text-white">{poolData.mint_fee}%</div>
+                  <div className="text-xs text-neutral-500 dark:text-neutral-400">Charged when buying tokens</div>
+                </div>
+                <div className="bg-white dark:bg-neutral-900 p-4 rounded-lg border border-black dark:border-neutral-600">
+                  <div className="font-medium text-neutral-600 dark:text-neutral-400 mb-1">Burn Fee</div>
+                  <div className="font-bold text-sm md:text-lg text-neutral-900 dark:text-white">{poolData.burn_fee}%</div>
+                  <div className="text-xs text-neutral-500 dark:text-neutral-400">Charged when selling tokens</div>
+                </div>
+                <div className="bg-white dark:bg-neutral-900 p-4 rounded-lg border border-black dark:border-neutral-600">
+                  <div className="font-medium text-neutral-600 dark:text-neutral-400 mb-1">Creator Fee</div>
+                  <div className="font-bold text-sm md:text-lg text-neutral-900 dark:text-white">{poolData.creator_fee}%</div>
+                  <div className="text-xs text-neutral-500 dark:text-neutral-400">Paid to pool creator</div>
+                </div>
+                <div className="bg-white dark:bg-neutral-900 p-4 rounded-lg border border-black dark:border-neutral-600">
+                  <div className="font-medium text-neutral-600 dark:text-neutral-400 mb-1">Treasury Fee</div>
+                  <div className="font-bold text-sm md:text-lg text-neutral-900 dark:text-white">{poolData.treasury_fee}%</div>
+                  <div className="text-xs text-neutral-500 dark:text-neutral-400">Paid to treasury</div>
+                </div>
+              </div>
+              <div className="text-sm text-neutral-500 dark:text-neutral-400 bg-neutral-100 dark:bg-neutral-800 p-4 rounded-lg">
+                <strong>Note:</strong> Fees are set during pool creation and cannot be changed. They are immutable for the lifetime of the pool.
               </div>
             </div>
-                
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
-                  <div className="bg-white dark:bg-neutral-900 p-4 rounded-lg border border-black dark:border-neutral-600">
-                    <div className="font-medium text-neutral-600 dark:text-neutral-400 mb-1">Mint Fee</div>
-                    <div className="font-bold text-sm md:text-lg text-neutral-900 dark:text-white">{poolData.mint_fee}%</div>
-                    <div className="text-xs text-neutral-500 dark:text-neutral-400">Charged when buying tokens</div>
           </div>
-                  <div className="bg-white dark:bg-neutral-900 p-4 rounded-lg border border-black dark:border-neutral-600">
-                    <div className="font-medium text-neutral-600 dark:text-neutral-400 mb-1">Burn Fee</div>
-                    <div className="font-bold text-sm md:text-lg text-neutral-900 dark:text-white">{poolData.burn_fee}%</div>
-                    <div className="text-xs text-neutral-500 dark:text-neutral-400">Charged when selling tokens</div>
+        )}
       </div>
-                  <div className="bg-white dark:bg-neutral-900 p-4 rounded-lg border border-black dark:border-neutral-600">
-                    <div className="font-medium text-neutral-600 dark:text-neutral-400 mb-1">Creator Fee</div>
-                    <div className="font-bold text-sm md:text-lg text-neutral-900 dark:text-white">{poolData.creator_fee}%</div>
-                    <div className="text-xs text-neutral-500 dark:text-neutral-400">Paid to pool creator</div>
-    </div>
-                  <div className="bg-white dark:bg-neutral-900 p-4 rounded-lg border border-black dark:border-neutral-600">
-                    <div className="font-medium text-neutral-600 dark:text-neutral-400 mb-1">Treasury Fee</div>
-                    <div className="font-bold text-sm md:text-lg text-neutral-900 dark:text-white">{poolData.treasury_fee}%</div>
-                    <div className="text-xs text-neutral-500 dark:text-neutral-400">Paid to treasury</div>
-      </div>
-    </div>
-                <div className="text-sm text-neutral-500 dark:text-neutral-400 bg-neutral-100 dark:bg-neutral-800 p-4 rounded-lg">
-                  <strong>Note:</strong> Fees are set during pool creation and cannot be changed. They are immutable for the lifetime of the pool.
-    </div>
-    </div>
-      </div>
-          )}
-       </div>
     </div>
   );
 }

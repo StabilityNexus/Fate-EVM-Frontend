@@ -84,6 +84,7 @@ body {
 .mode-toggle-button-light {
   background-color: white;
   border: 2px solid black;
+  color: black;
 }
 
 .mode-toggle-icon {
@@ -166,17 +167,31 @@ body {
 }
 
 @keyframes l7 {
-  0% { transform: translate(0, 0); }
-  25% { transform: translate(100%, 0); }
-  50% { transform: translate(100%, 100%); }
-  75% { transform: translate(0, 100%); }
-  100% { transform: translate(0, 0); }
+  0% {
+    transform: translate(0, 0);
+  }
+
+  25% {
+    transform: translate(100%, 0);
+  }
+
+  50% {
+    transform: translate(100%, 100%);
+  }
+
+  75% {
+    transform: translate(0, 100%);
+  }
+
+  100% {
+    transform: translate(0, 0);
+  }
 }
 
 /* Custom wallet button styling - More specific selectors */
 [data-testid="rk-connect-button"],
 [data-testid="rk-connect-button"] button,
-[data-testid="rk-connect-button"] > div,
+[data-testid="rk-connect-button"]>div,
 .rainbow-kit-connect-button,
 .rainbow-kit-connect-button button {
   background-color: black !important;
@@ -190,7 +205,7 @@ body {
 
 [data-testid="rk-connect-button"]:hover,
 [data-testid="rk-connect-button"] button:hover,
-[data-testid="rk-connect-button"] > div:hover,
+[data-testid="rk-connect-button"]>div:hover,
 .rainbow-kit-connect-button:hover,
 .rainbow-kit-connect-button button:hover {
   background-color: #333333 !important;
@@ -201,7 +216,7 @@ body {
 /* Dark mode wallet button */
 .dark [data-testid="rk-connect-button"],
 .dark [data-testid="rk-connect-button"] button,
-.dark [data-testid="rk-connect-button"] > div,
+.dark [data-testid="rk-connect-button"]>div,
 .dark .rainbow-kit-connect-button,
 .dark .rainbow-kit-connect-button button {
   background-color: white !important;
@@ -211,7 +226,7 @@ body {
 
 .dark [data-testid="rk-connect-button"]:hover,
 .dark [data-testid="rk-connect-button"] button:hover,
-.dark [data-testid="rk-connect-button"] > div:hover,
+.dark [data-testid="rk-connect-button"]>div:hover,
 .dark .rainbow-kit-connect-button:hover,
 .dark .rainbow-kit-connect-button button:hover {
   background-color: #f0f0f0 !important;
