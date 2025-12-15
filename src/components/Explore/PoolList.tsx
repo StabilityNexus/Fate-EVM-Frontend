@@ -73,7 +73,7 @@ const PoolList: React.FC<PoolListProps> = ({
         </div>
       );
     }
-    
+
     return (
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {Array.from({ length: 6 }).map((_, i) => (
@@ -103,12 +103,12 @@ const PoolList: React.FC<PoolListProps> = ({
           {searchQuery
             ? "Try adjusting your search terms or clear the search to see all pools."
             : !isConnected
-            ? "Please connect your wallet to view pools on your connected chain."
-            : !isConnectedChainSupported
-            ? "Please switch to a supported chain to view pools."
-            : currentChainId
-            ? `No prediction pools have been created yet on ${getChainConfig(currentChainId)?.name || `Chain ${currentChainId}`}.`
-            : "No prediction pools have been created yet on the connected chain."}
+              ? "Please connect your wallet to view pools on your connected chain."
+              : !isConnectedChainSupported
+                ? "Please switch to a supported chain to view pools."
+                : currentChainId
+                  ? `No prediction pools have been created yet on ${getChainConfig(currentChainId)?.name || `Chain ${currentChainId}`}.`
+                  : "No prediction pools have been created yet on the connected chain."}
         </p>
         {searchQuery && (
           <button
@@ -145,14 +145,14 @@ const PoolList: React.FC<PoolListProps> = ({
   return (
     <div className="space-y-12">
       {sortedChainIds.map((chainId) => (
-        
+
         <div key={chainId}>
           <h2 className="text-2xl font-bold text-black dark:text-white mb-6">
             Pools on {getChainConfig(chainId)?.name || `Chain ${chainId}`}
           </h2>
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {groupedPools[chainId].map((pool) => (
-              <div key={pool.id} className="relative">
+              <div key={pool.id} className="relative h-full">
                 <PredictionCard
                   name={pool.name}
                   baseToken={pool.baseToken}
