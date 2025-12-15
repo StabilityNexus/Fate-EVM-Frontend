@@ -54,7 +54,7 @@ export function PredictionCard({
     <div className="group relative w-full h-full flex flex-col justify-between max-w-sm bg-white dark:bg-zinc-950 rounded-3xl border border-gray-100 dark:border-zinc-800 shadow-xl hover:shadow-2xl hover:shadow-emerald-500/10 dark:hover:shadow-emerald-500/5 transition-all duration-300 hover:-translate-y-1 overflow-hidden">
 
       {/* Glossy gradient overlay */}
-      <div className="absolute inset-0 bg-gradient-to-br from-transparent via-white/5 to-white/0 pointer-events-none z-10 opactiy-0 group-hover:opacity-100 transition-opacity duration-500" />
+      <div className="absolute inset-0 bg-gradient-to-br from-transparent via-white/5 to-white/0 pointer-events-none z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-300 will-change-opacity" />
 
       {/* Header Section */}
       <div className="relative px-6 pt-6 pb-2 z-20">
@@ -91,8 +91,8 @@ export function PredictionCard({
         <div className="grid grid-cols-2 gap-3">
           {/* Bull Side */}
           <div className={`relative p-3 rounded-2xl border transition-all duration-300 ${isBullDominant
-              ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-500/30 shadow-sm'
-              : 'bg-gray-50 dark:bg-zinc-900/50 border-transparent opacity-80'
+            ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-500/30 shadow-sm'
+            : 'bg-gray-50 dark:bg-zinc-900/50 border-transparent opacity-80'
             }`}>
             <div className="flex items-center gap-2 mb-2">
               <div className={`p-1.5 rounded-lg ${isBullDominant ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400' : 'bg-gray-200 dark:bg-zinc-800 text-gray-500'}`}>
@@ -113,8 +113,8 @@ export function PredictionCard({
 
           {/* Bear Side */}
           <div className={`relative p-3 rounded-2xl border transition-all duration-300 ${isBearDominant
-              ? 'bg-rose-50/50 dark:bg-rose-950/20 border-rose-200 dark:border-rose-500/30 shadow-sm'
-              : 'bg-gray-50 dark:bg-zinc-900/50 border-transparent opacity-80'
+            ? 'bg-rose-50/50 dark:bg-rose-950/20 border-rose-200 dark:border-rose-500/30 shadow-sm'
+            : 'bg-gray-50 dark:bg-zinc-900/50 border-transparent opacity-80'
             }`}>
             <div className="flex items-center gap-2 mb-2">
               <div className={`p-1.5 rounded-lg ${isBearDominant ? 'bg-rose-100 dark:bg-rose-500/20 text-rose-600 dark:text-rose-400' : 'bg-gray-200 dark:bg-zinc-800 text-gray-500'}`}>

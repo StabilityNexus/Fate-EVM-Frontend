@@ -1,9 +1,5 @@
 import {
-  mainnet,
-  polygon,
   sepolia,
-  base,
-  bsc,
 } from "wagmi/chains";
 import { ethereumClassic } from "./chains/EthereumClassic";
 import { getDefaultConfig } from "@rainbow-me/rainbowkit";
