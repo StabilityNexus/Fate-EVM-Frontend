@@ -51,24 +51,28 @@ const PoolList: React.FC<PoolListProps> = ({
   if (loading) {
     if (viewMode === 'table') {
       return (
-        <div className="overflow-x-auto">
-          <div className="w-full border-collapse">
-            <div className="border-b border-gray-200 dark:border-gray-700">
-              <div className="grid grid-cols-5 gap-4 py-3 px-4">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <div key={i} className="h-4 bg-gray-200 dark:bg-gray-700 animate-pulse rounded" />
-                ))}
-              </div>
-            </div>
-            {Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} className="border-b border-gray-100 dark:border-gray-800">
-                <div className="grid grid-cols-5 gap-4 py-4 px-4">
-                  {Array.from({ length: 5 }).map((_, j) => (
-                    <div key={j} className="h-4 bg-gray-200 dark:bg-gray-700 animate-pulse rounded" />
+        <div className="overflow-hidden rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm">
+          <div className="overflow-x-auto">
+            <div className="w-full">
+              <div className="border-b border-gray-200 bg-gray-50/50 dark:border-gray-800 dark:bg-white/5">
+                <div className="grid grid-cols-5 gap-4 px-6 py-4">
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <div key={i} className="h-3 w-2/3 bg-gray-200 dark:bg-gray-700 animate-pulse rounded" />
                   ))}
                 </div>
               </div>
-            ))}
+              <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="px-6 py-4">
+                    <div className="grid grid-cols-5 gap-4">
+                      {Array.from({ length: 5 }).map((_, j) => (
+                        <div key={j} className="h-4 bg-gray-200 dark:bg-gray-700 animate-pulse rounded" />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       );

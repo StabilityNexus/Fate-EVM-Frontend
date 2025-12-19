@@ -15,9 +15,16 @@ export const config = (() => {
     return memoizedConfig;
   }
 
+  if (!process.env.NEXT_PUBLIC_PROJECT_ID) {
+    console.warn(
+      '⚠️ Reown Project ID is missing. Please set NEXT_PUBLIC_PROJECT_ID in your .env file.\n' +
+      'Get one for free at https://cloud.reown.com'
+    );
+  }
+
   memoizedConfig = getDefaultConfig({
     appName: "Fate Protocol",
-    projectId: process.env.NEXT_PUBLIC_PROJECT_ID ?? "DEFAULT_PROJECT_ID",
+    projectId: process.env.NEXT_PUBLIC_PROJECT_ID || "DEFAULT_PROJECT_ID",
     chains: [
       ethereumClassic, // 61 - Ethereum Classic
       sepolia,    // 11155111 - Sepolia Testnet
@@ -26,7 +33,7 @@ export const config = (() => {
       [ethereumClassic.id]: http(),
       [sepolia.id]: http(),
     },
-    ssr: false, // Disable SSR to prevent wallet disconnection issues
+    ssr: true, // Enable SSR for proper hydration
     // Add connection persistence
     // enableAnalytics: false, // Disable analytics to prevent connection issues
   });
