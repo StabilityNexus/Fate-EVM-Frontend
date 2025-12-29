@@ -88,6 +88,49 @@ const safeNumber = (value: any, fallback = 0): number => {
   return isFinite(num) && !isNaN(num) ? num : fallback;
 };
 
+// Quick balance check to filter pools with positions
+const checkUserHasBalance = async (
+  bullTokenAddress: string,
+  bearTokenAddress: string,
+  userAddress: string,
+  chainId: number
+): Promise<{ hasBull: boolean; hasBear: boolean; hasAny: boolean }> => {
+  try {
+    const chainConfig = getChainConfig(chainId);
+    if (!chainConfig) {
+      return { hasBull: false, hasBear: false, hasAny: false };
+    }
+    const publicClient = createPublicClient({
+      chain: chainConfig.chain,
+      transport: http()
+    });
+    // Quick parallel balance checks (cheap RPC calls)
+    const [bullBalance, bearBalance] = await Promise.all([
+      publicClient.readContract({
+        address: bullTokenAddress as Address,
+        abi: ERC20ABI,
+        functionName: 'balanceOf',
+        args: [userAddress as Address]
+      }),
+      publicClient.readContract({
+        address: bearTokenAddress as Address,
+        abi: ERC20ABI,
+        functionName: 'balanceOf',
+        args: [userAddress as Address]
+      })
+    ]);
+    const hasBull = Number(formatUnits(bullBalance as bigint, 18)) > 0;
+    const hasBear = Number(formatUnits(bearBalance as bigint, 18)) > 0;
+    return {
+      hasBull,
+      hasBear,
+      hasAny: hasBull || hasBear
+    };
+  } catch (error) {
+    console.warn('Balance check failed:', error);
+    return { hasBull: false, hasBear: false, hasAny: false };
+  }
+};
 
 // Enhanced token metrics calculation with maximum accuracy using all available data
 const calculateTokenMetricsWithEvents = async (
@@ -1698,6 +1741,113 @@ const EnhancedPoolDataLoader = ({
   return null;
 };
 
+// Balance-filtered pool loader component
+const BalanceFilteredPoolLoader: React.FC<{
+  pools: string[];
+  userAddress?: string;
+  chainId: number;
+  onDataLoad: (data: PoolData) => void;
+}> = ({ pools, userAddress, chainId, onDataLoad }) => {
+  const [filteredPools, setFilteredPools] = useState<string[]>([]);
+  const [isFiltering, setIsFiltering] = useState(true);
+  useEffect(() => {
+    const filterPools = async () => {
+      if (!userAddress || pools.length === 0) {
+        setFilteredPools([]);
+        setIsFiltering(false);
+        return;
+      }
+      console.log(`🔍 Pre-checking balances for ${pools.length} pools...`);
+      setIsFiltering(true);
+      try {
+        // Get pool details to extract token addresses
+        const poolDetailsPromises = pools.map(async (poolAddress) => {
+          try {
+            const publicClient = createPublicClient({
+              chain: getChainConfig(chainId)!.chain,
+              transport: http()
+            });
+            // Get bull and bear token addresses
+            const [bullToken, bearToken] = await Promise.all([
+              publicClient.readContract({
+                address: poolAddress as Address,
+                abi: PredictionPoolABI,
+                functionName: 'bullToken'
+              }),
+              publicClient.readContract({
+                address: poolAddress as Address,
+                abi: PredictionPoolABI,
+                functionName: 'bearToken'
+              })
+            ]);
+            return {
+              poolAddress,
+              bullToken: bullToken as string,
+              bearToken: bearToken as string
+            };
+          } catch (error) {
+            console.warn(`Failed to get token addresses for pool ${poolAddress}:`, error);
+            return null;
+          }
+        });
+        const poolDetails = (await Promise.all(poolDetailsPromises)).filter(Boolean);
+        // Quick balance checks
+        const balanceChecks = await Promise.all(
+          poolDetails.map(async (pool) => {
+            if (!pool) return null;
+            const balance = await checkUserHasBalance(
+              pool.bullToken,
+              pool.bearToken,
+              userAddress,
+              chainId
+            );
+            return {
+              poolAddress: pool.poolAddress,
+              hasBalance: balance.hasAny
+            };
+          })
+        );
+        // Filter to pools with balance
+        const poolsWithBalance = balanceChecks
+          .filter(check => check && check.hasBalance)
+          .map(check => check!.poolAddress);
+        console.log(`✅ Found ${poolsWithBalance.length} pools with balances out of ${pools.length} total`);
+        
+        setFilteredPools(poolsWithBalance);
+      } catch (error) {
+        console.error('Balance filtering failed:', error);
+        // Fallback: load all pools if filtering fails
+        setFilteredPools(pools);
+      } finally {
+        setIsFiltering(false);
+      }
+    };
+    filterPools();
+  }, [pools, userAddress, chainId]);
+  if (isFiltering) {
+    return (
+      <div className="text-center py-8">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-yellow-500 mx-auto mb-4"></div>
+        <p className="text-gray-600 dark:text-gray-400">Filtering pools...</p>
+      </div>
+    );
+  }
+  return (
+    <>
+      {filteredPools.map((pool, index) => (
+        <EnhancedPoolDataLoader
+          key={pool}
+          poolAddress={pool}
+          index={index}
+          userAddress={userAddress}
+          chainId={chainId}
+          onDataLoad={onDataLoad}
+        />
+      ))}
+    </>
+  );
+};
+
 // Main component
 export default function PortfolioPage() {
   const { address, isConnected, chainId } = useAccount();
@@ -2302,16 +2452,14 @@ export default function PortfolioPage() {
     <div className="min-h-screen bg-white dark:bg-black text-neutral-900 dark:text-white p-4 pt-28 min-[900px]:p-6 min-[900px]:pt-32">
       <div className="max-w-7xl mx-auto space-y-8">
         {/* Enhanced Pool Data Loaders - Only loads pools where user has positions */}
-        {availablePools.map((poolAddress, index) => (
-          <EnhancedPoolDataLoader
-            key={poolAddress}
-            poolAddress={poolAddress}
-            index={index}
+        {availablePools && availablePools.length > 0 && (
+          <BalanceFilteredPoolLoader
+            pools={availablePools}
             userAddress={address}
-            chainId={chainId || 1}
+            chainId={chainId!}
             onDataLoad={handlePoolDataLoad}
           />
-        ))}
+        )}
 
         {/* Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
