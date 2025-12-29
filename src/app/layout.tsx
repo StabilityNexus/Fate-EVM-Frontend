@@ -3,7 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ClientProviders } from "@/components/layout/Layout";
 import Navbar from "@/components/layout/Navbar";
-import Footer from "@/components/layout/Footer";
+import FooterWrapper from "@/components/layout/FooterWrapper";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 
@@ -169,7 +169,7 @@ export default function RootLayout({
             </ErrorBoundary>
           </main>
           
-          <Footer className="pb-20 lg:pb-4" />
+          <FooterWrapper className="pb-20 lg:pb-4" />
           </ClientProviders>
         </ErrorBoundary>
       </body>
