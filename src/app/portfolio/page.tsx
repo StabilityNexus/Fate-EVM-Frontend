@@ -181,12 +181,21 @@ const calculateTokenMetricsWithEvents = async (
     const fetchFromBlock = minBlock > 100 ? minBlock - 100 : 0;
     const newTransactions = await fetchUserTransactions(tokenAddress, userAddress, chainId, fetchFromBlock);
 
-    // 3. Merge and deduplicate
-    const existingHashes = new Set(transactions.map(t => t.transactionHash));
+    // 3. Merge and deduplicate using stable IDs
+    // Generate deterministic ID for transactions (handles missing transactionHash)
+    const generateTxId = (tx: any): string => {
+      if (tx.transactionHash) return tx.transactionHash;
+      // Fallback: create deterministic ID from transaction properties
+      const idString = `${tx.blockNumber}-${tx.amount || tx.amountCoin}-${tx.price}-${tx.timestamp || 0}`;
+      return `generated-${idString}`;
+    };
+
+    const existingIds = new Set(transactions.map(t => generateTxId(t)));
     for (const tx of newTransactions) {
-      if (!tx.transactionHash || !existingHashes.has(tx.transactionHash)) {
+      const txId = generateTxId(tx);
+      if (!existingIds.has(txId)) {
         transactions.push(tx);
-        if (tx.transactionHash) existingHashes.add(tx.transactionHash);
+        existingIds.add(txId);
       }
     }
 
@@ -426,7 +435,7 @@ const calculateTokenMetricsWithEvents = async (
 
         await storage.savePortfolioTransaction({
           ...portfolioTx,
-          id: `${userAddress}-${poolAddress}-${tx.transactionHash}`
+          id: `${userAddress}-${poolAddress}-${portfolioTx.transactionHash}`
         } as PortfolioTransaction);
       }
       console.debug(`✅ Saved position and ${recentTxns.length} transactions to cache`);
