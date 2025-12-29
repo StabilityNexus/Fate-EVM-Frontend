@@ -3,10 +3,10 @@
 
 import { logger } from '@/lib/logger';
 import { IndexedDBDatabase } from './database';
-import { 
-  type PoolDetails, 
-  type TokenDetails, 
-  type ChainStatus, 
+import {
+  type PoolDetails,
+  type TokenDetails,
+  type ChainStatus,
   type CacheMetadata,
   type PortfolioPosition,
   type PortfolioTransaction,
@@ -24,7 +24,165 @@ export class FatePoolsIndexedDBManager {
   }
 
   async init(): Promise<void> {
-    await this.db.init();
+    // SSR Guard: IndexedDB is only available in browser environment
+    if (typeof window === 'undefined') {
+      logger.warn('IndexedDB not available in SSR context');
+      return;
+    }
+    await this.db.init(this.handleUpgrade.bind(this));
+  }
+
+  private handleUpgrade(db: IDBDatabase, transaction: IDBTransaction, oldVersion: number, newVersion: number): void {
+    console.log(`Upgrading database from version ${oldVersion} to ${newVersion}`);
+    if (oldVersion < 4) {
+      this.migrateToV4(db, transaction);
+    }
+  }
+
+  private migrateToV4(db: IDBDatabase, transaction: IDBTransaction): Promise<void> {
+    return new Promise((resolve, reject) => {
+      try {
+        const positionStore = transaction.objectStore('portfolioPositions');
+        const txStore = transaction.objectStore('portfolioTransactions');
+        const positionsRequest = positionStore.getAll();
+
+        positionsRequest.onsuccess = () => {
+          const positions = positionsRequest.result as PortfolioPosition[];
+          if (!positions || positions.length === 0) {
+            logger.info('No positions to migrate.');
+            resolve();
+            return;
+          }
+
+          let pending = positions.length;
+          let hasError = false;
+
+          positions.forEach(position => {
+            // Get transactions for this position to calculate real metrics
+            const txRequest = txStore.index('poolAddress').getAll(position.poolAddress);
+            
+            txRequest.onsuccess = () => {
+              const allTxs = txRequest.result as PortfolioTransaction[];
+              
+              // Filter transactions for this specific token type
+              const txs = allTxs.filter(tx => 
+                tx.userAddress === position.userAddress &&
+                tx.tokenType === position.tokenType &&
+                tx.chainId === position.chainId
+              );
+
+              // Calculate v4 metrics from transaction history
+              let totalBought = 0;
+              let totalSold = 0;
+              let totalInvested = 0;
+              let totalReceived = 0;
+              let realizedPnL = 0;
+
+              // FIFO queue for cost basis calculation
+              const buyQueue: Array<{ amount: number; cost: number }> = [];
+
+              // Process transactions chronologically
+              txs.sort((a, b) => a.blockNumber - b.blockNumber).forEach(tx => {
+                if (tx.action === 'buy') {
+                  totalBought += tx.amount;
+                  totalInvested += tx.value - tx.fees;  // Net investment
+                  buyQueue.push({ amount: tx.amount, cost: tx.value - tx.fees });
+                } else if (tx.action === 'sell') {
+                  totalSold += tx.amount;
+                  totalReceived += tx.value - tx.fees;  // Net received
+                  
+                  // Calculate realized P&L using FIFO
+                  let remainingToSell = tx.amount;
+                  let costOfSold = 0;
+
+                  while (remainingToSell > 0 && buyQueue.length > 0) {
+                    const oldest = buyQueue[0];
+                    const amountToUse = Math.min(oldest.amount, remainingToSell);
+                    const costPerToken = oldest.cost / oldest.amount;
+                    
+                    costOfSold += amountToUse * costPerToken;
+                    oldest.amount -= amountToUse;
+                    remainingToSell -= amountToUse;
+                    
+                    if (oldest.amount <= 0) {
+                      buyQueue.shift();
+                    }
+                  }
+
+                  realizedPnL += (tx.value - tx.fees) - costOfSold;
+                }
+              });
+
+              // Calculate average buy price from remaining queue
+              const totalQueueCost = buyQueue.reduce((sum, b) => sum + b.cost, 0);
+              const totalQueueAmount = buyQueue.reduce((sum, b) => sum + b.amount, 0);
+              const avgBuyPrice = totalQueueAmount > 0 ? totalQueueCost / totalQueueAmount : 0;
+
+              // Calculate unrealized P&L
+              const currentValue = position.currentValue || 0;
+              const unrealizedPnL = currentValue - totalQueueCost;
+
+              const upgradedPosition: PortfolioPosition = {
+                ...position,
+                totalBought,
+                totalSold,
+                totalInvested,
+                totalReceived,
+                avgBuyPrice,
+                realizedPnL,
+                unrealizedPnL
+              };
+
+              const putRequest = positionStore.put(upgradedPosition);
+
+              putRequest.onsuccess = () => {
+                pending--;
+                if (pending === 0 && !hasError) {
+                  logger.info(`Migrated ${positions.length} positions to v4 schema with calculated metrics.`);
+
+                  transaction.oncomplete = () => {
+                    resolve();
+                  };
+
+                  transaction.onerror = () => {
+                    reject(transaction.error || new Error('Transaction error after migration'));
+                  };
+
+                  transaction.onabort = () => {
+                    reject(transaction.error || new Error('Transaction aborted after migration'));
+                  };
+                }
+              };
+
+              putRequest.onerror = () => {
+                if (!hasError) {
+                  hasError = true;
+                  reject(new Error('Failed to update position during migration'));
+                }
+              };
+            };
+
+            txRequest.onerror = () => {
+              if (!hasError) {
+                hasError = true;
+                reject(new Error('Failed to fetch transactions for migration'));
+              }
+            };
+          });
+        };
+
+        positionsRequest.onerror = () => {
+          logger.error('Failed to read positions for migration');
+          reject(new Error('Failed to read positions for migration'));
+        };
+
+        // Transaction pruning is handled by the app on next write (30 transactions limit)
+
+      } catch (error) {
+        logger.error('Migration to v4 failed:', error instanceof Error ? error : new Error(String(error)));
+        reject(error instanceof Error ? error : new Error(String(error)));
+      }
+    });
   }
 
   async close(): Promise<void> {
@@ -154,7 +312,7 @@ export class FatePoolsIndexedDBManager {
 
   async getCache(key: string): Promise<unknown | null> {
     const cacheData = await this.db.get<CacheMetadata>('cacheMetadata', key);
-    
+
     if (!cacheData) {
       return null;
     }
@@ -176,7 +334,7 @@ export class FatePoolsIndexedDBManager {
   async cleanupExpiredCache(): Promise<void> {
     const now = Date.now();
     const allCache = await this.db.getAll<CacheMetadata>('cacheMetadata');
-    
+
     for (const cache of allCache) {
       if (now > cache.expiresAt) {
         await this.deleteCache(cache.key);
@@ -232,14 +390,14 @@ export class FatePoolsIndexedDBManager {
       ...cache,
       lastUpdated: now
     };
-    
+
     // Use composite key for multi-chain support
     const cacheKey = `${cache.userAddress}-${cache.chainId}`;
     const cacheWithKey = {
       ...cacheData,
       userAddress: cacheKey // Override userAddress with composite key
     };
-    
+
     await this.db.put('portfolioCache', cacheWithKey);
     logger.debug('Portfolio cache saved for user:', { userAddress: cache.userAddress, chainId: cache.chainId });
   }
@@ -248,17 +406,17 @@ export class FatePoolsIndexedDBManager {
     // First try to get by userAddress + chainId combination
     const cacheKey = `${userAddress}-${chainId}`;
     const cache = await this.db.get<PortfolioCache>('portfolioCache', cacheKey);
-    
+
     if (cache) {
       return cache;
     }
-    
+
     // Fallback: get by userAddress and filter by chainId
     const allCache = await this.db.get<PortfolioCache>('portfolioCache', userAddress);
     if (allCache && allCache.chainId === chainId) {
       return allCache;
     }
-    
+
     return null;
   }
 
@@ -272,28 +430,28 @@ export class FatePoolsIndexedDBManager {
   async deletePortfolioPositions(userAddress: string, chainId: SupportedChainId): Promise<void> {
     // Get all positions for the user
     const allPositions = await this.db.getAll<PortfolioPosition>('portfolioPositions', 'userAddress', userAddress);
-    
+
     // Filter positions for the specific chain and delete them
     const positionsToDelete = allPositions.filter(pos => pos.chainId === chainId);
-    
+
     for (const position of positionsToDelete) {
       await this.db.delete('portfolioPositions', position.id);
     }
-    
+
     logger.debug('Portfolio positions deleted for user:', { userAddress, chainId, deletedCount: positionsToDelete.length });
   }
 
   async deletePortfolioTransactions(userAddress: string, chainId: SupportedChainId): Promise<void> {
     // Get all transactions for the user
     const allTransactions = await this.db.getAll<PortfolioTransaction>('portfolioTransactions', 'userAddress', userAddress);
-    
+
     // Filter transactions for the specific chain and delete them
     const transactionsToDelete = allTransactions.filter(tx => tx.chainId === chainId);
-    
+
     for (const transaction of transactionsToDelete) {
       await this.db.delete('portfolioTransactions', transaction.id);
     }
-    
+
     logger.debug('Portfolio transactions deleted for user:', { userAddress, chainId, deletedCount: transactionsToDelete.length });
   }
 
@@ -301,7 +459,7 @@ export class FatePoolsIndexedDBManager {
   async clearAllData(): Promise<void> {
     // Dynamically get store names from DATABASE_CONFIG
     const storeNames = DATABASE_CONFIG.stores.map(store => store.name);
-    
+
     for (const storeName of storeNames) {
       await this.db.clear(storeName);
     }
