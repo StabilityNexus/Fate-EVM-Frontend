@@ -23,7 +23,7 @@ export interface IndexConfig {
 // Database configuration
 export const DATABASE_CONFIG: DatabaseConfig = {
   name: 'FatePoolsDB',
-  version: 3,
+  version: 4,
   stores: [
     {
       name: 'poolDetails',
@@ -217,6 +217,14 @@ export interface PortfolioPosition {
   lastUpdated: number;
   blockNumber: number;
   baseTokenSymbol?: string;
+  // New metrics for aggregated caching (v4)
+  totalBought: number;
+  totalSold: number;
+  totalInvested: number;
+  totalReceived: number;
+  avgBuyPrice: number;
+  realizedPnL: number;
+  unrealizedPnL: number;
 }
 
 export interface PortfolioTransaction {
