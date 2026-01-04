@@ -113,10 +113,10 @@ export const CACHE_CONFIG = {
 } as const;
 
 // Supported chain IDs
-export type SupportedChainId = 61 | 11155111;
+export type SupportedChainId = 1 | 137 | 56 | 8453 | 61 | 11155111;
 
 // Single source of truth for supported chain IDs
-export const SUPPORTED_CHAIN_IDS: readonly SupportedChainId[] = [61, 11155111] as const;
+export const SUPPORTED_CHAIN_IDS: readonly SupportedChainId[] = [1, 137, 56, 8453, 61, 11155111] as const;
 
 // Data type definitions (keeping existing interfaces)
 export interface PoolDetails {

@@ -28,7 +28,7 @@ const PoolSearch: React.FC<PoolSearchProps> = ({
           placeholder="Search pools by name, token symbol, price feed, or chain..."
           value={searchQuery}
           onChange={onSearchChange}
-          className="w-full pl-10 pr-10 py-3 border border-gray-300 rounded-2xl dark:bg-[#10151c] dark:text-white dark:border-gray-600 transition-colors"
+          className="w-full pl-10 pr-10 py-3 border border-gray-300 rounded-lg dark:bg-[#10151c] dark:text-white dark:border-gray-600 transition-colors"
         />
         {searchQuery && (
           <button

@@ -50,12 +50,13 @@ const StatusMessages: React.FC<StatusMessagesProps> = ({
                 <div key={state.chainId} className="flex items-center gap-1">
                   <span className="dark:text-white">{chainName}:</span>
                   <span
-                    className={`font-medium ${state.loading
-                      ? "text-gray-600 dark:text-gray-400"
-                      : state.error
+                    className={`font-medium ${
+                      state.loading
+                        ? "text-gray-600 dark:text-gray-400"
+                        : state.error
                         ? "text-red-600 dark:text-red-400"
                         : "text-green-600 dark:text-green-400"
-                      }`}
+                    }`}
                   >
                     {state.loading ? "Loading..." : state.error ? "Error" : `${state.poolCount} pools`}
                   </span>
@@ -86,7 +87,7 @@ const StatusMessages: React.FC<StatusMessagesProps> = ({
       )}
 
       {!isConnected && (
-        <div className="mb-6 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-2xl">
+        <div className="mb-6 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
           <div className="flex items-center gap-2 text-yellow-800 dark:text-yellow-200">
             <AlertCircle size={16} />
             <span className="text-sm">
@@ -97,7 +98,7 @@ const StatusMessages: React.FC<StatusMessagesProps> = ({
       )}
 
       {isConnected && !isConnectedChainSupported && (
-        <div className="mb-6 p-4 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-2xl">
+        <div className="mb-6 p-4 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg">
           <div className="flex items-center gap-2 text-orange-800 dark:text-orange-200">
             <AlertCircle size={16} />
             <span className="text-sm">

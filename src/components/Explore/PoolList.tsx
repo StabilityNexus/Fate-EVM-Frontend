@@ -51,33 +51,29 @@ const PoolList: React.FC<PoolListProps> = ({
   if (loading) {
     if (viewMode === 'table') {
       return (
-        <div className="overflow-hidden rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm">
-          <div className="overflow-x-auto">
-            <div className="w-full">
-              <div className="border-b border-gray-200 bg-gray-50/50 dark:border-gray-800 dark:bg-white/5">
-                <div className="grid grid-cols-5 gap-4 px-6 py-4">
-                  {Array.from({ length: 5 }).map((_, i) => (
-                    <div key={i} className="h-3 w-2/3 bg-gray-200 dark:bg-gray-700 animate-pulse rounded" />
-                  ))}
-                </div>
-              </div>
-              <div className="divide-y divide-gray-100 dark:divide-gray-800">
+        <div className="overflow-x-auto">
+          <div className="w-full border-collapse">
+            <div className="border-b border-gray-200 dark:border-gray-700">
+              <div className="grid grid-cols-5 gap-4 py-3 px-4">
                 {Array.from({ length: 5 }).map((_, i) => (
-                  <div key={i} className="px-6 py-4">
-                    <div className="grid grid-cols-5 gap-4">
-                      {Array.from({ length: 5 }).map((_, j) => (
-                        <div key={j} className="h-4 bg-gray-200 dark:bg-gray-700 animate-pulse rounded" />
-                      ))}
-                    </div>
-                  </div>
+                  <div key={i} className="h-4 bg-gray-200 dark:bg-gray-700 animate-pulse rounded" />
                 ))}
               </div>
             </div>
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="border-b border-gray-100 dark:border-gray-800">
+                <div className="grid grid-cols-5 gap-4 py-4 px-4">
+                  {Array.from({ length: 5 }).map((_, j) => (
+                    <div key={j} className="h-4 bg-gray-200 dark:bg-gray-700 animate-pulse rounded" />
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       );
     }
-
+    
     return (
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {Array.from({ length: 6 }).map((_, i) => (
@@ -107,12 +103,12 @@ const PoolList: React.FC<PoolListProps> = ({
           {searchQuery
             ? "Try adjusting your search terms or clear the search to see all pools."
             : !isConnected
-              ? "Please connect your wallet to view pools on your connected chain."
-              : !isConnectedChainSupported
-                ? "Please switch to a supported chain to view pools."
-                : currentChainId
-                  ? `No prediction pools have been created yet on ${getChainConfig(currentChainId)?.name || `Chain ${currentChainId}`}.`
-                  : "No prediction pools have been created yet on the connected chain."}
+            ? "Please connect your wallet to view pools on your connected chain."
+            : !isConnectedChainSupported
+            ? "Please switch to a supported chain to view pools."
+            : currentChainId
+            ? `No prediction pools have been created yet on ${getChainConfig(currentChainId)?.name || `Chain ${currentChainId}`}.`
+            : "No prediction pools have been created yet on the connected chain."}
         </p>
         {searchQuery && (
           <button
@@ -149,14 +145,14 @@ const PoolList: React.FC<PoolListProps> = ({
   return (
     <div className="space-y-12">
       {sortedChainIds.map((chainId) => (
-
+        
         <div key={chainId}>
           <h2 className="text-2xl font-bold text-black dark:text-white mb-6">
             Pools on {getChainConfig(chainId)?.name || `Chain ${chainId}`}
           </h2>
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {groupedPools[chainId].map((pool) => (
-              <div key={pool.id} className="relative h-full">
+              <div key={pool.id} className="relative">
                 <PredictionCard
                   name={pool.name}
                   baseToken={pool.baseToken}

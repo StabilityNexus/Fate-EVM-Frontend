@@ -8,13 +8,14 @@ interface ViewToggleProps {
 
 const ViewToggle: React.FC<ViewToggleProps> = ({ viewMode, onViewModeChange }) => {
   return (
-    <div className="flex items-center bg-gray-100 dark:bg-gray-800 rounded-2xl p-1">
+    <div className="flex items-center bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
       <button
         onClick={() => onViewModeChange('grid')}
-        className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-colors ${viewMode === 'grid'
-          ? 'bg-white dark:bg-gray-700 text-black dark:text-white shadow-sm'
-          : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
-          }`}
+        className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+          viewMode === 'grid'
+            ? 'bg-white dark:bg-gray-700 text-black dark:text-white shadow-sm'
+            : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
+        }`}
         type="button"
         aria-label="Grid view"
       >
@@ -22,10 +23,11 @@ const ViewToggle: React.FC<ViewToggleProps> = ({ viewMode, onViewModeChange }) =
       </button>
       <button
         onClick={() => onViewModeChange('table')}
-        className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-colors ${viewMode === 'table'
-          ? 'bg-white dark:bg-gray-700 text-black dark:text-white shadow-sm'
-          : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
-          }`}
+        className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+          viewMode === 'table'
+            ? 'bg-white dark:bg-gray-700 text-black dark:text-white shadow-sm'
+            : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
+        }`}
         type="button"
         aria-label="Table view"
       >

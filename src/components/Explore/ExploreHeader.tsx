@@ -27,14 +27,11 @@ const ExploreHeader: React.FC<ExploreHeaderProps> = ({
   return (
     <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
       <div className="flex-1 min-w-0">
-        <h1 className="text-3xl md:text-5xl font-black text-black dark:text-white tracking-tight mb-3">
+        <h1 className="text-xl md:text-4xl font-bold text-black dark:text-white mb-2">
           Explore Fate Pools
         </h1>
-        <p className="text-lg md:text-xl font-medium text-gray-500 dark:text-gray-400 mb-4 max-w-2xl">
-          Predict markets. Stake conviction. Earn outcomes.
-        </p>
         <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
-          <p className="text-sm font-semibold text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-zinc-900 px-3 py-1 rounded-full inline-block">
+          <p className="text-sm text-gray-600 dark:text-gray-400">
             {isConnected && currentChainName
               ? `Connected to ${currentChainName}`
               : `Browse pools across ${supportedChainsCount} supported chains`}
@@ -54,7 +51,7 @@ const ExploreHeader: React.FC<ExploreHeaderProps> = ({
         <button
           onClick={onCreate}
           disabled={isCreatingPool || !isConnected || !isWalletConnectedChainSupported}
-          className="flex items-center gap-2 px-6 py-3 bg-black text-white rounded-xl hover:bg-gray-800 transition-all transform hover:scale-105 hover:shadow-xl dark:bg-white dark:text-black dark:hover:bg-gray-200 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none border border-transparent font-bold text-sm md:text-base flex-1 md:flex-none justify-center min-w-[160px]"
+          className="flex items-center gap-2 px-4 py-3 bg-black text-white rounded-lg hover:bg-gray-800 transition transform hover:scale-105 dark:bg-white dark:text-black dark:hover:bg-gray-100 shadow-md disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none border border-black dark:border-white text-sm md:text-base flex-1 md:flex-none justify-center"
           type="button"
         >
           <Plus size={18} className="md:w-5 md:h-5" />

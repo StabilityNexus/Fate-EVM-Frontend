@@ -12,7 +12,23 @@ import { WagmiProvider } from 'wagmi';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { config } from '@/utils/wagmiConfig';
 
-
+// Create QueryClient outside component to prevent recreation on re-renders
+const queryClient = new QueryClient({
+    defaultOptions: {
+        queries: {
+            staleTime: 60 * 1000, 
+            gcTime: 10 * 60 * 1000, 
+            retry: 3, 
+            retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+            // Add connection persistence
+            refetchOnWindowFocus: false,
+            refetchOnReconnect: true,
+        },
+        mutations: {
+            retry: 1, 
+        },
+    },
+});
 
 // Default theme for SSR/initial render
 const defaultTheme = lightTheme({
@@ -26,23 +42,6 @@ const defaultTheme = lightTheme({
 export function WalletProvider({ children }: { children: React.ReactNode }) {
     const { resolvedTheme } = useTheme();
     const [mounted, setMounted] = useState(false);
-
-    // Create QueryClient inside component to ensure data isolation between requests
-    const [queryClient] = useState(() => new QueryClient({
-        defaultOptions: {
-            queries: {
-                staleTime: 60 * 1000,
-                gcTime: 10 * 60 * 1000,
-                retry: 3,
-                retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
-                refetchOnWindowFocus: false,
-                refetchOnReconnect: true,
-            },
-            mutations: {
-                retry: 1,
-            },
-        },
-    }));
 
     useEffect(() => {
         setMounted(true);
