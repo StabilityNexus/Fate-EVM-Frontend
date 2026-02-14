@@ -31,11 +31,8 @@ interface PredictionCardProps {
 
 export function PredictionCard({
   name,
-  creator,
   priceFeed,
-  bullCoinName,
   bullCoinSymbol,
-  bearCoinName,
   bearCoinSymbol,
   bullPercentage,
   bearPercentage,
