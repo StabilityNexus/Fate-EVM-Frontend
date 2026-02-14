@@ -79,6 +79,7 @@ body {
 .mode-toggle-button-dark {
   background-color: #000000;
   border: 2px solid white;
+  color: white;
 }
 
 .mode-toggle-button-light {
@@ -92,10 +93,7 @@ body {
   width: 1.5rem;
   transition: transform 0.2s;
   transform: rotate(0) scale(1);
-}
-
-.mode-toggle-icon-dark {
-  color: white;
+  color: currentColor;
 }
 
 .hero-button {
