@@ -18,7 +18,7 @@ import { toast } from "sonner";
 import { isAddress } from "viem";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 
-{/* shared style tokens */}
+// shared style tokens
 const ACTIVE_ICON = "text-[var(--nav-active)]";
 const ACTIVE_LABEL = "text-[var(--nav-active)] font-semibold";
 const INACTIVE_ICON = "text-[var(--nav-inactive)]";
@@ -71,7 +71,7 @@ const BottomNavigation: React.FC = () => {
     </Link>
   );
 
-  {/* "Use" Button */}
+  // "Use" Button
   const UseButton = () => (
     <button
       onClick={handleUsePoolClick}
