@@ -105,7 +105,7 @@ export default function Footer({ className = "", onKYAClick }: FooterProps) {
   const year = new Date().getFullYear();
   return (
     <footer className={`w-full rounded-lg backdrop-blur-md bg-white/10 dark:bg-black shadow-lg border border-white/10 dark:border-black/10 ${className}`}>
-      <div className="px-4 sm:px-8  py-6 space-y-6">
+      <div className="px-4 sm:px-8 py-6 pb-20 max-[900px]:pb-20 space-y-6">
         {/* Logo and Social Links */}
         <div className="flex flex-col  md:flex-row ">
           <div className="w-full flex mb-4 md:mb-0 justify-between">

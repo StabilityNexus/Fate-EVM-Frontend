@@ -3,294 +3,198 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { 
-  Search, 
-  Plus, 
-  Wallet, 
-  Play, 
+import {
+  Search,
+  Plus,
+  Wallet,
+  Play,
   User,
-  X
+  X,
+  ChevronDown,
+  AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { isAddress } from "viem";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 
-interface BottomNavigationProps {
-  isConnected: boolean;
-}
+{/* shared style tokens */}
+const ACTIVE_ICON = "text-[var(--nav-active)]";
+const ACTIVE_LABEL = "text-[var(--nav-active)] font-semibold";
+const INACTIVE_ICON = "text-[var(--nav-inactive)]";
+const INACTIVE_LABEL = "text-[var(--nav-inactive)] font-medium";
+const ACTIVE_BAR = "absolute top-0 left-2 right-2 h-[2px] bg-[var(--nav-active)] rounded-full";
+const ICON_SIZE = 22;
+const ICON_STROKE = 1.75;
 
-const BottomNavigation: React.FC<BottomNavigationProps> = ({ isConnected }) => {
+const BottomNavigation: React.FC = () => {
   const pathname = usePathname();
   const router = useRouter();
   const [isUsePoolOpen, setIsUsePoolOpen] = useState(false);
   const [poolAddress, setPoolAddress] = useState("");
 
-  const handleUsePoolClick = () => {
-    if (!isConnected) {
-      toast.error("Please connect your wallet first.");
-      return;
-    }
-    setIsUsePoolOpen(true);
-  };
+  const handleUsePoolClick = () => setIsUsePoolOpen(true);
 
   const handlePoolSubmit = () => {
     if (!poolAddress.trim()) {
       toast.error("Please enter a pool address.");
       return;
     }
-    
+
     if (!isAddress(poolAddress)) {
       toast.error("Invalid pool address format.");
       return;
     }
-    
+
     router.push(`/pool?id=${poolAddress}`);
     setIsUsePoolOpen(false);
     setPoolAddress("");
   };
 
   const navItems = [
-    {
-      href: "/explorePools",
-      icon: Search,
-      label: "Explore",
-      isActive: pathname === "/explorePools"
-    },
-    {
-      href: "/createPool",
-      icon: Plus,
-      label: "Create",
-      isActive: pathname === "/createPool"
-    },
-    {
-      href: "/portfolio",
-      icon: User,
-      label: "Portfolio",
-      isActive: pathname === "/portfolio"
-    }
+    { href: "/explorePools", icon: Search, label: "Explore", isActive: pathname === "/explorePools" },
+    { href: "/createPool", icon: Plus, label: "Create", isActive: pathname === "/createPool" },
+    { href: "/portfolio", icon: User, label: "Portfolio", isActive: pathname === "/portfolio" },
   ];
+
+  // Re-usable nav link tile
+  const NavTile = ({ href, icon: Icon, label, isActive }: typeof navItems[0]) => (
+    <Link
+      href={href}
+      className="relative flex flex-col items-center justify-center py-3.5 flex-1 transition-colors"
+    >
+      {isActive && <span className={ACTIVE_BAR} />}
+      <Icon size={ICON_SIZE} strokeWidth={ICON_STROKE} className={cn("transition-colors", isActive ? ACTIVE_ICON : INACTIVE_ICON)} />
+      <span className={cn("text-[11px] mt-1 transition-colors", isActive ? ACTIVE_LABEL : INACTIVE_LABEL)}>
+        {label}
+      </span>
+    </Link>
+  );
+
+  {/* "Use" Button */}
+  const UseButton = () => (
+    <button
+      onClick={handleUsePoolClick}
+      className="relative flex flex-col items-center justify-center py-3.5 flex-1 transition-colors"
+    >
+      <Play size={ICON_SIZE} strokeWidth={ICON_STROKE} className={cn("transition-colors", INACTIVE_ICON)} />
+      <span className={cn("text-[11px] mt-1 transition-colors", INACTIVE_LABEL)}>
+        Use
+      </span>
+    </button>
+  );
 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-50 max-[900px]:block hidden">
-      {/* Glassy background with backdrop blur */}
-      <div className="bg-black/10 dark:bg-black/10 backdrop-blur-xl border-t border-black/20 dark:border-gray-800/50">
-        <div className="px-2">
-          <div className="flex items-center justify-between w-full max-w-md mx-auto">
-            {/* Left side navigation items */}
-            {navItems.slice(0, 2).map((item) => {
-              const Icon = item.icon;
-              
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={cn(
-                    "flex flex-col items-center justify-center py-1.5 px-2 rounded-lg transition-all duration-300 group relative flex-1",
-                    item.isActive 
-                      ? "bg-black/20 dark:bg-white/10 text-black dark:text-white" 
-                      : "text-black/70 dark:text-white/70 hover:text-black dark:hover:text-white hover:bg-black/10 dark:hover:bg-white/5"
-                  )}
-                >
-                  {/* Glowing effect for active item */}
-                  {item.isActive && (
-                    <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 to-purple-500/20 rounded-xl blur-sm" />
-                  )}
-                  
-                  {/* Icon with enhanced styling */}
-                  <div className="relative z-10">
-                    <Icon 
-                      size={18} 
-                      className={cn(
-                        "transition-all duration-300",
-                        item.isActive ? "scale-110" : "group-hover:scale-105"
-                      )}
-                    />
+      <div
+        className="bg-[var(--nav-bg)] shadow-[0_-2px_8px_rgba(0,0,0,0.3)]"
+        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+      >
+        <div className="flex items-stretch w-full max-w-md mx-auto">
+
+          {/* Explore · Create */}
+          {navItems.slice(0, 2).map((item) => (
+            <NavTile key={item.href} {...item} />
+          ))}
+
+          {/* Wallet slot */}
+          <div className="flex-[1.8] flex items-stretch">
+            <ConnectButton.Custom>
+              {({ account, chain, openAccountModal, openChainModal, openConnectModal, authenticationStatus, mounted }) => {
+                const ready = mounted && authenticationStatus !== "loading";
+                const connected = ready && account && chain;
+
+                return (
+                  <div
+                    className="flex items-center justify-center w-full"
+                    {...(!ready && { "aria-hidden": true, style: { opacity: 0, pointerEvents: "none", userSelect: "none" } })}
+                  >
+                    {/* Not connected */}
+                    {!connected && (
+                      <button
+                        onClick={openConnectModal}
+                        className="flex flex-col items-center justify-center py-3.5 w-full transition-colors"
+                      >
+                        <Wallet size={ICON_SIZE} strokeWidth={ICON_STROKE} className="text-[var(--nav-active)]" />
+                        <span className="text-[11px] mt-1 text-[var(--nav-active)] font-semibold">
+                          Connect
+                        </span>
+                      </button>
+                    )}
+
+                    {/* Wrong network */}
+                    {connected && chain.unsupported && (
+                      <button
+                        onClick={openChainModal}
+                        className="flex flex-col items-center justify-center py-3.5 w-full transition-colors"
+                      >
+                        <AlertTriangle size={ICON_SIZE} strokeWidth={ICON_STROKE} className="text-red-500" />
+                        <span className="text-[11px] mt-1 text-red-500 font-semibold">
+                          Wrong Net
+                        </span>
+                      </button>
+                    )}
+
+                    {/* Connected — unified capsule */}
+                    {connected && !chain.unsupported && (
+                      <div className="flex flex-col items-center justify-center py-2.5 px-1 w-full gap-1">
+
+                        {/* Chain selector — top row */}
+                        <button
+                          onClick={openChainModal}
+                          className="flex items-center gap-1 bg-white/[0.06] hover:bg-white/[0.1] rounded-full px-3 py-1 transition-colors"
+                        >
+                          <span className="text-[11px] font-medium text-[var(--nav-active)] max-w-[72px] truncate leading-none">
+                            {chain.name}
+                          </span>
+                          <ChevronDown size={10} strokeWidth={2.5} className="text-[var(--nav-active)]/70 shrink-0" />
+                        </button>
+
+                        {/* Account — bottom row */}
+                        <button
+                          onClick={openAccountModal}
+                          className="flex items-center gap-1 hover:bg-white/[0.06] rounded-full px-2 py-0.5 transition-colors"
+                        >
+                          <Wallet size={12} strokeWidth={1.75} className="text-white/35 shrink-0" />
+                          <span className="text-[10px] font-medium text-white/45 truncate max-w-[60px] leading-none">
+                            {account.displayName}
+                          </span>
+                        </button>
+
+                      </div>
+                    )}
                   </div>
-                  
-                  {/* Label */}
-                  <span className={cn(
-                    "text-xs font-medium mt-1 transition-all duration-300 text-center leading-tight",
-                    item.isActive ? "text-black dark:text-white" : "text-black/70 dark:text-white/70 group-hover:text-black dark:group-hover:text-white"
-                  )}>
-                    {item.label}
-                  </span>
-                  
-                  {/* Active indicator */}
-                  {item.isActive && (
-                    <div className="absolute -top-1 left-1/2 transform -translate-x-1/2 w-1 h-1 bg-black dark:bg-white rounded-full" />
-                  )}
-                </Link>
-              );
-            })}
-            
-            {/* Wallet Button in the center */}
-            <div className="flex flex-col items-center justify-center py-1.5 px-2 rounded-lg transition-all duration-300 group relative flex-1">
-              <ConnectButton.Custom>
-                {({
-                  account,
-                  chain,
-                  openAccountModal,
-                  openChainModal,
-                  openConnectModal,
-                  authenticationStatus,
-                  mounted,
-                }) => {
-                  const ready = mounted && authenticationStatus !== 'loading';
-                  const connected = ready && account && chain;
-
-                  return (
-                    <div
-                      {...(!ready && {
-                        'aria-hidden': true,
-                        'style': {
-                          opacity: 0,
-                          pointerEvents: 'none',
-                          userSelect: 'none',
-                        },
-                      })}
-                    >
-                      {(() => {
-                        if (!connected) {
-                          return (
-                            <button 
-                              onClick={openConnectModal}
-                              className="flex flex-col items-center justify-center py-1.5 px-2 rounded-lg transition-all duration-300 group relative hover:bg-black/10 dark:hover:bg-white/5 w-full"
-                            >
-                              <div className="relative z-10">
-                                <div className="flex items-center justify-center w-7 h-7 rounded-full">
-                                  <Wallet size={18} className="text-black dark:text-white" />
-                                </div>
-                              </div>
-                              <span className="text-xs font-medium mt-1 text-black/70 dark:text-white/70 text-center leading-tight">
-                                Connect
-                              </span>
-                            </button>
-                          );
-                        }
-
-                        if (chain.unsupported) {
-                          return (
-                            <button 
-                              onClick={openChainModal}
-                              className="flex flex-col items-center justify-center py-1.5 px-2 rounded-lg transition-all duration-300 group relative hover:bg-black/10 dark:hover:bg-white/5 w-full"
-                            >
-                              <div className="relative z-10">
-                                <div className="flex items-center justify-center w-7 h-7 rounded-full">
-                                  <Wallet size={18} className="text-red-500" />
-                                </div>
-                              </div>
-                              <span className="text-xs font-medium mt-1 text-red-500 text-center leading-tight">
-                                Wrong Network
-                              </span>
-                            </button>
-                          );
-                        }
-
-                        return (
-                          <button 
-                            onClick={openAccountModal}
-                            className="flex flex-col items-center justify-center py-1.5 px-2 rounded-lg transition-all duration-300 group relative hover:bg-black/10 dark:hover:bg-white/5 w-full"
-                          >
-                            <div className="relative z-10">
-                              <div className="flex items-center justify-center w-7 h-7 rounded-full">
-                                <Wallet size={18} className="text-black dark:text-white" />
-                              </div>
-                            </div>
-                            <span className="text-xs font-medium mt-1 text-black/70 dark:text-white/70 text-center leading-tight max-w-16 truncate">
-                              {account.displayName}
-                            </span>
-                          </button>
-                        );
-                      })()}
-                    </div>
-                  );
-                }}
-              </ConnectButton.Custom>
-            </div>
-            
-            {/* Right side navigation items */}
-            {navItems.slice(2).map((item) => {
-              const Icon = item.icon;
-              
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={cn(
-                    "flex flex-col items-center justify-center py-1.5 px-2 rounded-lg transition-all duration-300 group relative flex-1",
-                    item.isActive 
-                      ? "bg-black/20 dark:bg-white/10 text-black dark:text-white" 
-                      : "text-black/70 dark:text-white/70 hover:text-black dark:hover:text-white hover:bg-black/10 dark:hover:bg-white/5"
-                  )}
-                >
-                  {/* Glowing effect for active item */}
-                  {item.isActive && (
-                    <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 to-purple-500/20 rounded-xl blur-sm" />
-                  )}
-                  
-                  {/* Icon with enhanced styling */}
-                  <div className="relative z-10">
-                    <Icon 
-                      size={18} 
-                      className={cn(
-                        "transition-all duration-300",
-                        item.isActive ? "scale-110" : "group-hover:scale-105"
-                      )}
-                    />
-                  </div>
-                  
-                  {/* Label */}
-                  <span className={cn(
-                    "text-xs font-medium mt-1 transition-all duration-300 text-center leading-tight",
-                    item.isActive ? "text-black dark:text-white" : "text-black/70 dark:text-white/70 group-hover:text-black dark:group-hover:text-white"
-                  )}>
-                    {item.label}
-                  </span>
-                  
-                  {/* Active indicator */}
-                  {item.isActive && (
-                    <div className="absolute -top-1 left-1/2 transform -translate-x-1/2 w-1 h-1 bg-black dark:bg-white rounded-full" />
-                  )}
-                </Link>
-              );
-            })}
-            
-            {/* Use Pool Button */}
-            <button 
-              onClick={handleUsePoolClick}
-              className="flex flex-col items-center justify-center py-1.5 px-2 rounded-lg transition-all duration-300 group relative hover:bg-black/10 dark:hover:bg-white/5 flex-1 text-black/70 dark:text-white/70 hover:text-black dark:hover:text-white"
-            >
-              <div className="relative z-10">
-                <div className="flex items-center justify-center w-7 rounded-full">
-                  <Play size={18} className="text-black dark:text-white" />
-                </div>
-              </div>
-              <span className="text-xs font-medium mt-1 text-black/70 dark:text-white/70 text-center leading-tight">
-                Use
-              </span>
-            </button>
+                );
+              }}
+            </ConnectButton.Custom>
           </div>
+
+          {/* Portfolio · Use */}
+          {navItems.slice(2).map((item) => (
+            <NavTile key={item.href} {...item} />
+          ))}
+          <UseButton />
+
         </div>
       </div>
-      
-      {/* Use Pool Popup Modal */}
+
+      {/* Use Pool modal */}
       {isUsePoolOpen && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 w-full max-w-md shadow-2xl">
+          <div className="bg-zinc-900 rounded-2xl p-6 w-full max-w-md shadow-2xl">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-black dark:text-white">Use Pool</h3>
+              <h3 className="text-lg font-semibold text-white">Use Pool</h3>
               <button
                 onClick={() => setIsUsePoolOpen(false)}
-                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
+                className="p-2 hover:bg-zinc-800 rounded-full transition-colors"
               >
-                <X size={18} className="text-black dark:text-white" />
+                <X size={18} className="text-white" />
               </button>
             </div>
-            
+
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                <label className="block text-sm font-medium text-gray-300 mb-2">
                   Pool Address
                 </label>
                 <input
@@ -298,22 +202,22 @@ const BottomNavigation: React.FC<BottomNavigationProps> = ({ isConnected }) => {
                   value={poolAddress}
                   onChange={(e) => setPoolAddress(e.target.value)}
                   placeholder="0x..."
-                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-black dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                  className="w-full px-4 py-3 border border-zinc-700 rounded-xl bg-zinc-800 text-white placeholder-gray-500 focus:ring-2 focus:ring-yellow-500 focus:border-transparent outline-none transition-colors"
                 />
               </div>
-              
-              <div className="flex space-x-3">
+
+              <div className="flex gap-3">
                 <button
                   onClick={() => setIsUsePoolOpen(false)}
-                  className="flex-1 px-4 py-3 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                  className="flex-1 px-4 py-3 text-gray-300 bg-zinc-800 rounded-xl hover:bg-zinc-700 transition-colors text-sm font-medium"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handlePoolSubmit}
-                  className="flex-1 px-4 py-3 bg-black dark:bg-white text-white dark:text-black rounded-lg hover:bg-gray-800 dark:hover:bg-gray-100 transition-colors font-medium"
+                  className="flex-1 px-4 py-3 bg-yellow-500 hover:bg-yellow-400 text-black rounded-xl transition-colors text-sm font-semibold"
                 >
-                  Use
+                  Go to Pool
                 </button>
               </div>
             </div>
