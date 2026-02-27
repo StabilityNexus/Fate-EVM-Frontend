@@ -16,7 +16,7 @@ export function ClientProviders({ children }: { children: React.ReactNode }) {
       <WalletProvider>
         <KYAProvider>
           {children}
-          <Toaster position="top-right" richColors />
+          <Toaster position="bottom-right" richColors />
         </KYAProvider>
       </WalletProvider>
     </ThemeProvider>
