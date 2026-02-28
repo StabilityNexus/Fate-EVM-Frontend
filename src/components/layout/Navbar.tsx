@@ -9,7 +9,6 @@ import { useTheme } from "next-themes";
 import { ModeToggle } from "../darkModeToggle";
 import WalletButton from "../ui/walletButton";
 import BottomNavigation from "./BottomNavigation";
-import { useAccount } from "wagmi";
 import { cn } from "@/lib/utils";
 
 interface NavbarProps {
@@ -18,7 +17,6 @@ interface NavbarProps {
 
 const Navbar: React.FC<NavbarProps> = ({ className = "" }) => {
   const { resolvedTheme } = useTheme();
-  const { isConnected } = useAccount();
   const [isThemeReady, setIsThemeReady] = useState(false);
 
   useEffect(() => {
@@ -92,7 +90,7 @@ const Navbar: React.FC<NavbarProps> = ({ className = "" }) => {
       </header>
 
       {/* Bottom Navigation for Mobile */}
-      <BottomNavigation isConnected={isConnected} />
+      <BottomNavigation />
     </>
   );
 };

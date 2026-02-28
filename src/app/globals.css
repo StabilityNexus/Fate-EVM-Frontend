@@ -5,6 +5,13 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+
+  /* Bottom Navigation tokens */
+  --nav-bg: #1a1b1f;
+  --nav-active: #eab308;
+  --nav-inactive: rgba(255, 255, 255, 0.4);
+  --nav-icon-size: 22;
+  --nav-icon-stroke: 1.75;
 }
 
 /* Dark mode overrides */
