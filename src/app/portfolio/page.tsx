@@ -3369,7 +3369,7 @@ export default function PortfolioPage() {
               </Card>
             )}
           </div>
-        ) : null}
+        )}
       </div>
     </div>
   );
