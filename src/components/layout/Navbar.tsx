@@ -71,20 +71,25 @@ const Navbar: React.FC<NavbarProps> = ({ className = "" }) => {
             )}
           >
             {navItems.map((item) => {
-              const isActive = pathname === item.href;
+              const isActive = pathname.startsWith(item.href);
 
               return (
                 <Link
                   key={item.href}
                   href={item.href}
                   className={cn(
-                    "transition-colors pb-1",
+                    "relative pb-1 transition-colors duration-200",
                     isActive
-                      ? "text-yellow-500 border-b-2 border-yellow-500"
-                      : "text-gray-900 dark:text-white hover:text-yellow-500 dark:hover:text-yellow-400"
+                      ? "text-black dark:text-white font-semibold"
+                      : "text-gray-600 dark:text-gray-400 hover:text-black dark:hover:text-white"
                   )}
                 >
                   {item.name}
+
+                  {/* Active underline indicator */}
+                  {isActive && (
+                    <span className="absolute left-0 bottom-0 w-full h-[2px] bg-black dark:bg-white rounded-full" />
+                  )}
                 </Link>
               );
             })}
