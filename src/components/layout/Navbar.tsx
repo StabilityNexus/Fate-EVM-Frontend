@@ -40,7 +40,6 @@ const Navbar: React.FC<NavbarProps> = ({ className = "" }) => {
     <>
       <header className={cn("justify-between z-50", className)}>
         <div className="mx-auto flex items-center justify-between relative dark:bg-black px-5 py-2">
-
           {/* Logo */}
           <div className="flex-shrink-0">
             <Link href="/">
@@ -67,7 +66,7 @@ const Navbar: React.FC<NavbarProps> = ({ className = "" }) => {
             className={cn(
               "hidden min-[900px]:flex absolute left-1/2 transform -translate-x-1/2 space-x-8 text-md text-center px-8 py-2 rounded-full",
               "bg-[#f0f1f4] dark:bg-[#1a1b1f] text-gray-900 dark:text-white backdrop-blur-sm",
-              "font-[var(--font-bebas-nueue)]"
+              "font-[var(--font-bebas-nueue)]",
             )}
           >
             {navItems.map((item) => {
@@ -77,11 +76,12 @@ const Navbar: React.FC<NavbarProps> = ({ className = "" }) => {
                 <Link
                   key={item.href}
                   href={item.href}
+                  aria-current={isActive ? "page" : undefined}
                   className={cn(
                     "relative pb-1 transition-colors duration-200",
                     isActive
                       ? "text-black dark:text-white font-semibold"
-                      : "text-gray-600 dark:text-gray-400 hover:text-black dark:hover:text-white"
+                      : "text-gray-600 dark:text-gray-400 hover:text-black dark:hover:text-white",
                   )}
                 >
                   {item.name}
