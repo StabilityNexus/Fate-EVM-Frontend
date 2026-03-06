@@ -9,10 +9,9 @@ import { useTheme } from "next-themes";
 import { ModeToggle } from "../darkModeToggle";
 import WalletButton from "../ui/walletButton";
 import BottomNavigation from "./BottomNavigation";
-import { useAccount } from "wagmi";
 import { cn } from "@/lib/utils";
 import { usePathname } from "next/navigation";
-
+import { useAccount } from "wagmi";
 interface NavbarProps {
   className?: string;
 }

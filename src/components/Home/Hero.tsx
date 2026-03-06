@@ -266,7 +266,7 @@ const ButtonGroup = ({
             type="text"
             value={vaultAddress}
             onChange={(e) => setVaultAddress(e.target.value)}
-            className="w-full p-2 border border-gray-300 rounded mb-4 dark:bg-gray-700 dark:text-white"
+            className="w-full p-2 border border-gray-300 rounded mb-4 dark:bg-gray-700 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400"
             placeholder="0x123...abc"
           />
           <div className="flex justify-end space-x-2">

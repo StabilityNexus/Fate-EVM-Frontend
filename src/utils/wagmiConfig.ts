@@ -26,8 +26,8 @@ export const config = (() => {
     appName: "Fate Protocol",
     projectId: process.env.NEXT_PUBLIC_PROJECT_ID || "DEFAULT_PROJECT_ID",
     chains: [
-      ethereumClassic, // 61 - Ethereum Classic
       sepolia,    // 11155111 - Sepolia Testnet
+      ethereumClassic, // 61 - Ethereum Classic
     ],
     transports: {
       [ethereumClassic.id]: http(),
