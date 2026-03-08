@@ -24,7 +24,7 @@ import {
   Activity,
   DollarSign,
 } from "lucide-react";
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useAccount, useReadContracts } from "wagmi";
 import { formatUnits, Address, isAddress } from "viem";
 import { useRouter } from "next/navigation";
@@ -1493,8 +1493,10 @@ const EnhancedPoolDataLoader = ({
 }) => {
   // Initialize storage hook for caching
   const storage = useFatePoolsStorage();
+  // onSettled must fire exactly once per loader instance (success OR permanent failure)
+  const settledRef = useRef(false);
   // Step 1: Get basic pool information
-  const { data: poolBasicData } = useReadContracts({
+  const { data: poolBasicData, status: poolBasicStatus, fetchStatus: poolBasicFetchStatus } = useReadContracts({
     contracts: [
       { address: poolAddress as Address, abi: PredictionPoolABI, functionName: 'poolName' },
       { address: poolAddress as Address, abi: PredictionPoolABI, functionName: 'baseToken' },
@@ -1518,7 +1520,7 @@ const EnhancedPoolDataLoader = ({
   const previousPrice = Number(formatUnits(poolBasicData?.[6]?.result as bigint || BigInt(0), 18));
 
   // Step 2: Get fee information
-  const { data: feeData } = useReadContracts({
+  const { data: feeData, fetchStatus: feeFetchStatus } = useReadContracts({
     contracts: poolAddress ? [
       { address: poolAddress as Address, abi: PredictionPoolABI, functionName: 'mintFee' },
       { address: poolAddress as Address, abi: PredictionPoolABI, functionName: 'burnFee' },
@@ -1531,7 +1533,7 @@ const EnhancedPoolDataLoader = ({
   });
 
   // Step 3: Get token metadata and supplies
-  const { data: tokenData } = useReadContracts({
+  const { data: tokenData, fetchStatus: tokenFetchStatus } = useReadContracts({
     contracts: bullTokenAddress && bearTokenAddress ? [
       { address: bullTokenAddress, abi: CoinABI, functionName: 'name' },
       { address: bullTokenAddress, abi: CoinABI, functionName: 'symbol' },
@@ -1547,7 +1549,7 @@ const EnhancedPoolDataLoader = ({
   });
 
   // Step 4: Get reserves (base token balances in bull/bear tokens)
-  const { data: reserveData } = useReadContracts({
+  const { data: reserveData, fetchStatus: reserveFetchStatus } = useReadContracts({
     contracts: baseToken && bullTokenAddress && bearTokenAddress ? [
       { address: baseToken, abi: ERC20ABI, functionName: 'balanceOf', args: [bullTokenAddress] },
       { address: baseToken, abi: ERC20ABI, functionName: 'balanceOf', args: [bearTokenAddress] },
@@ -1561,7 +1563,7 @@ const EnhancedPoolDataLoader = ({
   });
 
   // Step 5: Get user balances if user is connected
-  const { data: userBalanceData } = useReadContracts({
+  const { data: userBalanceData, fetchStatus: userBalanceFetchStatus } = useReadContracts({
     contracts: userAddress && bullTokenAddress && bearTokenAddress && baseToken ? [
       { address: bullTokenAddress, abi: CoinABI, functionName: 'balanceOf', args: [userAddress as Address] },
       { address: bearTokenAddress, abi: CoinABI, functionName: 'balanceOf', args: [userAddress as Address] },
@@ -1573,7 +1575,7 @@ const EnhancedPoolDataLoader = ({
   });
 
   // Step 6: Get underlying oracle address
-  const { data: underlyingOracleData } = useReadContracts({
+  const { data: underlyingOracleData, fetchStatus: underlyingOracleFetchStatus } = useReadContracts({
     contracts: oracleAddress && oracleAddress !== "0x0000000000000000000000000000000000000000" ? [
       { address: oracleAddress, abi: ChainlinkOracleABI, functionName: 'priceFeed' },
     ] : [],
@@ -1749,11 +1751,34 @@ const EnhancedPoolDataLoader = ({
         currentPrice: poolData.currentPrice
       });
       onDataLoad(poolData);
-      onSettled?.();
+      if (!settledRef.current) {
+        settledRef.current = true;
+        onSettled?.();
+      }
     };
 
     processPoolData();
   }, [poolBasicData, tokenData, reserveData, userBalanceData, underlyingOracleData, feeData, poolAddress, onDataLoad, onSettled, userAddress, chainId, index, baseToken, bearTokenAddress, bullTokenAddress, currentPrice, oracleAddress, poolName, previousPrice, storage]);
+
+  // Safety-net: fire onSettled when all queries reach a terminal state (success or
+  // permanent failure) on paths where processPoolData's early-returns never execute.
+  // Requires poolBasicStatus !== 'pending' to avoid firing before the first fetch runs.
+  useEffect(() => {
+    if (settledRef.current) return;
+    if (!userAddress) return;
+    if (poolBasicStatus === 'pending') return; // primary query hasn't settled yet
+    const allIdle =
+      poolBasicFetchStatus === 'idle' &&
+      feeFetchStatus === 'idle' &&
+      tokenFetchStatus === 'idle' &&
+      reserveFetchStatus === 'idle' &&
+      userBalanceFetchStatus === 'idle' &&
+      underlyingOracleFetchStatus === 'idle';
+    if (allIdle) {
+      settledRef.current = true;
+      onSettled?.();
+    }
+  }, [poolBasicStatus, poolBasicFetchStatus, feeFetchStatus, tokenFetchStatus, reserveFetchStatus, userBalanceFetchStatus, underlyingOracleFetchStatus, userAddress, onSettled]);
 
   return null;
 };
