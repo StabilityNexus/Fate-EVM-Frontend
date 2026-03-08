@@ -32,6 +32,7 @@ import Navbar from '@/components/layout/Navbar';
 import { useTheme } from "next-themes";
 import { Info } from 'lucide-react';
 import { logger } from "@/lib/logger";
+import { getChainConfig } from "@/utils/chainConfig";
 
 // Utility function for safe BigInt subtraction to prevent underflow
 const safeBigIntSubtract = (a: bigint, b: bigint): bigint => {
@@ -627,28 +628,44 @@ export default function InteractionClient() {
   // const [gasPrice, setGasPrice] = useState<bigint>(BigInt(0));
   const [newOracleAddress, setNewOracleAddress] = useState<string>('');
   const [isFetchingRebalanceEvents, setIsFetchingRebalanceEvents] = useState(false);
+  const isFetchingRebalanceRef = useRef(false);
+  const [rebalanceOutOfRange, setRebalanceOutOfRange] = useState(false);
 
   // const POLLING_INTERVAL = 5000;
   const [pollingEnabledState, setPollingEnabledState] = useState(true);
 
   // Fetch the last rebalance event from blockchain
   const fetchLastRebalanceEvent = useCallback(async () => {
-    if (!poolId || !walletClient) {
-      logger.debug('fetchLastRebalanceEvent: Missing poolId or walletClient', { poolId, walletClient: !!walletClient });
+    if (!poolId) {
+      logger.debug('fetchLastRebalanceEvent: Missing poolId', { poolId });
+      return;
+    }
+
+    // Prevent concurrent scans
+    if (isFetchingRebalanceRef.current) {
+      logger.debug('fetchLastRebalanceEvent: Already in progress, skipping');
+      return;
+    }
+
+    // Prefer pool.chainId so the scan works without a connected wallet
+    const chainConfig = pool?.chainId ? getChainConfig(pool.chainId) : null;
+    const activeChain = chainConfig?.chain ?? walletClient?.chain;
+    if (!activeChain) {
+      logger.debug('fetchLastRebalanceEvent: Cannot determine chain yet', { poolId });
       return;
     }
 
     try {
       logger.debug('fetchLastRebalanceEvent: Starting to fetch events for pool:', { poolId });
+      isFetchingRebalanceRef.current = true;
       setIsFetchingRebalanceEvents(true);
       const publicClient = createPublicClient({
-        chain: walletClient.chain,
+        chain: activeChain,
         transport: http()
       });
 
-      logger.debug('fetchLastRebalanceEvent: Created public client for chain:', { chainName: walletClient.chain.name });
+      logger.debug('fetchLastRebalanceEvent: Created public client for chain:', { chainName: activeChain.name });
 
-      // Use the correct Rebalanced event signature from the ABI
       const rebalancedEventABI = {
         type: 'event',
         name: 'Rebalanced',
@@ -665,125 +682,227 @@ export default function InteractionClient() {
         ]
       } as const;
 
-      // Approach 1: Use the exact event ABI definition
-      try {
-        logger.debug('Approach 1: Trying with correct Rebalanced event ABI...');
-        const logs = await publicClient.getLogs({
-          address: poolId as Address,
-          event: rebalancedEventABI,
-          fromBlock: 'earliest',
-          toBlock: 'latest'
-        });
+      const CHUNK_SIZE = BigInt(9000);
+      const MAX_PAGES = 10;
 
-        logger.debug('Approach 1: Found Rebalanced logs:', { logCount: logs.length });
+      const cachedBlockStr = localStorage.getItem(`lastRebalanceBlock_${poolId}`);
+      const cachedTimestampStr = localStorage.getItem(`lastRebalance_${poolId}`);
+      const cacheAgeMs = cachedTimestampStr
+        ? Date.now() - new Date(cachedTimestampStr).getTime()
+        : Infinity;
+      const FAST_PATH_MAX_AGE_MS = 30 * 60 * 60 * 1000; // 30h ≈ 9,000 blocks, fits within 10k range limit
+      const AVG_BLOCK_TIME_MS = 12_000; // fallback estimate for fast path B block estimation
 
-        if (logs.length > 0) {
-          const latestEvent = logs[logs.length - 1];
-          const block = await publicClient.getBlock({ blockNumber: latestEvent.blockNumber });
-          const rebalanceTime = new Date(Number(block.timestamp) * 1000);
-          setLastRebalanceTime(rebalanceTime);
-          localStorage.setItem(`lastRebalance_${poolId}`, rebalanceTime.toISOString());
+      // Measures real avg block time from two known boundary blocks and interpolates
+      // event timestamps — works for any chain without hardcoded PoS/PoW lists.
+      const makeTimestampResolver = (
+        lb: { number: bigint; timestamp: bigint },
+        boundary: { number: bigint; timestamp: bigint }
+      ) => {
+        const blockSpan = Number(lb.number - boundary.number);
+        const timeSpan  = Number(lb.timestamp - boundary.timestamp);
+        const avgBlockTimeS = blockSpan > 0 && timeSpan > 0 ? timeSpan / blockSpan : 12; // fallback: 12s/block
+        return (eventBlockNumber: bigint): Date => {
+          const blocksDiff = Number(lb.number - eventBlockNumber);
+          return new Date((Number(lb.timestamp) - blocksDiff * avgBlockTimeS) * 1000);
+        };
+      };
 
-          logger.debug('Success with Approach 1 - Last rebalance event found:', {
-            blockNumber: latestEvent.blockNumber,
-            timestamp: block.timestamp,
-            rebalanceTime: rebalanceTime.toLocaleString(),
-            eventArgs: latestEvent.args
+      // Reused across paths to avoid redundant getBlock('latest') calls
+      let sharedLatestBlock: { number: bigint; timestamp: bigint } | null = null;
+
+      // Fast path A: scan from cached block — getBlock + getLogs in parallel
+      if (cachedBlockStr && cacheAgeMs < FAST_PATH_MAX_AGE_MS) {
+        try {
+          logger.debug('fetchLastRebalanceEvent: Trying fast path A (cached block, parallel fetch)', {
+            cachedBlock: cachedBlockStr
+          });
+          const [lb, logs] = await Promise.all([
+            publicClient.getBlock({ blockTag: 'latest' }),
+            publicClient.getLogs({
+              address: poolId as Address,
+              event: rebalancedEventABI,
+              fromBlock: BigInt(cachedBlockStr),
+              toBlock: 'latest',
+            }),
+          ]);
+          sharedLatestBlock = lb;
+
+          if (logs.length > 0) {
+            const latestEvent = logs[logs.length - 1];
+            const cachedBoundary = {
+              number: BigInt(cachedBlockStr),
+              timestamp: BigInt(Math.floor(new Date(cachedTimestampStr!).getTime() / 1000)),
+            };
+            const resolveTs = makeTimestampResolver(lb, cachedBoundary);
+            const rebalanceTime = resolveTs(latestEvent.blockNumber!);
+            setLastRebalanceTime(rebalanceTime);
+            setRebalanceOutOfRange(false);
+            localStorage.setItem(`lastRebalance_${poolId}`, rebalanceTime.toISOString());
+            localStorage.setItem(`lastRebalanceBlock_${poolId}`, latestEvent.blockNumber!.toString());
+            logger.debug('fetchLastRebalanceEvent: Fast path A found newer event', {
+              blockNumber: latestEvent.blockNumber?.toString(),
+              rebalanceTime: rebalanceTime.toLocaleString()
+            });
+          } else {
+            logger.debug('fetchLastRebalanceEvent: Fast path A confirmed no newer events');
+          }
+          return;
+        } catch (fastPathError) {
+          logger.warn('fetchLastRebalanceEvent: Fast path A failed, falling back', {
+            message: (fastPathError as Error)?.message
+          });
+        }
+      }
+
+      if (!sharedLatestBlock) {
+        try {
+          sharedLatestBlock = await publicClient.getBlock({ blockTag: 'latest' });
+        } catch (blockNumError) {
+          logger.warn('fetchLastRebalanceEvent: Failed to get latest block', {
+            message: (blockNumError as Error)?.message
           });
           return;
         }
-      } catch (approach1Error) {
-        logger.debug('Approach 1 failed:', { error: approach1Error });
       }
+      const latestBlock = sharedLatestBlock.number;
 
-      // Approach 2: Use event topic hash to find rebalance events
-      try {
-        logger.debug('Approach 2: Searching by event topic hash...');
+      // Fast path B: estimate event block from cached timestamp, scan ±1,500 block window
+      if (cachedTimestampStr && cacheAgeMs < FAST_PATH_MAX_AGE_MS) {
+        try {
+          const estimatedBlocksAgo = BigInt(Math.round(cacheAgeMs / AVG_BLOCK_TIME_MS));
+          const BUFFER = BigInt(1500);
+          const estimatedBlock = latestBlock > estimatedBlocksAgo
+            ? latestBlock - estimatedBlocksAgo
+            : BigInt(0);
+          const fromBlock = estimatedBlock > BUFFER ? estimatedBlock - BUFFER : BigInt(0);
+          const toBlock = estimatedBlock + BUFFER < latestBlock ? estimatedBlock + BUFFER : latestBlock;
 
-        // Get the event topic hash (keccak256 of event signature)
-        // const eventSignature = 'Rebalanced(address,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256)';
-        const allLogs = await publicClient.getLogs({
-          address: poolId as Address,
-          fromBlock: 'earliest',
-          toBlock: 'latest'
-        });
-
-        logger.debug('Approach 2: Found total logs:', { logCount: allLogs.length });
-
-        // Look for rebalance events by checking if they have the expected number of topics
-        const rebalanceEvents = allLogs.filter((log: { topics: string[] }) => {
-          // Rebalanced event has 2 indexed parameters (caller, blockNumber) + event signature = 3 topics total
-          return log.topics && log.topics.length === 3;
-        });
-
-        logger.debug('Approach 2: Potential rebalance events (by topic count):', { eventCount: rebalanceEvents.length });
-
-        if (rebalanceEvents.length > 0) {
-          const latestEvent = rebalanceEvents[rebalanceEvents.length - 1];
-          const block = await publicClient.getBlock({ blockNumber: latestEvent.blockNumber });
-          const rebalanceTime = new Date(Number(block.timestamp) * 1000);
-          setLastRebalanceTime(rebalanceTime);
-          localStorage.setItem(`lastRebalance_${poolId}`, rebalanceTime.toISOString());
-
-          logger.debug('Success with Approach 2 - Found rebalance event:', {
-            blockNumber: latestEvent.blockNumber,
-            timestamp: block.timestamp,
-            rebalanceTime: rebalanceTime.toLocaleString(),
-            topics: latestEvent.topics
+          logger.debug('fetchLastRebalanceEvent: Trying fast path B (timestamp estimate, parallel fetch)', {
+            estimatedBlock: estimatedBlock.toString(), fromBlock: fromBlock.toString(), toBlock: toBlock.toString()
           });
-          return;
-        }
-      } catch (approach2Error) {
-        logger.debug('Approach 2 failed:', { error: approach2Error });
-      }
 
-      // Approach 3: Check recent blocks for any pool activity
-      try {
-        logger.debug('Approach 3: Checking recent pool activity...');
-        const latestBlock = await publicClient.getBlockNumber();
-        const startBlock = safeBigIntSubtract(latestBlock, BigInt(10000)); // Check last 10000 blocks, but never go below 0
+          const [fromBlockData, logs] = await Promise.all([
+            publicClient.getBlock({ blockNumber: fromBlock }),
+            publicClient.getLogs({ address: poolId as Address, event: rebalancedEventABI, fromBlock, toBlock }),
+          ]);
 
-        const recentLogs = await publicClient.getLogs({
-          address: poolId as Address,
-          fromBlock: startBlock,
-          toBlock: 'latest'
-        });
-
-        logger.debug('Approach 3: Found recent logs in last 10000 blocks:', { logCount: recentLogs.length });
-
-        if (recentLogs.length > 0) {
-          // Use the most recent activity as a potential rebalance indicator
-          const latestActivity = recentLogs[recentLogs.length - 1];
-          const block = await publicClient.getBlock({ blockNumber: latestActivity.blockNumber });
-          const rebalanceTime = new Date(Number(block.timestamp) * 1000);
-          setLastRebalanceTime(rebalanceTime);
-          localStorage.setItem(`lastRebalance_${poolId}`, rebalanceTime.toISOString());
-
-          logger.debug('Success with Approach 3 - Using latest pool activity:', {
-            blockNumber: latestActivity.blockNumber,
-            timestamp: block.timestamp,
-            rebalanceTime: rebalanceTime.toLocaleString()
+          if (logs.length > 0) {
+            const latestEvent = logs[logs.length - 1];
+            const resolveTs = makeTimestampResolver(sharedLatestBlock, fromBlockData);
+            const rebalanceTime = resolveTs(latestEvent.blockNumber!);
+            setLastRebalanceTime(rebalanceTime);
+            setRebalanceOutOfRange(false);
+            localStorage.setItem(`lastRebalance_${poolId}`, rebalanceTime.toISOString());
+            localStorage.setItem(`lastRebalanceBlock_${poolId}`, latestEvent.blockNumber!.toString());
+            logger.debug('fetchLastRebalanceEvent: Fast path B found event', {
+              blockNumber: latestEvent.blockNumber?.toString(),
+              rebalanceTime: rebalanceTime.toLocaleString()
+            });
+            return;
+          }
+          logger.debug('fetchLastRebalanceEvent: Fast path B found no event in window, falling back to full scan');
+        } catch (fastPathBError) {
+          logger.warn('fetchLastRebalanceEvent: Fast path B failed, falling back', {
+            message: (fastPathBError as Error)?.message
           });
-          return;
         }
-      } catch (approach3Error) {
-        logger.debug('Approach 3 failed:', { error: approach3Error });
       }
 
-      logger.warn('All approaches failed - No rebalance events found for pool:', { poolId });
-      // Don't set to null immediately, check localStorage first
-      const storedTime = localStorage.getItem(`lastRebalance_${poolId}`);
-      if (!storedTime) {
-        setLastRebalanceTime(null);
+      // Full backward scan: 10 pages × 9,000 blocks ≈ 12–13 days
+      logger.debug('fetchLastRebalanceEvent: Starting reverse-paginated scan', {
+        latestBlock: latestBlock.toString(),
+        chunkSize: CHUNK_SIZE.toString(),
+        maxPages: MAX_PAGES
+      });
+
+      let foundEvent = false;
+      let reachedEarliestBlock = false;
+      let scanTimestampResolver: ((b: bigint) => Date) | null = null;
+
+      for (let page = 0; page < MAX_PAGES; page++) {
+        const toBlock   = latestBlock - BigInt(page) * CHUNK_SIZE;
+        if (toBlock < BigInt(0)) break;
+        const fromBlock = toBlock >= CHUNK_SIZE ? toBlock - CHUNK_SIZE + BigInt(1) : BigInt(0);
+
+        try {
+          let logs;
+          if (page === 0) {
+            // Fetch boundary block in parallel on first page to calibrate block time
+            const [fromBlockData, page0Logs] = await Promise.all([
+              publicClient.getBlock({ blockNumber: fromBlock }),
+              publicClient.getLogs({ address: poolId as Address, event: rebalancedEventABI, fromBlock, toBlock }),
+            ]);
+            scanTimestampResolver = makeTimestampResolver(sharedLatestBlock, fromBlockData);
+            logs = page0Logs;
+          } else {
+            logs = await publicClient.getLogs({
+              address: poolId as Address,
+              event: rebalancedEventABI,
+              fromBlock,
+              toBlock
+            });
+          }
+
+          if (logs.length > 0) {
+            const latestEvent = logs[logs.length - 1];
+            const resolveTs = scanTimestampResolver
+              ?? makeTimestampResolver(sharedLatestBlock, { number: fromBlock, timestamp: sharedLatestBlock.timestamp });
+            const rebalanceTime = resolveTs(latestEvent.blockNumber!);
+            setLastRebalanceTime(rebalanceTime);
+            setRebalanceOutOfRange(false);
+            localStorage.setItem(`lastRebalance_${poolId}`, rebalanceTime.toISOString());
+            localStorage.setItem(`lastRebalanceBlock_${poolId}`, latestEvent.blockNumber!.toString());
+
+            logger.debug('fetchLastRebalanceEvent: Found last Rebalanced event', {
+              blockNumber: latestEvent.blockNumber?.toString(),
+              rebalanceTime: rebalanceTime.toLocaleString(),
+              page: page + 1
+            });
+            foundEvent = true;
+            break;
+          }
+        } catch (pageError) {
+          logger.warn(`fetchLastRebalanceEvent: Scan page ${page + 1} failed`, {
+            fromBlock: fromBlock.toString(),
+            toBlock: toBlock.toString(),
+            message: (pageError as Error)?.message
+          });
+        }
+
+        if (fromBlock === BigInt(0)) {
+          reachedEarliestBlock = true;
+          break;
+        }
+      }
+
+      if (!foundEvent) {
+        logger.debug('fetchLastRebalanceEvent: No Rebalanced events found after scanning', {
+          pagesScanned: MAX_PAGES,
+          blocksScanned: (CHUNK_SIZE * BigInt(MAX_PAGES)).toString(),
+          reachedEarliestBlock
+        });
+        const storedTime = localStorage.getItem(`lastRebalance_${poolId}`);
+        if (storedTime) {
+          setLastRebalanceTime(new Date(storedTime));
+          setRebalanceOutOfRange(false);
+        } else if (reachedEarliestBlock) {
+          setLastRebalanceTime(null);
+          setRebalanceOutOfRange(false);
+        } else {
+          setLastRebalanceTime(null);
+          setRebalanceOutOfRange(true);
+        }
       }
 
     } catch (error) {
       logger.error('Error fetching rebalance events:', error instanceof Error ? error : undefined);
       // Don't set to null on error, keep existing value
     } finally {
+      isFetchingRebalanceRef.current = false;
       setIsFetchingRebalanceEvents(false);
     }
-  }, [poolId, walletClient]);
+  }, [poolId, pool?.chainId, walletClient]);
 
   // Fetch gas data
   useEffect(() => {
@@ -840,14 +959,13 @@ export default function InteractionClient() {
     }
   }, [poolId]);
 
-  // Fetch last rebalance event on mount and when pool changes
+  // Fetch last rebalance event on mount and when pool/wallet changes.
+  // The function itself handles the case where chain is not yet determined.
   useEffect(() => {
-    logger.debug('Initial fetch effect triggered:', { poolId, walletClient: !!walletClient });
-    if (poolId && walletClient) {
-      logger.debug('Calling fetchLastRebalanceEvent from initial effect');
+    if (poolId) {
       fetchLastRebalanceEvent();
     }
-  }, [poolId, walletClient, fetchLastRebalanceEvent]);
+  }, [poolId, fetchLastRebalanceEvent]);
 
   const handlePoll = useCallback(async () => {
     if (!pool?.id?.id || loading) return;
@@ -860,8 +978,8 @@ export default function InteractionClient() {
     }
   }, [pool?.id?.id, loading, refetch]);
 
-  const { writeContract, isPending, data: rebalanceHash } = useWriteContract();
-  const { isLoading: isConfirming, isSuccess: isRebalanceConfirmed } = useWaitForTransactionReceipt({ hash: rebalanceHash });
+  const { writeContractAsync, isPending, data: rebalanceHash } = useWriteContract();
+  const { isLoading: isConfirming, isSuccess: isRebalanceConfirmed, data: rebalanceReceipt } = useWaitForTransactionReceipt({ hash: rebalanceHash });
   const isTransactionPending = isPending || isConfirming;
 
   const handleDistribute = async () => {
@@ -870,32 +988,30 @@ export default function InteractionClient() {
       return;
     }
 
+    const loadingToast = toast.loading("Rebalancing pool...");
     try {
       setIsDistributeLoading(true);
       setDistributeError("");
 
-      // Store the rebalance time immediately when called
-      const rebalanceCallTime = new Date();
-      setLastRebalanceTime(rebalanceCallTime);
-      localStorage.setItem(`lastRebalance_${poolId}`, rebalanceCallTime.toISOString());
-      logger.debug('Stored rebalance time in localStorage:', { rebalanceTime: rebalanceCallTime.toLocaleString() });
-
-      const loadingToast = toast.loading("Rebalancing pool...");
-      await writeContract({
+      await writeContractAsync({
         address: poolId,
         abi: PredictionPoolABI,
         functionName: 'rebalance',
       });
       toast.dismiss(loadingToast);
+      // Loading state cleared in confirmation useEffect once tx is confirmed
     } catch (err: unknown) {
+      toast.dismiss(loadingToast);
       logger.error('Rebalance error:', err instanceof Error ? err : undefined);
       let errorMessage = 'Failed to rebalance pool';
-      if ((err as Error).message.includes("user rejected transaction")) {
-        errorMessage = "Transaction rejected";
-      } else if ((err as Error).message.includes("insufficient funds")) {
+      if ((err as Error & { code?: number }).code === 4001
+          || (err as Error).message?.toLowerCase().includes("user rejected")
+          || (err as Error).message?.toLowerCase().includes("rejected transaction")) {
+        errorMessage = "Transaction cancelled";
+      } else if ((err as Error).message?.includes("insufficient funds")) {
         errorMessage = "Insufficient funds";
       }
-      setDistributeError(errorMessage);
+      toast.error(errorMessage);
       setIsDistributeLoading(false);
     }
   };
@@ -1060,17 +1176,20 @@ export default function InteractionClient() {
       const currentTime = new Date();
       setLastRebalanceTime(currentTime);
       localStorage.setItem(`lastRebalance_${poolId}`, currentTime.toISOString());
+      // Also cache the confirmed block number so the next page load uses the fast path
+      if (rebalanceReceipt?.blockNumber) {
+        localStorage.setItem(`lastRebalanceBlock_${poolId}`, rebalanceReceipt.blockNumber.toString());
+      }
       logger.debug('Updated last rebalance time to current time:', { rebalanceTime: currentTime.toLocaleString() });
 
-      handlePoll();
+      // Refetch pool data directly to ensure UI reflects new state, with a small delay for blockchain propagation
+      setTimeout(async () => {
+        await refetch?.();
+        logger.debug('Pool data refreshed after rebalance confirmation');
+      }, 1000);
 
-      // Also fetch from blockchain to verify (but don't override if it fails)
-      setTimeout(() => {
-        logger.debug('Fetching rebalance events from blockchain to verify...');
-        fetchLastRebalanceEvent();
-      }, 3000); // Wait 3 seconds for blockchain to update
     }
-  }, [isRebalanceConfirmed, isTransactionPending, handlePoll, fetchLastRebalanceEvent, rebalanceHash, poolId]);
+  }, [isRebalanceConfirmed, isTransactionPending, refetch, rebalanceHash, rebalanceReceipt, poolId]);
 
   useEffect(() => {
     const handleVisibilityChange = () => {
@@ -1175,7 +1294,7 @@ export default function InteractionClient() {
               </div>
               <div className="flex items-center space-x-2 mt-2 text-xs text-neutral-600 dark:text-neutral-400">
                 <span>
-                  Last rebalanced: {isFetchingRebalanceEvents ? 'Loading...' : (lastRebalanceTime ? lastRebalanceTime.toLocaleString() : 'Never')}
+                  Last rebalanced: {(isFetchingRebalanceEvents && !lastRebalanceTime) ? 'Loading...' : (lastRebalanceTime ? lastRebalanceTime.toLocaleString() : (rebalanceOutOfRange ? 'Older than ~2 weeks' : 'Never'))}
                 </span>
                 <TooltipProvider>
                   <Tooltip>
@@ -1360,21 +1479,23 @@ export default function InteractionClient() {
                             className="w-full bg-black hover:bg-gray-800 dark:bg-white dark:hover:bg-gray-200 text-white dark:text-black font-semibold py-2 md:py-3 text-sm md:text-base transition-all duration-200 shadow-lg hover:shadow-xl"
                             onClick={handleDistribute}
                             disabled={
-                              address !== pool?.vault_creator && address !== undefined ||
-                              isDistributeLoading
+                              !isConnected ||
+                              !address ||
+                              isDistributeLoading ||
+                              isTransactionPending
                             }
                           >
-                            {isDistributeLoading && (
+                            {(isDistributeLoading || isTransactionPending) && (
                               <RefreshCw className="w-4 h-4 animate-spin mr-2" />
                             )}
                             Rebalance Pool
                           </Button>
                         </div>
                       </TooltipTrigger>
-                      {address !== pool?.vault_creator && (
+                      {!isConnected && (
                         <TooltipContent>
                           <p className="bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 p-2 rounded-md text-xs md:text-sm">
-                            This action can only be performed by the pool creator
+                            Connect your wallet to rebalance this pool
                           </p>
                         </TooltipContent>
                       )}
