@@ -339,8 +339,8 @@ function ExploreFatePoolsClient() {
         for (const poolDetails of filteredPools) {
           const tokenDetails = await getTokensForPool(poolDetails.id);
           if (tokenDetails.length === 2) {
-            const bullDetails = tokenDetails.find(t => t.symbol.includes('BULL'));
-            const bearDetails = tokenDetails.find(t => t.symbol.includes('BEAR'));
+            const bullDetails = tokenDetails.find(t => t.tokenType === 'bull');
+            const bearDetails = tokenDetails.find(t => t.tokenType === 'bear');
 
               if (bullDetails && bearDetails) {
                 const bull: Token = {

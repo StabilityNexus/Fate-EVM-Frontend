@@ -1482,12 +1482,14 @@ const EnhancedPoolDataLoader = ({
   userAddress,
   chainId,
   onDataLoad,
+  onSettled,
 }: {
   poolAddress: string;
   index: number;
   userAddress?: string;
   chainId: number;
   onDataLoad: (data: PoolData) => void;
+  onSettled?: () => void;
 }) => {
   // Initialize storage hook for caching
   const storage = useFatePoolsStorage();
@@ -1747,10 +1749,11 @@ const EnhancedPoolDataLoader = ({
         currentPrice: poolData.currentPrice
       });
       onDataLoad(poolData);
+      onSettled?.();
     };
 
     processPoolData();
-  }, [poolBasicData, tokenData, reserveData, userBalanceData, underlyingOracleData, feeData, poolAddress, onDataLoad, userAddress, chainId, index, baseToken, bearTokenAddress, bullTokenAddress, currentPrice, oracleAddress, poolName, previousPrice, storage]);
+  }, [poolBasicData, tokenData, reserveData, userBalanceData, underlyingOracleData, feeData, poolAddress, onDataLoad, onSettled, userAddress, chainId, index, baseToken, bearTokenAddress, bullTokenAddress, currentPrice, oracleAddress, poolName, previousPrice, storage]);
 
   return null;
 };
@@ -1762,9 +1765,17 @@ const BalanceFilteredPoolLoader: React.FC<{
   chainId: number;
   onDataLoad: (data: PoolData) => void;
   onFilterComplete?: (count: number) => void;
-}> = ({ pools, userAddress, chainId, onDataLoad, onFilterComplete }) => {
+  onAllSettled?: () => void;
+}> = ({ pools, userAddress, chainId, onDataLoad, onFilterComplete, onAllSettled }) => {
   const [filteredPools, setFilteredPools] = useState<string[]>([]);
   const [isFiltering, setIsFiltering] = useState(true);
+  const [settledCount, setSettledCount] = useState(0);
+
+  useEffect(() => {
+    if (!isFiltering && filteredPools.length > 0 && settledCount === filteredPools.length) {
+      onAllSettled?.();
+    }
+  }, [settledCount, filteredPools.length, isFiltering, onAllSettled]);
   useEffect(() => {
     const filterPools = async () => {
       if (!userAddress || pools.length === 0) {
@@ -1853,6 +1864,7 @@ const BalanceFilteredPoolLoader: React.FC<{
           userAddress={userAddress}
           chainId={chainId}
           onDataLoad={onDataLoad}
+          onSettled={() => setSettledCount(c => c + 1)}
         />
       ))}
     </>
@@ -1869,6 +1881,7 @@ export default function PortfolioPage() {
   const [isBalanceCheckDone, setIsBalanceCheckDone] = useState(false);
   const [filteredPoolCount, setFilteredPoolCount] = useState<number | null>(null);
   const [isLoadingFromBlockchain, setIsLoadingFromBlockchain] = useState(false);
+  const [isAllLoadersSettled, setIsAllLoadersSettled] = useState(false);
 
   // IndexedDB storage hook (for portfolio cache only)
   const {
@@ -2237,8 +2250,10 @@ export default function PortfolioPage() {
         }
         console.log("Portfolio data and pool details cached successfully");
       }
+      setIsLoadingFromBlockchain(false);
     } catch (error) {
       console.error("Failed to save portfolio data to cache:", error);
+      setIsLoadingFromBlockchain(false);
     }
   }, [address, chainId, isDBInitialized, indexedDB, savePortfolioCache]);
 
@@ -2415,6 +2430,7 @@ export default function PortfolioPage() {
     setPoolsData([]);
     setIsBalanceCheckDone(false);
     setFilteredPoolCount(null);
+    setIsAllLoadersSettled(false);
   }, [address, chainId]);
 
   if (!isConnected) {
@@ -2454,6 +2470,7 @@ export default function PortfolioPage() {
             chainId={chainId!}
             onDataLoad={handlePoolDataLoad}
             onFilterComplete={handleFilterComplete}
+            onAllSettled={() => setIsAllLoadersSettled(true)}
           />
         )}
 
@@ -2493,7 +2510,7 @@ export default function PortfolioPage() {
                 trend={totalReturnPercentage >= 0 ? "up" : "down"}
               />
             </>
-          ) : isPoolsQueryPending || (availablePools.length > 0 && !isBalanceCheckDone) || (isBalanceCheckDone && filteredPoolCount !== null && filteredPoolCount > 0 && poolsData.length === 0) ? (
+          ) : isPoolsQueryPending || (availablePools.length > 0 && !isBalanceCheckDone) || (isBalanceCheckDone && filteredPoolCount !== null && filteredPoolCount > 0 && !isAllLoadersSettled) ? (
             // Skeleton while factory query, balance filtering, or data loading is in progress
             <>
               <div className="bg-white dark:bg-neutral-900 border border-gray-200 dark:border-neutral-700 rounded-xl p-6 shadow-sm">
