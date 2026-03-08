@@ -152,30 +152,26 @@ const calculateTokenMetricsWithEvents = async (
   try {
     let transactions: any[] = [];
     let minBlock = 0;
-    // 1. Load cached transactions from IndexedDB
-    try {
-      const allTransactions = await storage.getPortfolioTransactions(userAddress, chainId as SupportedChainId);
+    // 1. Load cached transactions from IndexedDB (safeReadOperation returns [] on failure, never throws)
+    const allTransactions = await storage.getPortfolioTransactions(userAddress, chainId as SupportedChainId);
 
-      // Filter for this specific pool and token type
-      transactions = allTransactions
-        .filter((tx: PortfolioTransaction) => tx.poolAddress === poolAddress && tx.tokenType === type)
-        .map(t => ({
-          type: t.action,  // Map 'action' to 'type' for consistency
-          blockNumber: BigInt(t.blockNumber),
-          amountAsset: t.value,
-          amountCoin: t.amount,
-          price: t.price,
-          transactionHash: t.transactionHash,
-          feePaid: t.fees,
-          timestamp: t.timestamp
-        }));
-      // Get the highest block number from cached transactions
-      if (transactions.length > 0) {
-        minBlock = Math.max(...transactions.map(t => Number(t.blockNumber)));
-        console.debug(`Loaded ${transactions.length} cached transactions for ${type}, highest block: ${minBlock}`);
-      }
-    } catch (e) {
-      console.warn('Failed to load cached transactions:', e);
+    // Filter for this specific pool and token type
+    transactions = allTransactions
+      .filter((tx: PortfolioTransaction) => tx.poolAddress === poolAddress && tx.tokenType === type)
+      .map(t => ({
+        type: t.action,  // Map 'action' to 'type' for consistency
+        blockNumber: BigInt(t.blockNumber),
+        amountAsset: t.value,
+        amountCoin: t.amount,
+        price: t.price,
+        transactionHash: t.transactionHash,
+        feePaid: t.fees,
+        timestamp: t.timestamp
+      }));
+    // Get the highest block number from cached transactions
+    if (transactions.length > 0) {
+      minBlock = Math.max(...transactions.map(t => Number(t.blockNumber)));
+      console.debug(`Loaded ${transactions.length} cached transactions for ${type}, highest block: ${minBlock}`);
     }
     // 2. Fetch NEW transactions from blockchain (incremental)
     // Use buffer to avoid missing transactions at block boundaries (reorgs, timing issues)
