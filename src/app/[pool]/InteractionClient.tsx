@@ -34,10 +34,7 @@ import { Info } from 'lucide-react';
 import { logger } from "@/lib/logger";
 import { getChainConfig } from "@/utils/chainConfig";
 
-// Utility function for safe BigInt subtraction to prevent underflow
-const safeBigIntSubtract = (a: bigint, b: bigint): bigint => {
-  return a > b ? a - b : BigInt(0);
-};
+
 
 // EVM-based pool hook
 const usePool = (poolId: Address | undefined, isConnected: boolean) => {
