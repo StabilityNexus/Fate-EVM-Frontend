@@ -145,26 +145,39 @@ export const useIndexedDB = (): UseIndexedDBReturn => {
     }
   }, [canOperate]);
 
+  // Safe wrapper for reads — returns fallback instead of throwing when DB unavailable
+  const safeReadOperation = useCallback(async <T>(operation: () => Promise<T>, fallback: T): Promise<T> => {
+    if (!canOperate()) {
+      return fallback;
+    }
+    try {
+      return await operation();
+    } catch (err) {
+      console.warn('IndexedDB read operation failed, using fallback:', err);
+      return fallback;
+    }
+  }, [canOperate]);
+
   // Pool operations
   const savePoolDetails = useCallback(async (pool: Omit<PoolDetails, 'createdAt' | 'updatedAt'>) => {
     return safeOperation(() => managerRef.current!.savePoolDetails(pool));
   }, [safeOperation]);
 
   const getPoolDetails = useCallback(async (poolId: string) => {
-    return safeOperation(() => managerRef.current!.getPoolDetails(poolId));
-  }, [safeOperation]);
+    return safeReadOperation(() => managerRef.current!.getPoolDetails(poolId), null);
+  }, [safeReadOperation]);
 
   const getAllPoolsForChain = useCallback(async (chainId: SupportedChainId) => {
-    return safeOperation(() => managerRef.current!.getAllPoolsForChain(chainId));
-  }, [safeOperation]);
+    return safeReadOperation(() => managerRef.current!.getAllPoolsForChain(chainId), []);
+  }, [safeReadOperation]);
 
   const getAllPools = useCallback(async () => {
-    return safeOperation(() => managerRef.current!.getAllPools());
-  }, [safeOperation]);
+    return safeReadOperation(() => managerRef.current!.getAllPools(), []);
+  }, [safeReadOperation]);
 
   const getPoolsByCreator = useCallback(async (creator: string, chainId?: SupportedChainId) => {
-    return safeOperation(() => managerRef.current!.getPoolsByCreator(creator, chainId));
-  }, [safeOperation]);
+    return safeReadOperation(() => managerRef.current!.getPoolsByCreator(creator, chainId), []);
+  }, [safeReadOperation]);
 
   const batchSavePools = useCallback(async (pools: Omit<PoolDetails, 'createdAt' | 'updatedAt'>[]) => {
     return safeOperation(() => managerRef.current!.batchSavePools(pools));
@@ -176,12 +189,12 @@ export const useIndexedDB = (): UseIndexedDBReturn => {
   }, [safeOperation]);
 
   const getTokenDetails = useCallback(async (tokenId: string) => {
-    return safeOperation(() => managerRef.current!.getTokenDetails(tokenId));
-  }, [safeOperation]);
+    return safeReadOperation(() => managerRef.current!.getTokenDetails(tokenId), null);
+  }, [safeReadOperation]);
 
   const getTokensForPool = useCallback(async (poolAddress: string) => {
-    return safeOperation(() => managerRef.current!.getTokensForPool(poolAddress));
-  }, [safeOperation]);
+    return safeReadOperation(() => managerRef.current!.getTokensForPool(poolAddress), []);
+  }, [safeReadOperation]);
 
   const batchSaveTokens = useCallback(async (tokens: Omit<TokenDetails, 'createdAt' | 'updatedAt'>[]) => {
     return safeOperation(() => managerRef.current!.batchSaveTokens(tokens));
@@ -193,12 +206,12 @@ export const useIndexedDB = (): UseIndexedDBReturn => {
   }, [safeOperation]);
 
   const getChainStatus = useCallback(async (chainId: SupportedChainId) => {
-    return safeOperation(() => managerRef.current!.getChainStatus(chainId));
-  }, [safeOperation]);
+    return safeReadOperation(() => managerRef.current!.getChainStatus(chainId), null);
+  }, [safeReadOperation]);
 
   const getAllChainStatuses = useCallback(async () => {
-    return safeOperation(() => managerRef.current!.getAllChainStatuses());
-  }, [safeOperation]);
+    return safeReadOperation(() => managerRef.current!.getAllChainStatuses(), []);
+  }, [safeReadOperation]);
 
   // Cache operations
   const saveCache = useCallback(async (key: string, data: unknown, ttlMinutes?: number, chainId?: SupportedChainId) => {
@@ -206,8 +219,8 @@ export const useIndexedDB = (): UseIndexedDBReturn => {
   }, [safeOperation]);
 
   const getCache = useCallback(async (key: string) => {
-    return safeOperation(() => managerRef.current!.getCache(key));
-  }, [safeOperation]);
+    return safeReadOperation(() => managerRef.current!.getCache(key), null);
+  }, [safeReadOperation]);
 
   const deleteCache = useCallback(async (key: string) => {
     return safeOperation(() => managerRef.current!.deleteCache(key));
@@ -223,24 +236,24 @@ export const useIndexedDB = (): UseIndexedDBReturn => {
   }, [safeOperation]);
 
   const getPortfolioPositions = useCallback(async (userAddress: string, chainId?: SupportedChainId) => {
-    return safeOperation(() => managerRef.current!.getPortfolioPositions(userAddress, chainId));
-  }, [safeOperation]);
+    return safeReadOperation(() => managerRef.current!.getPortfolioPositions(userAddress, chainId), []);
+  }, [safeReadOperation]);
 
   const savePortfolioTransaction = useCallback(async (transaction: Omit<PortfolioTransaction, 'timestamp'>) => {
     return safeOperation(() => managerRef.current!.savePortfolioTransaction(transaction));
   }, [safeOperation]);
 
   const getPortfolioTransactions = useCallback(async (userAddress: string, chainId?: SupportedChainId) => {
-    return safeOperation(() => managerRef.current!.getPortfolioTransactions(userAddress, chainId));
-  }, [safeOperation]);
+    return safeReadOperation(() => managerRef.current!.getPortfolioTransactions(userAddress, chainId), []);
+  }, [safeReadOperation]);
 
   const savePortfolioCache = useCallback(async (cache: Omit<PortfolioCache, 'lastUpdated'>) => {
     return safeOperation(() => managerRef.current!.savePortfolioCache(cache));
   }, [safeOperation]);
 
   const getPortfolioCache = useCallback(async (userAddress: string, chainId: SupportedChainId) => {
-    return safeOperation(() => managerRef.current!.getPortfolioCache(userAddress, chainId));
-  }, [safeOperation]);
+    return safeReadOperation(() => managerRef.current!.getPortfolioCache(userAddress, chainId), null);
+  }, [safeReadOperation]);
 
   const deletePortfolioCache = useCallback(async (userAddress: string, chainId: SupportedChainId) => {
     return safeOperation(() => managerRef.current!.deletePortfolioCache(userAddress, chainId));
@@ -264,8 +277,8 @@ export const useIndexedDB = (): UseIndexedDBReturn => {
   }, [safeOperation]);
 
   const isHealthy = useCallback(async () => {
-    return safeOperation(() => managerRef.current!.isHealthy());
-  }, [safeOperation]);
+    return safeReadOperation(() => managerRef.current!.isHealthy(), false);
+  }, [safeReadOperation]);
 
   return {
     // State

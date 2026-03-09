@@ -329,18 +329,18 @@ function ExploreFatePoolsClient() {
     // Fallback to cached data when offline or factory fetch fails
     if (isInitialized) {
       logger.debug(`Falling back to cached data for chain ${chainId}`);
-      try {
-        const cachedPools = await getAllPools();
-        const filteredPools = cachedPools.filter(p => p.chainId === chainId);
-        updateChainState(chainId, { poolCount: filteredPools.length, loading: false });
-        
-        const convertedPools: Pool[] = [];
+      // safeReadOperation-backed calls return [] on failure, never throw
+      const cachedPools = await getAllPools();
+      const filteredPools = cachedPools.filter(p => p.chainId === chainId);
+      updateChainState(chainId, { poolCount: filteredPools.length, loading: false });
+
+      const convertedPools: Pool[] = [];
+      if (filteredPools.length > 0) {
         for (const poolDetails of filteredPools) {
-          try {
-            const tokenDetails = await getTokensForPool(poolDetails.id);
-            if (tokenDetails.length === 2) {
-              const bullDetails = tokenDetails.find(t => t.symbol.includes('BULL'));
-              const bearDetails = tokenDetails.find(t => t.symbol.includes('BEAR'));
+          const tokenDetails = await getTokensForPool(poolDetails.id);
+          if (tokenDetails.length === 2) {
+            const bullDetails = tokenDetails.find(t => t.tokenType === 'bull');
+            const bearDetails = tokenDetails.find(t => t.tokenType === 'bear');
 
               if (bullDetails && bearDetails) {
                 const bull: Token = {
@@ -393,16 +393,9 @@ function ExploreFatePoolsClient() {
                 });
               }
             }
-          } catch (tokenError) {
-            logger.error(`Failed to load tokens for pool ${poolDetails.id} from cache:`, tokenError instanceof Error ? tokenError : undefined);
           }
         }
-        return convertedPools;
-      } catch (cacheError) {
-        logger.error(`Failed to load cached pools for chain ${chainId}:`, cacheError instanceof Error ? cacheError : undefined);
-        updateChainState(chainId, { loading: false, error: `Failed to load cached data` });
-        return [];
-      }
+      return convertedPools;
     }
     
     updateChainState(chainId, { loading: false, error: `Unable to fetch pools` });
