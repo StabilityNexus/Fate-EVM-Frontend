@@ -17,23 +17,35 @@ const AsyncStorage: AsyncStorageLike = {
   async getItem(key) {
     const storage = getStorage();
     if (storage) {
-      return storage.getItem(key);
+      try {
+        return storage.getItem(key);
+      } catch {
+        return memoryStore.get(key) ?? null;
+      }
     }
     return memoryStore.get(key) ?? null;
   },
   async setItem(key, value) {
     const storage = getStorage();
     if (storage) {
-      storage.setItem(key, value);
-      return;
+      try {
+        storage.setItem(key, value);
+        return;
+      } catch {
+        // Fall through to memory store
+      }
     }
     memoryStore.set(key, value);
   },
   async removeItem(key) {
     const storage = getStorage();
     if (storage) {
-      storage.removeItem(key);
-      return;
+      try {
+        storage.removeItem(key);
+        return;
+      } catch {
+        // Fall through to memory store
+      }
     }
     memoryStore.delete(key);
   },

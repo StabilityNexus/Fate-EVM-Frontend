@@ -7,12 +7,14 @@ export const metadata: Metadata = {
   description:
     "View pool details, pricing, and trade bull and bear positions on Fate Protocol with real-time oracle updates, liquidity metrics, and transparent on-chain execution.",
   alternates: {
+    // TODO: Replace with a dynamic per-pool canonical URL once generateMetadata() is implemented.
     canonical: "/pool",
   },
   openGraph: {
     title: "Pool",
     description:
       "View pool details, pricing, and trade bull and bear positions on Fate Protocol with real-time oracle updates, liquidity metrics, and transparent on-chain execution.",
+    // TODO: Replace with a dynamic per-pool URL once generateMetadata() is implemented.
     url: "/pool",
     type: "website",
     images: [
