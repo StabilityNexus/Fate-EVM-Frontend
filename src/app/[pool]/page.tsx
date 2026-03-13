@@ -1,5 +1,36 @@
+import type { Metadata } from "next";
 import { Suspense } from "react";
 import InteractionClient from "./InteractionClient";
+
+export const metadata: Metadata = {
+  title: "Pool",
+  description:
+    "View pool details, pricing, and trade bull and bear positions on Fate Protocol with real-time oracle updates, liquidity metrics, and transparent on-chain execution.",
+  alternates: {
+    canonical: "/pool",
+  },
+  openGraph: {
+    title: "Pool",
+    description:
+      "View pool details, pricing, and trade bull and bear positions on Fate Protocol with real-time oracle updates, liquidity metrics, and transparent on-chain execution.",
+    url: "/pool",
+    type: "website",
+    images: [
+      {
+        url: "https://evm.fate.stability.nexus/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "Fate Protocol - Decentralized Prediction Markets",
+      },
+    ],
+  },
+  twitter: {
+    title: "Pool",
+    description:
+      "View pool details, pricing, and trade bull and bear positions on Fate Protocol with real-time oracle updates, liquidity metrics, and transparent on-chain execution.",
+    images: ["https://evm.fate.stability.nexus/og-image.png"],
+  },
+};
 
 export async function generateStaticParams() {
   return [
