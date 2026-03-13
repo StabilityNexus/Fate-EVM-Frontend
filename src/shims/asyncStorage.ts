@@ -7,8 +7,12 @@ type AsyncStorageLike = {
 const memoryStore = new Map<string, string>();
 
 const getStorage = () => {
-  if (typeof window !== "undefined" && window.localStorage) {
-    return window.localStorage;
+  try {
+    if (typeof window !== "undefined" && window.localStorage) {
+      return window.localStorage;
+    }
+  } catch {
+    return null;
   }
   return null;
 };
