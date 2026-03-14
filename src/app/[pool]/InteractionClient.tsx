@@ -25,6 +25,9 @@ import { Loading } from '@/components/ui/loading';
 import { formatNumber, formatNumberDown } from '@/utils/format';
 import { validateTransactionInput } from '@/lib/validation';
 import { withErrorHandling, createTransactionError } from '@/lib/errorHandler';
+import { useEthWethBalances } from '@/hooks/useEthWethBalances';
+import { useWrapEthToWeth } from '@/hooks/useWrapEthToWeth';
+import { getWethConfig } from '@/lib/weth';
 
 // Note: ChainlinkAdapterFactories is imported but can be used for future oracle management features
 import TradingViewWidget from '@/components/ui/TradingViewWidget';
@@ -245,7 +248,15 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
   supply: number;
   tokenAddress: string;
 }) {
-  const { address } = useAccount();
+  const { address, chain } = useAccount();
+  const chainId = chain?.id ?? 11155111;
+  const wethCfg = useMemo(() => {
+    try {
+      return getWethConfig(chainId);
+    } catch {
+      return null;
+    }
+  }, [chainId]);
   const { writeContract, data: hash, isPending: isTransactionPending } = useWriteContract();
   const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({ hash });
   const isTransacting = isTransactionPending || isConfirming;
@@ -255,6 +266,13 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
   const [baseTokenBalance, setBaseTokenBalance] = useState<bigint>(BigInt(0));
   const [allowance, setAllowance] = useState<bigint>(BigInt(0));
   const [pendingApproval, setPendingApproval] = useState<{ amount: string; type: 'buy' | 'sell' } | null>(null);
+
+  const { ethBalance, wethBalance, isLoading: balancesLoading, refetch: refetchBalances } =
+    useEthWethBalances({ chainId, address, enabled: !!address && poolData?.asset_address?.toLowerCase() === wethCfg?.address.toLowerCase() });
+    
+  const { wrap, status: wrapStatus } = useWrapEthToWeth(chainId, () => {
+    refetchBalances();
+  });
 
   // Get base token balance for MAX calculation
   const { data: baseTokenBalanceData } = useReadContracts({
@@ -374,6 +392,25 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
 
     await handleBuyTransaction(buyAmount);
   }, { functionName: 'handleBuy' });
+
+  // Wrap Logic
+  const amountWei = useMemo(() => {
+    try {
+      return buyAmount ? parseUnits(buyAmount, 18) : BigInt(0);
+    } catch {
+      return BigInt(0); // Invalid number string
+    }
+  }, [buyAmount]);
+
+  const isWethPool = poolData?.asset_address?.toLowerCase() === wethCfg?.address.toLowerCase();
+  
+  // Actually use the hook state *only* if it's a WETH pool. Otherwise use baseTokenBalance.
+  const activeBaseBalance = isWethPool ? wethBalance : baseTokenBalance;
+  const hasEnoughWeth = activeBaseBalance >= amountWei;
+  const missingWeth = hasEnoughWeth ? BigInt(0) : amountWei - activeBaseBalance;
+  const gasBuffer = parseUnits('0.002', 18);
+  const canWrap = isWethPool && !hasEnoughWeth && ethBalance > missingWeth + gasBuffer;
+  const disableBuy = !buyAmount || !connected || isTransacting || balancesLoading || (!hasEnoughWeth && isWethPool);
 
   const handleSell = async () => {
     if (!address || !connected) {
@@ -515,15 +552,34 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
                 />
                 <div
                   className="mt-1 text-xs text-gray-500 dark:text-gray-400 cursor-pointer"
-                  onClick={() => setBuyAmount(formatNumberDown(Number(formatUnits(baseTokenBalance, 18)), 4))}
+                  onClick={() => setBuyAmount(formatNumberDown(Number(formatUnits(activeBaseBalance, 18)), 4))}
                 >
-                  Max: {formatNumberDown(Number(formatUnits(baseTokenBalance, 18)), 4)} WETH
+                  Max: {formatNumberDown(Number(formatUnits(activeBaseBalance, 18)), 4)} {isWethPool ? 'WETH' : 'Tokens'}
                 </div>
               </div>
+
+              {!hasEnoughWeth && canWrap && (
+                <div className="rounded border border-blue-500 bg-blue-50 dark:bg-blue-950/40 px-3 py-2 text-xs flex flex-col gap-2">
+                  <p className="text-blue-800 dark:text-blue-200">
+                    You want {buyAmount} WETH but only have {formatNumber(Number(formatUnits(wethBalance, 18)), 4)} WETH.
+                    You have {formatNumber(Number(formatUnits(ethBalance, 18)), 4)} ETH available.
+                  </p>
+                  <Button
+                    onClick={() => wrap(missingWeth)}
+                    disabled={wrapStatus === 'pending'}
+                    variant="outline"
+                    className="w-full border-blue-500 text-blue-600 hover:bg-blue-100 dark:hover:bg-blue-900"
+                    size="sm"
+                  >
+                    {wrapStatus === 'pending' ? 'Wrapping...' : 'Wrap ETH to WETH'}
+                  </Button>
+                </div>
+              )}
+
               <Button
                 onClick={() => handleBuy()}
                 className={`w-full ${buttonColor} text-white`}
-                disabled={!buyAmount || !connected || isTransacting}
+                disabled={disableBuy}
               >
                 {isTransacting ? 'Processing...' : `Buy ${symbol} Tokens`}
               </Button>
