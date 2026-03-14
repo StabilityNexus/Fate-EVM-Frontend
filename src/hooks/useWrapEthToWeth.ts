@@ -20,7 +20,19 @@ export function useWrapEthToWeth(chainId: number, onSuccess?: () => void) {
 
   async function wrap(amountWei: bigint) {
     if (!wethAddress) {
+      setStatus('error');
       toast.error("WETH wrapping not supported on this chain");
+      return;
+    }
+
+    if (amountWei <= BigInt(0)) {
+      setStatus('error');
+      toast.error("Amount must be greater than zero");
+      return;
+    }
+
+    if (status === 'pending') {
+      toast.info("A wrapping transaction is already in progress");
       return;
     }
 
@@ -38,16 +50,36 @@ export function useWrapEthToWeth(chainId: number, onSuccess?: () => void) {
       toast.dismiss(loadingToast);
       loadingToast = toast.loading("Wrapping ETH to WETH...");
 
-      await waitForTransactionReceipt(config, { hash, chainId });
+      const receipt = await waitForTransactionReceipt(config, { hash, chainId });
+      if (receipt.status !== 'success') {
+        throw new Error('Wrap transaction reverted');
+      }
 
       setStatus('success');
       toast.success("Successfully wrapped ETH to WETH");
-      onSuccess?.();
+      try {
+        onSuccess?.();
+      } catch (callbackError) {
+        logger.error('wrap-eth-to-weth-success-callback-failed', callbackError instanceof Error ? callbackError : undefined);
+      }
     } catch (e) {
       setStatus('error');
       logger.error('wrap-eth-to-weth-failed', e instanceof Error ? e : undefined);
-      toast.error("Failed to wrap ETH");
-      throw e;
+      
+      let errorMessage = "Failed to wrap ETH";
+      if ((e as { code?: number })?.code === 4001) {
+        errorMessage = "Transaction rejected by user";
+      } else if (e instanceof Error) {
+        const lowerMessage = e.message.toLowerCase();
+        if (lowerMessage.includes("user rejected") || lowerMessage.includes("rejected transaction")) {
+          errorMessage = "Transaction rejected by user";
+        } else if (lowerMessage.includes("insufficient funds")) {
+          errorMessage = "Insufficient funds";
+        } else if (lowerMessage.includes("revert")) {
+          errorMessage = "Transaction failed on-chain";
+        }
+      }
+      toast.error(errorMessage);
     } finally {
       if (loadingToast !== undefined) {
         toast.dismiss(loadingToast);
