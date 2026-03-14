@@ -22,9 +22,12 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Loading } from '@/components/ui/loading';
-import { formatNumber, formatNumberDown } from '@/utils/format';
+import { formatNumber } from '@/utils/format';
 import { validateTransactionInput } from '@/lib/validation';
 import { withErrorHandling, createTransactionError } from '@/lib/errorHandler';
+import { useEthWethBalances } from '@/hooks/useEthWethBalances';
+import { useWrapEthToWeth } from '@/hooks/useWrapEthToWeth';
+import { getWethConfig } from '@/lib/weth';
 
 // Note: ChainlinkAdapterFactories is imported but can be used for future oracle management features
 import TradingViewWidget from '@/components/ui/TradingViewWidget';
@@ -64,14 +67,14 @@ const usePool = (poolId: Address | undefined, isConnected: boolean) => {
   const [error, setError] = useState<string | null>(null);
 
   const { data: poolData, refetch: refetchPool } = useReadContracts({
-    contracts: [
+    contracts: poolId ? [
       { address: poolId, abi: PredictionPoolABI, functionName: 'baseToken' },
       { address: poolId, abi: PredictionPoolABI, functionName: 'bullCoin' },
       { address: poolId, abi: PredictionPoolABI, functionName: 'bearCoin' },
       { address: poolId, abi: PredictionPoolABI, functionName: 'previousPrice' },
       { address: poolId, abi: PredictionPoolABI, functionName: 'oracle' },
       { address: poolId, abi: PredictionPoolABI, functionName: 'poolName' },
-    ],
+    ] : [],
     query: {
       enabled: !!poolId,
     }
@@ -137,12 +140,20 @@ const usePool = (poolId: Address | undefined, isConnected: boolean) => {
 
 
   useEffect(() => {
-    if (!poolId || !tokenData) {
+    if (!poolId) {
+      setPool(null);
+      setError('Invalid or missing pool address');
+      setLoading(false);
+      return;
+    }
+
+    if (!tokenData) {
       setLoading(true);
       return;
     }
 
     try {
+      setError(null);
       const bullName = tokenData?.[0]?.result as string || 'Bull Token';
       const bullSymbol = tokenData?.[1]?.result as string || 'BULL';
       const bullSupply = tokenData?.[2]?.result as bigint || BigInt(0);
@@ -213,6 +224,42 @@ const usePool = (poolId: Address | undefined, isConnected: boolean) => {
 
 const formatValue = (value: number) => `${formatNumber(value, 3)} WETH`;
 
+const stripTrailingZeros = (value: string): string => {
+  if (!value.includes('.')) return value;
+  return value.replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1');
+};
+
+const truncateDecimalString = (value: string, maxDecimals: number): string => {
+  const trimmed = value.trim();
+  if (!trimmed || !/^\d*(\.\d*)?$/.test(trimmed)) return '';
+
+  const [integerPartRaw = '0', fractionalPartRaw = ''] = trimmed.split('.');
+  const integerPart = integerPartRaw.replace(/^0+(?=\d)/, '') || '0';
+  const fractionalPart = fractionalPartRaw.slice(0, maxDecimals).replace(/0+$/, '');
+
+  return fractionalPart ? `${integerPart}.${fractionalPart}` : integerPart;
+};
+
+const normalizeAmountInput = (value: string): string => {
+  const trimmed = value.trim();
+  if (!trimmed || !/^\d*(\.\d*)?$/.test(trimmed)) return '';
+
+  // Keep comparison exact in wei while capping user input at token precision.
+  return stripTrailingZeros(truncateDecimalString(trimmed, 18));
+};
+
+const toDisplayAmount = (value: bigint, tokenDecimals = 18, displayDecimals = 4): string => {
+  return truncateDecimalString(formatUnits(value, tokenDecimals), displayDecimals);
+};
+
+const toDisplayAmountWithMin = (value: bigint, tokenDecimals = 18, displayDecimals = 6): string => {
+  const display = toDisplayAmount(value, tokenDecimals, displayDecimals);
+  if (value > BigInt(0) && display === '0') {
+    return `< 0.${'0'.repeat(Math.max(displayDecimals - 1, 0))}1`;
+  }
+  return display;
+};
+
 
 function VaultSection({ isBull, poolData, userTokens, price, value, symbol, connected, handlePoll, reserve, supply, tokenAddress }: {
   isBull: boolean;
@@ -245,8 +292,16 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
   supply: number;
   tokenAddress: string;
 }) {
-  const { address } = useAccount();
-  const { writeContract, data: hash, isPending: isTransactionPending } = useWriteContract();
+  const { address, chain } = useAccount();
+  const chainId = chain?.id ?? 11155111;
+  const wethCfg = useMemo(() => {
+    try {
+      return getWethConfig(chainId);
+    } catch {
+      return null;
+    }
+  }, [chainId]);
+  const { writeContractAsync, data: hash, isPending: isTransactionPending } = useWriteContract();
   const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({ hash });
   const isTransacting = isTransactionPending || isConfirming;
 
@@ -255,6 +310,13 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
   const [baseTokenBalance, setBaseTokenBalance] = useState<bigint>(BigInt(0));
   const [allowance, setAllowance] = useState<bigint>(BigInt(0));
   const [pendingApproval, setPendingApproval] = useState<{ amount: string; type: 'buy' | 'sell' } | null>(null);
+
+  const { ethBalance, wethBalance, isLoading: balancesLoading, refetch: refetchBalances } =
+    useEthWethBalances({ chainId, address, enabled: !!address && poolData?.asset_address?.toLowerCase() === wethCfg?.address.toLowerCase() });
+    
+  const { wrap, status: wrapStatus } = useWrapEthToWeth(chainId, () => {
+    refetchBalances();
+  });
 
   // Get base token balance for MAX calculation
   const { data: baseTokenBalanceData } = useReadContracts({
@@ -298,7 +360,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
       const amountWei = parseUnits(amount, 18);
 
       loadingToast = toast.loading("Processing buy transaction...");
-      await writeContract({
+      await writeContractAsync({
         address: tokenAddress! as `0x${string}`,
         abi: CoinABI,
         functionName: 'buy',
@@ -317,7 +379,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
         toast.dismiss(loadingToast);
       }
     }
-  }, [tokenAddress, address, writeContract]);
+  }, [tokenAddress, address, writeContractAsync]);
 
   const handleBuy = withErrorHandling(async () => {
     if (!address || !connected) {
@@ -336,8 +398,8 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
     let validatedInput;
     try {
       validatedInput = validateTransactionInput({
-        amount: buyAmount,
-        poolId: poolData?.asset_address as Address,
+        amount: normalizedBuyAmount,
+        poolId: poolData.id.id,
         chainId: poolData?.chainId || 11155111, // Use pool chain or fallback to Sepolia
         userAddress: address
       });
@@ -361,19 +423,46 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
     const currentAllowance = allowance || BigInt(0);
     if (currentAllowance < amountWei) {
       const approvalToast = toast.loading("Approving tokens...");
-      setPendingApproval({ amount: buyAmount, type: 'buy' });
-      await writeContract({
-        address: poolData.asset_address as `0x${string}`,
-        abi: ERC20ABI,
-        functionName: 'approve',
-        args: [tokenAddress, amountWei],
-      });
-      toast.dismiss(approvalToast);
+      try {
+        await writeContractAsync({
+          address: poolData.asset_address as `0x${string}`,
+          abi: ERC20ABI,
+          functionName: 'approve',
+          args: [tokenAddress, amountWei],
+        });
+        setPendingApproval({ amount: validatedInput.amount, type: 'buy' });
+      } catch (approvalError) {
+        setPendingApproval(null);
+        throw approvalError;
+      } finally {
+        toast.dismiss(approvalToast);
+      }
       return;
     }
 
-    await handleBuyTransaction(buyAmount);
+    await handleBuyTransaction(validatedInput.amount);
   }, { functionName: 'handleBuy' });
+
+  // Wrap Logic
+  const normalizedBuyAmount = useMemo(() => normalizeAmountInput(buyAmount), [buyAmount]);
+  const amountWei = useMemo(() => {
+    try {
+      return normalizedBuyAmount ? parseUnits(normalizedBuyAmount, 18) : BigInt(0);
+    } catch {
+      return BigInt(0); // Invalid number string
+    }
+  }, [normalizedBuyAmount]);
+
+  const isWethPool = poolData?.asset_address?.toLowerCase() === wethCfg?.address.toLowerCase();
+  
+  // Actually use the hook state *only* if it's a WETH pool. Otherwise use baseTokenBalance.
+  const activeBaseBalance = isWethPool ? wethBalance : baseTokenBalance;
+  const hasEnoughWeth = activeBaseBalance >= amountWei;
+  const hasValidBuyAmount = amountWei > BigInt(0);
+  const missingWeth = hasEnoughWeth ? BigInt(0) : amountWei - activeBaseBalance;
+  const gasBuffer = parseUnits('0.002', 18);
+  const canWrap = isWethPool && !hasEnoughWeth && ethBalance > missingWeth + gasBuffer;
+  const disableBuy = !hasValidBuyAmount || !connected || isTransacting || balancesLoading || (!hasEnoughWeth && isWethPool);
 
   const handleSell = async () => {
     if (!address || !connected) {
@@ -403,7 +492,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
       }
 
       loadingToast = toast.loading("Processing sell transaction...");
-      await writeContract({
+      await writeContractAsync({
         address: tokenAddress as `0x${string}`,
         abi: CoinABI,
         functionName: 'sell',
@@ -429,9 +518,9 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
     if (isConfirmed && !isTransactionPending) {
       if (pendingApproval && pendingApproval.type === 'buy') {
         setPendingApproval(null);
-        handleBuyTransaction(pendingApproval.amount);
+        void handleBuyTransaction(pendingApproval.amount);
       } else {
-        handlePoll();
+        void handlePoll();
       }
     }
   }, [isConfirmed, isTransactionPending, pendingApproval, handlePoll, handleBuyTransaction, poolData.id.id]);
@@ -515,15 +604,39 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
                 />
                 <div
                   className="mt-1 text-xs text-gray-500 dark:text-gray-400 cursor-pointer"
-                  onClick={() => setBuyAmount(formatNumberDown(Number(formatUnits(baseTokenBalance, 18)), 4))}
+                  onClick={() => setBuyAmount(toDisplayAmount(activeBaseBalance, 18, 4))}
                 >
-                  Max: {formatNumberDown(Number(formatUnits(baseTokenBalance, 18)), 4)} WETH
+                  Max: {toDisplayAmount(activeBaseBalance, 18, 4)} {isWethPool ? 'WETH' : 'Tokens'}
                 </div>
               </div>
+
+              {!hasEnoughWeth && canWrap && (
+                <div className="rounded-md border border-neutral-200 dark:border-neutral-700/60 bg-neutral-50 dark:bg-neutral-800/30 px-3 py-2.5 text-xs flex flex-col gap-2.5 mt-2 transition-all">
+                  <div className="text-neutral-600 dark:text-neutral-400 flex flex-col space-y-1">
+                    <span className="flex justify-between items-center">
+                      <span>Insufficient WETH</span>
+                      <span className="font-semibold text-neutral-900 dark:text-white">Need {toDisplayAmountWithMin(missingWeth, 18, 6)} WETH</span>
+                    </span>
+                    <span className="flex justify-between items-center text-[11px]">
+                      <span>ETH Available</span>
+                      <span className="font-medium text-neutral-900 dark:text-neutral-300">{toDisplayAmount(ethBalance, 18, 6)} ETH</span>
+                    </span>
+                  </div>
+                  <Button
+                    onClick={() => wrap(missingWeth)}
+                    disabled={wrapStatus === 'pending'}
+                    variant="secondary"
+                    className="w-full h-8 bg-neutral-200 dark:bg-neutral-700/80 text-neutral-900 dark:text-white hover:bg-neutral-300 dark:hover:bg-neutral-600 font-medium text-xs transition-colors"
+                  >
+                    {wrapStatus === 'pending' ? 'Wrapping...' : 'Wrap ETH to WETH'}
+                  </Button>
+                </div>
+              )}
+
               <Button
                 onClick={() => handleBuy()}
                 className={`w-full ${buttonColor} text-white`}
-                disabled={!buyAmount || !connected || isTransacting}
+                disabled={disableBuy}
               >
                 {isTransacting ? 'Processing...' : `Buy ${symbol} Tokens`}
               </Button>
@@ -545,9 +658,9 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
                 />
                 <div
                   className="mt-1 text-xs text-gray-500 dark:text-gray-400 cursor-pointer"
-                  onClick={() => setSellAmount(formatNumberDown(Number(formatUnits(userTokens, 18)), 4))}
+                  onClick={() => setSellAmount(toDisplayAmount(userTokens, 18, 4))}
                 >
-                  Max: {formatNumberDown(Number(formatUnits(userTokens, 18)), 4)} {symbol}
+                  Max: {toDisplayAmount(userTokens, 18, 4)} {symbol}
                 </div>
               </div>
               <Button
@@ -1019,6 +1132,11 @@ export default function InteractionClient() {
       return;
     }
 
+    if (!isAddress(newOracleAddress)) {
+      toast.error('Invalid oracle address format');
+      return;
+    }
+
     try {
       setIsDistributeLoading(true);
       await updateOracle(walletClient, poolId, newOracleAddress as Address);
@@ -1126,6 +1244,13 @@ export default function InteractionClient() {
   const underlyingPriceFeedAddress = underlyingPriceFeedData?.[0]?.result as Address;
   const oracleAddress = underlyingPriceFeedAddress || poolData.oracle_address || '';
   const priceFeedName = getPriceFeedName(oracleAddress, chainId);
+  const currentOraclePrice = oraclePriceData?.[0]?.result ? Number(oraclePriceData[0].result) : null;
+  const previousOraclePrice = oraclePriceData?.[1]?.result ? Number(oraclePriceData[1].result) : null;
+  const hasOraclePrices = currentOraclePrice !== null && previousOraclePrice !== null;
+  const hasValidPriceChange = hasOraclePrices && previousOraclePrice > 0;
+  const oraclePriceChangePercent = hasValidPriceChange
+    ? (((currentOraclePrice - previousOraclePrice) / previousOraclePrice) * 100)
+    : null;
 
   // Create asset configuration based on the price feed
   const asset = {
@@ -1165,6 +1290,13 @@ export default function InteractionClient() {
     });
 
     if (isRebalanceConfirmed && !isTransactionPending) {
+      if (rebalanceReceipt?.status !== 'success') {
+        setIsDistributeLoading(false);
+        setDistributeError('Rebalance transaction failed on-chain');
+        toast.error('Rebalance transaction failed on-chain');
+        return;
+      }
+
       logger.debug('Rebalance confirmed! Setting current time as last rebalance time...');
       toast.success('Pool rebalanced successfully!');
       setIsDistributeLoading(false);
@@ -1431,8 +1563,8 @@ export default function InteractionClient() {
                       <div className="flex justify-between items-center">
                         <span className="text-neutral-600 dark:text-neutral-400">Current price:</span>
                         <span className="font-medium text-right">
-                          {oraclePriceData?.[0]?.result
-                            ? (Number(oraclePriceData[0].result) / 1e18).toFixed(4)
+                          {currentOraclePrice !== null
+                            ? (currentOraclePrice / 1e18).toFixed(4)
                             : 'Loading...'
                           }
                         </span>
@@ -1440,24 +1572,26 @@ export default function InteractionClient() {
                       <div className="flex justify-between items-center">
                         <span className="text-neutral-600 dark:text-neutral-400">Previous price:</span>
                         <span className="font-medium text-right">
-                          {oraclePriceData?.[1]?.result
-                            ? (Number(oraclePriceData[1].result) / 1e18).toFixed(4)
+                          {previousOraclePrice !== null
+                            ? (previousOraclePrice / 1e18).toFixed(4)
                             : 'Loading...'
                           }
                         </span>
                       </div>
                       <div className="flex justify-between items-center">
                         <span className="text-neutral-600 dark:text-neutral-400">Price change:</span>
-                        <span className={`font-medium text-right flex items-center gap-1 ${oraclePriceData?.[0]?.result && oraclePriceData?.[1]?.result
-                          ? (Number(oraclePriceData[0].result) > Number(oraclePriceData[1].result)
+                        <span className={`font-medium text-right flex items-center gap-1 ${hasOraclePrices
+                          ? (currentOraclePrice > previousOraclePrice
                             ? 'text-green-600 dark:text-green-400'
                             : 'text-red-600 dark:text-red-400')
                           : 'text-neutral-600 dark:text-neutral-400'
                           }`}>
-                          {oraclePriceData?.[0]?.result && oraclePriceData?.[1]?.result ? (
+                          {hasOraclePrices ? (
                             <>
-                              <span>{Number(oraclePriceData[0].result) > Number(oraclePriceData[1].result) ? '▲' : '▼'}</span>
-                              {(((Number(oraclePriceData[0].result) - Number(oraclePriceData[1].result)) / Number(oraclePriceData[1].result)) * 100).toFixed(2)}%
+                              <span>{currentOraclePrice > previousOraclePrice ? '▲' : '▼'}</span>
+                              {hasValidPriceChange && oraclePriceChangePercent !== null
+                                ? `${oraclePriceChangePercent.toFixed(2)}%`
+                                : 'N/A'}
                             </>
                           ) : (
                             'Loading...'
