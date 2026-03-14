@@ -18,7 +18,10 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Fate Protocol | Decentralized Prediction Markets & DeFi Trading",
+  title: {
+    default: "Fate Protocol",
+    template: "%s | Fate Protocol",
+  },
   description:
     "Trade prediction markets on Fate Protocol - the decentralized platform for perpetual prediction pools. Buy bullCoins and bearCoins to predict price movements across multiple blockchain networks. Advanced DeFi trading with real-time price feeds and automated market making.",
   keywords: [
@@ -48,9 +51,6 @@ export const metadata: Metadata = {
     telephone: false,
   },
   metadataBase: new URL("https://evm.fate.stability.nexus"),
-  alternates: {
-    canonical: "/",
-  },
   openGraph: {
     title: "Fate Protocol | Decentralized Prediction Markets",
     description: "Trade prediction markets on Fate Protocol - the decentralized platform for perpetual prediction pools. Buy bullCoins and bearCoins to predict price movements.",
