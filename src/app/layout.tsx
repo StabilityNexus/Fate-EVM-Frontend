@@ -100,7 +100,7 @@ export default function RootLayout({
             __html: `
               (function() {
                 try {
-                  var theme = localStorage.getItem('theme') || 'system';
+                  var theme = localStorage.getItem('fate-protocol-theme') || 'system';
                   var systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
                   var finalTheme = theme === 'system' ? systemTheme : theme;
                   
