@@ -135,10 +135,13 @@ export default function Footer({ className = "", onKYAClick }: FooterProps) {
                 href={item.href}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="rounded-full bg-white/10 dark:bg-black/10 p-2 hover:bg-white/20 dark:hover:bg-black/20 transition-colors"
+                className="group rounded-full bg-white/10 dark:bg-white/5 p-2 hover:bg-white/20 dark:hover:bg-yellow-400/10 transition-all duration-300 hover:scale-110 active:scale-95"
               >
                 <span className="sr-only">{item.name}</span>
-                <item.icon className="size-6 text-white dark:text-white" aria-hidden="true" />
+                <item.icon 
+                  className="size-6 text-white transition-colors duration-300 group-hover:text-yellow-500 dark:group-hover:text-yellow-400" 
+                  aria-hidden="true" 
+                />
               </Link>
             ))}
           </div>
