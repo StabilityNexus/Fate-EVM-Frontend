@@ -1,0 +1,14 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+set -e
+
+echo "🛡️  Running Pre-commit Hooks..."
+
+# 1. Full Project Type Check (Crucial for cross-file regressions)
+npm run typecheck
+
+# 2. Staged Files Lint Check (Fast and targeted)
+npx lint-staged
+
+echo "All checks passed!"
