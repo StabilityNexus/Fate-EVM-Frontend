@@ -1,0 +1,7 @@
+echo "Running lint-staged..."
+npx --no-install lint-staged
+
+echo "Running type check..."
+npm run typecheck
+
+echo "All checks passed!"
