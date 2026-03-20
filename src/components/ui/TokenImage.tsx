@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import Image from "next/image";
 
 interface TokenImageProps {
   src: string;
@@ -28,11 +29,13 @@ const TokenImage: React.FC<TokenImageProps> = ({ src, alt, symbol, size = "md" }
   }
 
   return (
-    <div className={`${sizeClasses[size]} flex-shrink-0 rounded-full bg-gray-200 dark:bg-gray-600 overflow-hidden`}>
-      <img
+    <div className={`${sizeClasses[size]} relative flex-shrink-0 rounded-full bg-gray-200 dark:bg-gray-600 overflow-hidden`}>
+      <Image
         src={src}
         alt={alt}
-        className="w-full h-full object-cover"
+        fill
+        sizes="(max-width: 768px) 48px, 48px"
+        className="object-cover"
         onError={() => setHasError(true)}
       />
     </div>
