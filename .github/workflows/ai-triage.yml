@@ -14,6 +14,10 @@ jobs:
     name: Triage New Issue
     if: contains(fromJson('["OWNER","MEMBER","COLLABORATOR"]'), github.event.issue.author_association)
     runs-on: ubuntu-latest
+    timeout-minutes: 2
+    concurrency:
+      group: ai-triage-${{ github.repository }}-${{ github.event.issue.number }}
+      cancel-in-progress: false
 
     steps:
       - name: Checkout repository

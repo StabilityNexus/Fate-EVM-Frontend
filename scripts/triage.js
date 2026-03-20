@@ -7,10 +7,15 @@ const REQUIRED_ENV_VARS = [
 ];
 
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-1.5-flash";
-const REQUEST_TIMEOUT_MS = Number.parseInt(
-  process.env.REQUEST_TIMEOUT_MS || "15000",
+const DEFAULT_REQUEST_TIMEOUT_MS = 15000;
+const parsedRequestTimeoutMs = Number.parseInt(
+  process.env.REQUEST_TIMEOUT_MS || String(DEFAULT_REQUEST_TIMEOUT_MS),
   10,
 );
+const REQUEST_TIMEOUT_MS =
+  Number.isInteger(parsedRequestTimeoutMs) && parsedRequestTimeoutMs > 0
+    ? parsedRequestTimeoutMs
+    : DEFAULT_REQUEST_TIMEOUT_MS;
 const TRIAGE_MARKER = "<!-- ai-triage-comment -->";
 const TRIAGE_HEADING = "### \uD83E\uDD16 AI Triage";
 const GEMINI_API_URL =
@@ -278,35 +283,53 @@ async function postIssueComment(commentBody) {
     "User-Agent": `${owner}-${repo}-ai-triage`,
     "X-GitHub-Api-Version": "2022-11-28",
   };
-  const listResponse = await fetchWithTimeout(url, {
-    method: "GET",
-    headers,
-  });
+  const perPage = 100;
+  const maxPages = 10;
+  let existingComment = null;
 
-  const listRawText = await listResponse.text();
-  if (!listResponse.ok) {
-    throw new Error(
-      `GitHub comments lookup failed (${listResponse.status}): ${listRawText.slice(0, 1000)}`,
+  for (let page = 1; page <= maxPages; page += 1) {
+    const pageUrl = `${url}?per_page=${perPage}&page=${page}`;
+    const listResponse = await fetchWithTimeout(pageUrl, {
+      method: "GET",
+      headers,
+    });
+
+    const listRawText = await listResponse.text();
+    if (!listResponse.ok) {
+      throw new Error(
+        `GitHub comments lookup failed (${listResponse.status}): ${listRawText.slice(0, 1000)}`,
+      );
+    }
+
+    let comments;
+    try {
+      comments = listRawText ? JSON.parse(listRawText) : [];
+    } catch (error) {
+      throw new Error(
+        `GitHub comments lookup returned invalid JSON: ${listRawText.slice(0, 1000)}`,
+      );
+    }
+
+    if (!Array.isArray(comments)) {
+      throw new Error("GitHub comments lookup returned a non-array payload.");
+    }
+
+    existingComment = comments.find(
+      (comment) =>
+        typeof comment?.body === "string" &&
+        comment.body.includes(TRIAGE_MARKER) &&
+        (comment?.user?.type === "Bot" ||
+          comment?.user?.login === "github-actions[bot]"),
     );
-  }
 
-  let comments;
-  try {
-    comments = listRawText ? JSON.parse(listRawText) : [];
-  } catch (error) {
-    throw new Error(
-      `GitHub comments lookup returned invalid JSON: ${listRawText.slice(0, 1000)}`,
-    );
-  }
+    if (existingComment) {
+      break;
+    }
 
-  const existingComment = Array.isArray(comments)
-    ? comments.find(
-        (comment) =>
-          typeof comment?.body === "string" &&
-          comment.body.includes(TRIAGE_MARKER) &&
-          (comment?.user?.type === "Bot" || comment?.user?.login === "github-actions[bot]"),
-      )
-    : null;
+    if (comments.length < perPage) {
+      break;
+    }
+  }
 
   const targetUrl = existingComment?.id
     ? `${githubApiUrl}/repos/${owner}/${repo}/issues/comments/${existingComment.id}`
@@ -354,7 +377,7 @@ async function main() {
   console.log(
     JSON.stringify({
       message: "Received Gemini response",
-      preview: rawModelOutput.slice(0, 300),
+      outputLength: rawModelOutput.length,
     }),
   );
 
