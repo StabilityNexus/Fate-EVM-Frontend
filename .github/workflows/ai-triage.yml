@@ -12,6 +12,7 @@ permissions:
 jobs:
   triage:
     name: Triage New Issue
+    if: contains(fromJson('["OWNER","MEMBER","COLLABORATOR"]'), github.event.issue.author_association)
     runs-on: ubuntu-latest
 
     steps:

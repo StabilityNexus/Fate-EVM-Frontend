@@ -7,6 +7,12 @@ const REQUIRED_ENV_VARS = [
 ];
 
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-1.5-flash";
+const REQUEST_TIMEOUT_MS = Number.parseInt(
+  process.env.REQUEST_TIMEOUT_MS || "15000",
+  10,
+);
+const TRIAGE_MARKER = "<!-- ai-triage-comment -->";
+const TRIAGE_HEADING = "### \uD83E\uDD16 AI Triage";
 const GEMINI_API_URL =
   process.env.GEMINI_API_URL ||
   `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
@@ -60,7 +66,7 @@ function buildPrompt(title, body) {
     "The final line must be: Maintainers can override this.",
     "",
     "Required output template:",
-    "### 🤖 AI Triage",
+    TRIAGE_HEADING,
     "",
     "**Verdict:** (Valid / Invalid / Needs More Info)  ",
     "**Priority:** (Low / Medium / High)  ",
@@ -89,29 +95,48 @@ function buildPrompt(title, body) {
   ].join("\n");
 }
 
+async function fetchWithTimeout(url, init = {}) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error(`Request timed out after ${REQUEST_TIMEOUT_MS}ms: ${url}`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 async function callGemini(prompt, apiKey) {
-  const response = await fetch(`${GEMINI_API_URL}?key=${encodeURIComponent(apiKey)}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      contents: [
-        {
-          role: "user",
-          parts: [
-            {
-              text: prompt,
-            },
-          ],
-        },
-      ],
-      generationConfig: {
-        temperature: 0.2,
-        maxOutputTokens: 500,
+  const response = await fetchWithTimeout(
+    `${GEMINI_API_URL}?key=${encodeURIComponent(apiKey)}`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
       },
-    }),
-  });
+      body: JSON.stringify({
+        contents: [
+          {
+            role: "user",
+            parts: [
+              {
+                text: prompt,
+              },
+            ],
+          },
+        ],
+        generationConfig: {
+          temperature: 0.2,
+          maxOutputTokens: 500,
+        },
+      }),
+    },
+  );
 
   const rawText = await response.text();
   let payload;
@@ -167,6 +192,10 @@ function extractSection(text, label) {
   return match?.[1]?.trim() || "";
 }
 
+function escapeGithubMentions(text) {
+  return text.replace(/(^|[^`])@([a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?(?:\/[a-zA-Z0-9_.-]+)?)/g, "$1@\u200B$2");
+}
+
 function normalizeResponse(rawText) {
   const verdict =
     extractField(rawText, "Verdict", ["Valid", "Invalid", "Needs More Info"]) ||
@@ -194,22 +223,26 @@ function normalizeResponse(rawText) {
   const confidenceMatch = rawText.match(/\*\*Confidence:\*\*\s*([0-9]{1,3})%/i);
   const confidenceValue = Number.parseInt(confidenceMatch?.[1] || "50", 10);
   const confidence = Math.min(100, Math.max(0, Number.isNaN(confidenceValue) ? 50 : confidenceValue));
+  const sanitizedSummary = escapeGithubMentions(summary);
+  const sanitizedWhyThisMatters = escapeGithubMentions(whyThisMatters);
+  const sanitizedRecommendation = escapeGithubMentions(recommendation);
 
   return [
-    "### 🤖 AI Triage",
+    TRIAGE_MARKER,
+    TRIAGE_HEADING,
     "",
     `**Verdict:** ${verdict}  `,
     `**Priority:** ${priority}  `,
     `**Action:** ${action}  `,
     "",
     "**Summary:**  ",
-    summary,
+    sanitizedSummary,
     "",
     "**Why this matters:**  ",
-    whyThisMatters,
+    sanitizedWhyThisMatters,
     "",
     "**Recommendation:**  ",
-    recommendation,
+    sanitizedRecommendation,
     "",
     `**Confidence:** ${confidence}%`,
     "",
@@ -238,15 +271,50 @@ async function postIssueComment(commentBody) {
   }
 
   const url = `${githubApiUrl}/repos/${owner}/${repo}/issues/${issueNumber}/comments`;
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      Accept: "application/vnd.github+json",
-      Authorization: `Bearer ${githubToken}`,
-      "Content-Type": "application/json",
-      "User-Agent": `${owner}-${repo}-ai-triage`,
-      "X-GitHub-Api-Version": "2022-11-28",
-    },
+  const headers = {
+    Accept: "application/vnd.github+json",
+    Authorization: `Bearer ${githubToken}`,
+    "Content-Type": "application/json",
+    "User-Agent": `${owner}-${repo}-ai-triage`,
+    "X-GitHub-Api-Version": "2022-11-28",
+  };
+  const listResponse = await fetchWithTimeout(url, {
+    method: "GET",
+    headers,
+  });
+
+  const listRawText = await listResponse.text();
+  if (!listResponse.ok) {
+    throw new Error(
+      `GitHub comments lookup failed (${listResponse.status}): ${listRawText.slice(0, 1000)}`,
+    );
+  }
+
+  let comments;
+  try {
+    comments = listRawText ? JSON.parse(listRawText) : [];
+  } catch (error) {
+    throw new Error(
+      `GitHub comments lookup returned invalid JSON: ${listRawText.slice(0, 1000)}`,
+    );
+  }
+
+  const existingComment = Array.isArray(comments)
+    ? comments.find(
+        (comment) =>
+          typeof comment?.body === "string" &&
+          comment.body.includes(TRIAGE_MARKER) &&
+          (comment?.user?.type === "Bot" || comment?.user?.login === "github-actions[bot]"),
+      )
+    : null;
+
+  const targetUrl = existingComment?.id
+    ? `${githubApiUrl}/repos/${owner}/${repo}/issues/comments/${existingComment.id}`
+    : url;
+  const method = existingComment?.id ? "PATCH" : "POST";
+  const response = await fetchWithTimeout(targetUrl, {
+    method,
+    headers,
     body: JSON.stringify({
       body: commentBody,
     }),
@@ -255,7 +323,7 @@ async function postIssueComment(commentBody) {
   const rawText = await response.text();
   if (!response.ok) {
     throw new Error(
-      `GitHub comment request failed (${response.status}): ${rawText.slice(0, 1000)}`,
+      `GitHub comment ${method} request failed (${response.status}): ${rawText.slice(0, 1000)}`,
     );
   }
 }
