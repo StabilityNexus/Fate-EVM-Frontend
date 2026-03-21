@@ -213,6 +213,8 @@ const usePool = (poolId: Address | undefined, isConnected: boolean) => {
 
 const formatValue = (value: number) => `${formatNumber(value, 3)} WETH`;
 
+// Timeout duration for stuck transactions (5 minutes)
+const TX_TIMEOUT_MS = 5 * 60 * 1000;
 
 function VaultSection({ isBull, poolData, userTokens, price, value, symbol, connected, handlePoll, reserve, supply, tokenAddress }: {
   isBull: boolean;
@@ -258,9 +260,6 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
   const [pendingTransactionType, setPendingTransactionType] = useState<'buy' | 'sell' | null>(null);
   const pendingTransactionToastIdRef = useRef<string | number | null>(null);
   const txTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Timeout duration for stuck transactions (5 minutes)
-  const TX_TIMEOUT_MS = 5 * 60 * 1000;
 
   // Cleanup timeout on unmount
   useEffect(() => {
@@ -380,7 +379,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
       }
       pendingTransactionToastIdRef.current = null;
     }
-  }, [tokenAddress, address, writeContractAsync, TX_TIMEOUT_MS]);
+  }, [tokenAddress, address, writeContractAsync]);
 
   const handleBuy = withErrorHandling(async () => {
     if (!address || !connected) {
@@ -488,7 +487,6 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
         functionName: 'sell',
         args: [amountWei],
       });
-      setSellAmount('');
 
       // Tx submitted — update the same toast to show on-chain wait
       toast.loading('Waiting for on-chain confirmation...', { id: walletToastId });
@@ -556,6 +554,9 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
         }
         setPendingTransactionType(null);
         pendingTransactionToastIdRef.current = null;
+        // Clear input fields on confirmed success
+        setBuyAmount('');
+        setSellAmount('');
         handlePoll();
       }
     }
