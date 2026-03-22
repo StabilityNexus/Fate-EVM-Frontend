@@ -42,7 +42,6 @@ const TokenImage: React.FC<TokenImageProps> = ({ src, alt, symbol, size = "md" }
         width={sizePixels[size]}
         height={sizePixels[size]}
         className="w-full h-full object-cover"
-        unoptimized
         onError={() => setHasError(true)}
       />
     </div>

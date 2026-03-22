@@ -1,6 +1,8 @@
 import { z } from "zod";
+import { validationMessages } from "@/lib/i18n/validationMessages";
 
 const ETH_ADDRESS_REGEX = /^0x[a-fA-F0-9]{40}$/;
+const msg = validationMessages.createPool;
 
 export const FormDataSchema = z.object({
   poolName: z.string().trim(),
@@ -38,7 +40,7 @@ export const StepOneFormDataSchema = FormDataSchema.pick({
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ["poolName"],
-      message: "Pool name is required",
+      message: msg.poolNameRequired,
     });
   }
 
@@ -46,13 +48,13 @@ export const StepOneFormDataSchema = FormDataSchema.pick({
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ["baseTokenAddress"],
-      message: "Base token address is required",
+      message: msg.baseTokenAddressRequired,
     });
   } else if (!ETH_ADDRESS_REGEX.test(data.baseTokenAddress)) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ["baseTokenAddress"],
-      message: "Invalid Ethereum address format",
+      message: msg.invalidEthAddressFormat,
     });
   }
 
@@ -60,21 +62,21 @@ export const StepOneFormDataSchema = FormDataSchema.pick({
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ["initialDeposit"],
-      message: "Initial deposit must be a valid number",
+      message: msg.initialDepositInvalid,
     });
   } else {
     const deposit = Number(data.initialDeposit);
-    if (Number.isNaN(deposit)) {
+    if (!Number.isFinite(deposit)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["initialDeposit"],
-        message: "Initial deposit must be a valid number",
+        message: msg.initialDepositInvalid,
       });
     } else if (deposit < 0) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["initialDeposit"],
-        message: "Initial deposit cannot be negative",
+        message: msg.initialDepositNegative,
       });
     }
   }
@@ -83,7 +85,7 @@ export const StepOneFormDataSchema = FormDataSchema.pick({
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ["priceFeedAddress"],
-      message: "Please select a Chainlink price feed",
+      message: msg.chainlinkPriceFeedRequired,
     });
   }
 
@@ -92,13 +94,13 @@ export const StepOneFormDataSchema = FormDataSchema.pick({
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["hebeswapPairAddress"],
-        message: "Hebeswap pair address is required",
+        message: msg.hebeswapPairRequired,
       });
     } else if (!ETH_ADDRESS_REGEX.test(data.hebeswapPairAddress)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["hebeswapPairAddress"],
-        message: "Invalid Hebeswap pair address format",
+        message: msg.hebeswapPairInvalid,
       });
     }
 
@@ -106,13 +108,13 @@ export const StepOneFormDataSchema = FormDataSchema.pick({
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["hebeswapQuoteToken"],
-        message: "Quote token address is required",
+        message: msg.quoteTokenAddressRequired,
       });
     } else if (!ETH_ADDRESS_REGEX.test(data.hebeswapQuoteToken)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["hebeswapQuoteToken"],
-        message: "Invalid quote token address format",
+        message: msg.quoteTokenAddressInvalid,
       });
     }
   }
@@ -128,37 +130,61 @@ export const StepTwoFormDataSchema = FormDataSchema.pick({
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ["bullCoinName"],
-      message: "Bull coin name is required",
+      message: msg.bullCoinNameRequired,
     });
   }
   if (!data.bullCoinSymbol) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ["bullCoinSymbol"],
-      message: "Bull coin symbol is required",
+      message: msg.bullCoinSymbolRequired,
     });
   }
   if (!data.bearCoinName) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ["bearCoinName"],
-      message: "Bear coin name is required",
+      message: msg.bearCoinNameRequired,
     });
   }
   if (!data.bearCoinSymbol) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ["bearCoinSymbol"],
-      message: "Bear coin symbol is required",
+      message: msg.bearCoinSymbolRequired,
     });
   }
 });
 
 const FeeStepSchema = z.object({
-  mintFee: z.string().trim(),
-  burnFee: z.string().trim(),
-  creatorFee: z.string().trim(),
-  treasuryFee: z.string().trim(),
+  mintFee: z
+    .string()
+    .trim()
+    .nonempty({ message: msg.invalidFeeValue })
+    .refine((s) => Number.isFinite(Number(s)) && Number(s) > 0, {
+      message: msg.positiveFeeRequired,
+    }),
+  burnFee: z
+    .string()
+    .trim()
+    .nonempty({ message: msg.invalidFeeValue })
+    .refine((s) => Number.isFinite(Number(s)) && Number(s) > 0, {
+      message: msg.positiveFeeRequired,
+    }),
+  creatorFee: z
+    .string()
+    .trim()
+    .nonempty({ message: msg.invalidFeeValue })
+    .refine((s) => Number.isFinite(Number(s)) && Number(s) > 0, {
+      message: msg.positiveFeeRequired,
+    }),
+  treasuryFee: z
+    .string()
+    .trim()
+    .nonempty({ message: msg.invalidFeeValue })
+    .refine((s) => Number.isFinite(Number(s)) && Number(s) > 0, {
+      message: msg.positiveFeeRequired,
+    }),
 });
 
 export const StepThreeFormDataSchema = FeeStepSchema.superRefine((data, ctx) => {
@@ -171,28 +197,28 @@ export const StepThreeFormDataSchema = FeeStepSchema.superRefine((data, ctx) => 
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ["mintFee"],
-      message: "Invalid fee value",
+      message: msg.invalidFeeValue,
     });
   }
   if (!Number.isFinite(burnFee)) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ["burnFee"],
-      message: "Invalid fee value",
+      message: msg.invalidFeeValue,
     });
   }
   if (!Number.isFinite(creatorFee)) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ["creatorFee"],
-      message: "Invalid fee value",
+      message: msg.invalidFeeValue,
     });
   }
   if (!Number.isFinite(treasuryFee)) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ["treasuryFee"],
-      message: "Invalid fee value",
+      message: msg.invalidFeeValue,
     });
   }
 
@@ -200,28 +226,28 @@ export const StepThreeFormDataSchema = FeeStepSchema.superRefine((data, ctx) => 
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ["mintFee"],
-      message: "Invalid fee value",
+      message: msg.invalidFeeValue,
     });
   }
   if (burnFee < 0) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ["burnFee"],
-      message: "Invalid fee value",
+      message: msg.invalidFeeValue,
     });
   }
   if (creatorFee < 0) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ["creatorFee"],
-      message: "Invalid fee value",
+      message: msg.invalidFeeValue,
     });
   }
   if (treasuryFee < 0) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ["treasuryFee"],
-      message: "Invalid fee value",
+      message: msg.invalidFeeValue,
     });
   }
 
@@ -230,7 +256,7 @@ export const StepThreeFormDataSchema = FeeStepSchema.superRefine((data, ctx) => 
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ["mintFee"],
-      message: "Total fees must be less than 100%",
+      message: msg.totalFeesTooHigh,
     });
   }
 });
