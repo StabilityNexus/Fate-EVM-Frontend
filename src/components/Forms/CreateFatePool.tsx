@@ -11,7 +11,12 @@ import PoolConfigurationStep from "./Steps/PoolConfigurationStep";
 import TokenConfigurationStep from "./Steps/TokenConfigurationStep";
 import FeeConfigurationStep from "./Steps/FeeConfigurationStep";
 import ReviewStep from "./Steps/ReviewStep";
-import type { FormData } from "./FormData";
+import {
+  type FormData,
+  StepOneFormDataSchema,
+  StepTwoFormDataSchema,
+  StepThreeFormDataSchema,
+} from "./FormData";
 import { toast } from "sonner";
 import { logger } from "@/lib/logger";
 import { PredictionPoolFactoryABI } from "@/utils/abi/PredictionPoolFactory";
@@ -151,74 +156,37 @@ export default function CreateFatePool() {
 
 
   const validateCurrentStep = useCallback(() => {
+    const schema =
+      currentStep === 1
+        ? StepOneFormDataSchema
+        : currentStep === 2
+          ? StepTwoFormDataSchema
+          : currentStep === 3
+            ? StepThreeFormDataSchema
+            : null;
+
+    if (!schema) {
+      setErrors({});
+      return true;
+    }
+
+    const result = schema.safeParse(formData);
+    if (result.success) {
+      setErrors({});
+      return true;
+    }
+
     const newErrors: Record<string, string> = {};
-
-    if (currentStep === 1) {
-      logger.debug('Validating step 1 with formData:', { formData });
-      
-      if (!formData.poolName.trim()) newErrors.poolName = "Pool name is required";
-      if (!formData.baseTokenAddress.trim()) {
-        newErrors.baseTokenAddress = "Base token address is required";
-      } else if (!/^0x[a-fA-F0-9]{40}$/.test(formData.baseTokenAddress.trim())) {
-        newErrors.baseTokenAddress = "Invalid Ethereum address format";
+    for (const issue of result.error.issues) {
+      const field = issue.path[0];
+      if (typeof field === "string" && !newErrors[field]) {
+        newErrors[field] = issue.message;
       }
-      
-      // Validate initial deposit
-      const initialDeposit = parseFloat(formData.initialDeposit);
-      if (isNaN(initialDeposit)) {
-        newErrors.initialDeposit = "Initial deposit must be a valid number";
-      } else if (initialDeposit < 0) {
-        newErrors.initialDeposit = "Initial deposit cannot be negative";
-      }
-      
-      // Validate oracle configuration based on type
-      if (formData.oracleType === 'chainlink') {
-        if (!formData.priceFeedAddress) {
-          newErrors.priceFeedAddress = "Please select a Chainlink price feed";
-        }
-      } else if (formData.oracleType === 'hebeswap') {
-        logger.debug('Validating Hebeswap configuration:', {
-          hebeswapPairAddress: formData.hebeswapPairAddress,
-          hebeswapQuoteToken: formData.hebeswapQuoteToken
-        });
-        
-        if (!formData.hebeswapPairAddress) {
-          newErrors.hebeswapPairAddress = "Hebeswap pair address is required";
-        } else if (!/^0x[a-fA-F0-9]{40}$/.test(formData.hebeswapPairAddress.trim())) {
-          newErrors.hebeswapPairAddress = "Invalid Hebeswap pair address format";
-        }
-        if (!formData.hebeswapQuoteToken) {
-          newErrors.hebeswapQuoteToken = "Quote token address is required";
-        } else if (!/^0x[a-fA-F0-9]{40}$/.test(formData.hebeswapQuoteToken.trim())) {
-          newErrors.hebeswapQuoteToken = "Invalid quote token address format";
-        }
-      }
-      
-      logger.debug('Step 1 validation errors:', { errors: newErrors });
-    } else if (currentStep === 2) {
-      if (!formData.bullCoinName.trim()) newErrors.bullCoinName = "Bull coin name is required";
-      if (!formData.bullCoinSymbol.trim()) newErrors.bullCoinSymbol = "Bull coin symbol is required";
-      if (!formData.bearCoinName.trim()) newErrors.bearCoinName = "Bear coin name is required";
-      if (!formData.bearCoinSymbol.trim()) newErrors.bearCoinSymbol = "Bear coin symbol is required";
-         } else if (currentStep === 3) {
-       const mintFee = parseFloat(formData.mintFee);
-       const burnFee = parseFloat(formData.burnFee);
-       const creatorFee = parseFloat(formData.creatorFee);
-       const treasuryFee = parseFloat(formData.treasuryFee);
+    }
 
-       if (isNaN(mintFee) || mintFee < 0) newErrors.mintFee = "Invalid fee value";
-       if (isNaN(burnFee) || burnFee < 0) newErrors.burnFee = "Invalid fee value";
-       if (isNaN(creatorFee) || creatorFee < 0) newErrors.creatorFee = "Invalid fee value";
-       if (isNaN(treasuryFee) || treasuryFee < 0) newErrors.treasuryFee = "Invalid fee value";
-
-       const totalFee = mintFee + burnFee + creatorFee + treasuryFee;
-       if (totalFee >= 100) {
-         newErrors.mintFee = "Total fees must be less than 100%";
-       }
-     }
-
+    logger.debug(`Step ${currentStep} validation errors:`, { errors: newErrors });
     setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    return false;
   }, [currentStep, formData]);
 
   const nextStep = useCallback(() => {

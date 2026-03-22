@@ -60,7 +60,7 @@ const PoolConfigurationStep: React.FC<PoolConfigurationStepProps> = ({
     };
 
     loadTokens();
-  }, [chainId]);
+  }, [chainId, formData.baseTokenAddress]);
 
   // Update selected token when base token address changes externally
   useEffect(() => {
