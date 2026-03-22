@@ -193,69 +193,11 @@ export const StepThreeFormDataSchema = FeeStepSchema.superRefine((data, ctx) => 
   const creatorFee = Number(data.creatorFee);
   const treasuryFee = Number(data.treasuryFee);
 
-  if (!Number.isFinite(mintFee)) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ["mintFee"],
-      message: msg.invalidFeeValue,
-    });
-  }
-  if (!Number.isFinite(burnFee)) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ["burnFee"],
-      message: msg.invalidFeeValue,
-    });
-  }
-  if (!Number.isFinite(creatorFee)) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ["creatorFee"],
-      message: msg.invalidFeeValue,
-    });
-  }
-  if (!Number.isFinite(treasuryFee)) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ["treasuryFee"],
-      message: msg.invalidFeeValue,
-    });
-  }
-
-  if (mintFee < 0) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ["mintFee"],
-      message: msg.invalidFeeValue,
-    });
-  }
-  if (burnFee < 0) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ["burnFee"],
-      message: msg.invalidFeeValue,
-    });
-  }
-  if (creatorFee < 0) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ["creatorFee"],
-      message: msg.invalidFeeValue,
-    });
-  }
-  if (treasuryFee < 0) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ["treasuryFee"],
-      message: msg.invalidFeeValue,
-    });
-  }
-
   const totalFee = mintFee + burnFee + creatorFee + treasuryFee;
   if (totalFee >= 100) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      path: ["mintFee"],
+      path: ["totalFee"],
       message: msg.totalFeesTooHigh,
     });
   }
