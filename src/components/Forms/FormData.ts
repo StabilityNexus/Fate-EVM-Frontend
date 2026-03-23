@@ -81,12 +81,20 @@ export const StepOneFormDataSchema = FormDataSchema.pick({
     }
   }
 
-  if (data.oracleType === "chainlink" && !data.priceFeedAddress) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ["priceFeedAddress"],
-      message: msg.chainlinkPriceFeedRequired,
-    });
+  if (data.oracleType === "chainlink") {
+    if (!data.priceFeedAddress) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["priceFeedAddress"],
+        message: msg.chainlinkPriceFeedRequired,
+      });
+    } else if (!ETH_ADDRESS_REGEX.test(data.priceFeedAddress)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["priceFeedAddress"],
+        message: msg.invalidEthAddressFormat,
+      });
+    }
   }
 
   if (data.oracleType === "hebeswap") {
