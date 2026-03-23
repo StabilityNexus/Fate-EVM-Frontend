@@ -1397,13 +1397,20 @@ const PositionChart = ({
                     boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)",
                     color: "#000",
                   }}
-                  formatter={(value: number) => [
-                    `${value.toLocaleString(undefined, {
+                  formatter={(value) => {
+                    const numericValue =
+                      typeof value === "number"
+                        ? value
+                        : Number(value ?? 0);
+
+                    return [
+                    `${numericValue.toLocaleString(undefined, {
                       minimumFractionDigits: 0,
                       maximumFractionDigits: 4,
                     })} ${data[0]?.baseTokenSymbol || 'UNKNOWN'}`,
                     type === "bull" ? "Bull Value" : "Bear Value",
-                  ]}
+                    ];
+                  }}
                 />
                 <Bar dataKey={dataKey} radius={[6, 6, 0, 0]}>
                   {data.map((entry, index) => (
@@ -1436,13 +1443,20 @@ const PositionChart = ({
                   ))}
                 </Pie>
                 <Tooltip
-                  formatter={(value: number) => [
-                    `${value.toLocaleString(undefined, {
+                  formatter={(value) => {
+                    const numericValue =
+                      typeof value === "number"
+                        ? value
+                        : Number(value ?? 0);
+
+                    return [
+                    `${numericValue.toLocaleString(undefined, {
                       minimumFractionDigits: 0,
                       maximumFractionDigits: 4,
                     })} ${data[0]?.baseTokenSymbol || 'UNKNOWN'}`,
                     type === "bull" ? "Bull Value" : "Bear Value",
-                  ]}
+                    ];
+                  }}
                   contentStyle={{
                     backgroundColor: "rgba(255, 255, 255, 0.95)",
                     border: "1px solid #e5e5e5",

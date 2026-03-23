@@ -6,6 +6,24 @@ const nextConfig = {
   distDir: 'out',
   images: {
     unoptimized: true,
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "coin-images.coingecko.com",
+      },
+      {
+        protocol: "https",
+        hostname: "static.coingecko.com",
+      },
+      {
+        protocol: "http",
+        hostname: "coin-images.coingecko.com",
+      },
+      {
+        protocol: "http",
+        hostname: "static.coingecko.com",
+      },
+    ],
   },
   webpack: (config) => {
     config.resolve.fallback = { fs: false, net: false, tls: false };
