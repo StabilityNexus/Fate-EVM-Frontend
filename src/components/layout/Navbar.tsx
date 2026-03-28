@@ -18,7 +18,7 @@ interface NavbarProps {
 const Navbar: React.FC<NavbarProps> = ({ className = "" }) => {
   const { resolvedTheme } = useTheme();
   const pathname = usePathname();
-  const isActive = (path: string) => pathname === path;
+  const isActive = (path: string) => pathname.startsWith(path);
   const [isThemeReady, setIsThemeReady] = useState(false);
 
   useEffect(() => {
