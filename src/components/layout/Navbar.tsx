@@ -18,6 +18,7 @@ interface NavbarProps {
 const Navbar: React.FC<NavbarProps> = ({ className = "" }) => {
   const { resolvedTheme } = useTheme();
   const pathname = usePathname();
+  const isActive = (path: string) => pathname === path;
   const [isThemeReady, setIsThemeReady] = useState(false);
 
   useEffect(() => {
@@ -63,40 +64,40 @@ const Navbar: React.FC<NavbarProps> = ({ className = "" }) => {
   )}
 >
   <Link
-    href="/explorePools"
-    className={cn(
-      "px-4 py-2 rounded-full transition-all duration-200",
-      pathname === "/explorePools"
-        ? "bg-black text-white dark:bg-white dark:text-black shadow-sm"
-        : "text-gray-900 dark:text-white hover:text-yellow-500 dark:hover:text-yellow-400"
-    )}
-  >
-    Explore
-  </Link>
+  href="/explorePools"
+  className={cn(
+    "px-4 py-1 rounded-full transition-all",
+    isActive("/explorePools")
+      ? "bg-black text-white dark:bg-white dark:text-black"
+      : "text-gray-900 dark:text-white hover:text-yellow-500"
+  )}
+>
+  Explore
+</Link>
 
   <Link
-    href="/createPool"
-    className={cn(
-      "px-4 py-2 rounded-full transition-all duration-200",
-      pathname === "/createPool"
-        ? "bg-black text-white dark:bg-white dark:text-black shadow-sm"
-        : "text-gray-900 dark:text-white hover:text-yellow-500 dark:hover:text-yellow-400"
-    )}
-  >
-    Create
-  </Link>
+  href="/createPool"
+  className={cn(
+    "px-4 py-1 rounded-full transition-all",
+    isActive("/createPool")
+      ? "bg-black text-white dark:bg-white dark:text-black"
+      : "text-gray-900 dark:text-white hover:text-yellow-500"
+  )}
+>
+  Create
+</Link>
 
-  <Link
-    href="/portfolio"
-    className={cn(
-      "px-4 py-2 rounded-full transition-all duration-200",
-      pathname === "/portfolio"
-        ? "bg-black text-white dark:bg-white dark:text-black shadow-sm"
-        : "text-gray-900 dark:text-white hover:text-yellow-500 dark:hover:text-yellow-400"
-    )}
-  >
-    Portfolio
-  </Link>
+ <Link
+  href="/portfolio"
+  className={cn(
+    "px-4 py-1 rounded-full transition-all",
+    isActive("/portfolio")
+      ? "bg-black text-white dark:bg-white dark:text-black"
+      : "text-gray-900 dark:text-white hover:text-yellow-500"
+  )}
+>
+  Portfolio
+</Link>
 </nav>
 
           {/* Theme Toggle & Connect Button - Right Side */}
