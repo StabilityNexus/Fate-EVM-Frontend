@@ -25,6 +25,7 @@ import { Loading } from '@/components/ui/loading';
 import { formatNumber, formatNumberDown } from '@/utils/format';
 import { validateTransactionInput } from '@/lib/validation';
 import { withErrorHandling, createTransactionError } from '@/lib/errorHandler';
+import { useExecutionGuard } from '@/hooks/useExecutionGuard';
 
 // Note: ChainlinkAdapterFactories is imported but can be used for future oracle management features
 import TradingViewWidget from '@/components/ui/TradingViewWidget';
@@ -249,6 +250,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
   const { writeContract, data: hash, isPending: isTransactionPending } = useWriteContract();
   const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({ hash });
   const isTransacting = isTransactionPending || isConfirming;
+  const { guardExecution } = useExecutionGuard();
 
   const [buyAmount, setBuyAmount] = useState('');
   const [sellAmount, setSellAmount] = useState('');
@@ -319,7 +321,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
     }
   }, [tokenAddress, address, writeContract]);
 
-  const handleBuy = withErrorHandling(async () => {
+  const handleBuy = withErrorHandling(async () => guardExecution(async () => {
     if (!address || !connected) {
       const errorMessage = "Please connect your wallet";
       toast.error(errorMessage);
@@ -373,9 +375,9 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
     }
 
     await handleBuyTransaction(buyAmount);
-  }, { functionName: 'handleBuy' });
+  }), { functionName: 'handleBuy' });
 
-  const handleSell = async () => {
+  const handleSell = async () => guardExecution(async () => {
     if (!address || !connected) {
       toast.error('Please connect your wallet');
       return;
@@ -423,7 +425,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
         toast.dismiss(loadingToast);
       }
     }
-  };
+  });
 
   useEffect(() => {
     if (isConfirmed && !isTransactionPending) {

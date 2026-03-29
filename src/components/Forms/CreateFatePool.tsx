@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useAccount, useChainId, useWriteContract, useWaitForTransactionReceipt, usePublicClient } from "wagmi";
-import { ConnectButton } from "@rainbow-me/rainbowkit";
+import ConnectBtn from "@/components/ui/ConnectBtn";
 import { useRouter } from "next/navigation";
 import { AlertCircle } from "lucide-react";
 
@@ -20,6 +20,7 @@ import { HebeswapAdapterFactoryABI } from "@/utils/abi/HebeswapAdapterFactory";
 import { FatePoolFactories, ChainlinkAdapterFactories, HebeswapAdapterFactories } from "@/utils/addresses";
 import { SUPPORTED_CHAINS, getPriceFeedOptions } from "@/utils/supportedChainFeed";
 import { parseUnits } from "viem";
+import { useExecutionGuard } from "@/hooks/useExecutionGuard";
 
 const DENOMINATOR = 100_000;
 
@@ -59,6 +60,7 @@ export default function CreateFatePool() {
   const { isConnected, address } = useAccount();
   const currentChainId = useChainId();
   const publicClient = usePublicClient();
+  const { guardExecution } = useExecutionGuard();
 
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -237,7 +239,7 @@ export default function CreateFatePool() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+    await guardExecution(async () => {
     if (!validateCurrentStep()) {
       return;
     }
@@ -528,9 +530,9 @@ export default function CreateFatePool() {
           } else if (typeof error === 'object' && error !== null && 'message' in error) {
         errorMessage = String((error as { message: string }).message);
       }
-      toast.error(`Failed to deploy: ${errorMessage}`);
       setIsSubmitting(false);
     }
+    });
   };
 
   // Handle successful pool deployment and initialization
@@ -586,7 +588,7 @@ export default function CreateFatePool() {
             <p className="text-sm md:text-base text-gray-600 dark:text-gray-300">
               Please connect your wallet to create a prediction pool
             </p>
-            <ConnectButton />
+            <ConnectBtn />
           </div>
         </div>
       </div>

@@ -29,6 +29,7 @@ const TokenImage: React.FC<TokenImageProps> = ({ src, alt, symbol, size = "md" }
 
   return (
     <div className={`${sizeClasses[size]} flex-shrink-0 rounded-full bg-gray-200 dark:bg-gray-600 overflow-hidden`}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={src}
         alt={alt}

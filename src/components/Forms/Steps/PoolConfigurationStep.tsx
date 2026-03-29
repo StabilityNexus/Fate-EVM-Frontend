@@ -46,12 +46,6 @@ const PoolConfigurationStep: React.FC<PoolConfigurationStepProps> = ({
       try {
         const tokens = await loadTokensForChain(chainId);
         setAvailableTokens(tokens);
-        
-        // If we have a base token address, try to find its token info
-        if (formData.baseTokenAddress && tokens.length > 0) {
-          const token = findTokenByAddress(tokens, formData.baseTokenAddress);
-          setSelectedToken(token || null);
-        }
       } catch (err) {
         logger.error('Failed to load tokens:', err instanceof Error ? err : new Error(String(err)));
       } finally {

@@ -193,97 +193,11 @@ body {
   }
 }
 
-/* Custom wallet button styling - More specific selectors */
-[data-testid="rk-connect-button"],
-[data-testid="rk-connect-button"] button,
-[data-testid="rk-connect-button"]>div,
-.rainbow-kit-connect-button,
-.rainbow-kit-connect-button button {
-  background-color: black !important;
-  color: white !important;
-  border: 2px solid black !important;
-  border-radius: 8px !important;
-  font-weight: 600 !important;
-  transition: all 0.2s ease !important;
-  box-shadow: none !important;
+/* Custom wallet button styling - Unified with app design */
+.connect-btn {
+  @apply bg-black dark:bg-white text-white dark:text-black font-semibold rounded-lg transition-all duration-200 hover:opacity-90 active:scale-95;
 }
 
-[data-testid="rk-connect-button"]:hover,
-[data-testid="rk-connect-button"] button:hover,
-[data-testid="rk-connect-button"]>div:hover,
-.rainbow-kit-connect-button:hover,
-.rainbow-kit-connect-button button:hover {
-  background-color: #333333 !important;
-  border-color: #333333 !important;
-  color: white !important;
-}
-
-/* Dark mode wallet button */
-.dark [data-testid="rk-connect-button"],
-.dark [data-testid="rk-connect-button"] button,
-.dark [data-testid="rk-connect-button"]>div,
-.dark .rainbow-kit-connect-button,
-.dark .rainbow-kit-connect-button button {
-  background-color: white !important;
-  color: black !important;
-  border: 2px solid white !important;
-}
-
-.dark [data-testid="rk-connect-button"]:hover,
-.dark [data-testid="rk-connect-button"] button:hover,
-.dark [data-testid="rk-connect-button"]>div:hover,
-.dark .rainbow-kit-connect-button:hover,
-.dark .rainbow-kit-connect-button button:hover {
-  background-color: #f0f0f0 !important;
-  border-color: #f0f0f0 !important;
-  color: black !important;
-}
-
-/* Override any RainbowKit default styles */
-[data-testid="rk-connect-button"] *,
-.rainbow-kit-connect-button * {
-  background-color: inherit !important;
-  color: inherit !important;
-  border-color: inherit !important;
-}
-
-/* Additional RainbowKit button overrides */
-.rainbow-kit-connect-button,
-.rainbow-kit-connect-button__button,
-[data-testid="rk-connect-button"] .rainbow-kit-connect-button__button {
-  background-color: black !important;
-  color: white !important;
-  border: 2px solid black !important;
-  border-radius: 8px !important;
-  font-weight: 600 !important;
-  transition: all 0.2s ease !important;
-  box-shadow: none !important;
-}
-
-.rainbow-kit-connect-button:hover,
-.rainbow-kit-connect-button__button:hover,
-[data-testid="rk-connect-button"] .rainbow-kit-connect-button__button:hover {
-  background-color: #333333 !important;
-  border-color: #333333 !important;
-  color: white !important;
-}
-
-/* Dark mode overrides */
-.dark .rainbow-kit-connect-button,
-.dark .rainbow-kit-connect-button__button,
-.dark [data-testid="rk-connect-button"] .rainbow-kit-connect-button__button {
-  background-color: white !important;
-  color: black !important;
-  border: 2px solid white !important;
-}
-
-.dark .rainbow-kit-connect-button:hover,
-.dark .rainbow-kit-connect-button__button:hover,
-.dark [data-testid="rk-connect-button"] .rainbow-kit-connect-button__button:hover {
-  background-color: #f0f0f0 !important;
-  border-color: #f0f0f0 !important;
-  color: black !important;
-}
 
 /* Fix exclamation icon color to red */
 .text-red-500 {
