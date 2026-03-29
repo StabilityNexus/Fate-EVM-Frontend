@@ -260,6 +260,14 @@ const toDisplayAmountWithMin = (value: bigint, tokenDecimals = 18, displayDecima
   return display;
 };
 
+const getGasBufferForChain = (chainId: number): bigint => {
+  // Use a smaller gas buffer for Layer 2s, but keep mainnet/testnet buffer at 0.002 ETH
+  const l2ChainIds = [8453, 84532, 42161, 421614, 10, 11155420];
+  if (l2ChainIds.includes(chainId)) {
+    return parseUnits('0.0001', 18);
+  }
+  return parseUnits('0.002', 18);
+};
 
 function VaultSection({ isBull, poolData, userTokens, price, value, symbol, connected, handlePoll, reserve, supply, tokenAddress }: {
   isBull: boolean;
@@ -311,8 +319,8 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
   const [allowance, setAllowance] = useState<bigint>(BigInt(0));
   const [pendingApproval, setPendingApproval] = useState<{ amount: string; type: 'buy' | 'sell' } | null>(null);
 
-  const { ethBalance, wethBalance, isLoading: balancesLoading, refetch: refetchBalances } =
-    useEthWethBalances({ chainId, address, enabled: !!address && poolData?.asset_address?.toLowerCase() === wethCfg?.address.toLowerCase() });
+  const { isWethSupported, ethBalance, wethBalance, isLoading: balancesLoading, refetch: refetchBalances } =
+    useEthWethBalances({ chainId, address, enabled: !!address && poolData?.asset_address?.toLowerCase() === wethCfg?.address?.toLowerCase() });
     
   const { wrap, status: wrapStatus } = useWrapEthToWeth(chainId, () => {
     refetchBalances();
@@ -460,7 +468,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
   const hasEnoughWeth = activeBaseBalance >= amountWei;
   const hasValidBuyAmount = amountWei > BigInt(0);
   const missingWeth = hasEnoughWeth ? BigInt(0) : amountWei - activeBaseBalance;
-  const gasBuffer = parseUnits('0.002', 18);
+  const gasBuffer = getGasBufferForChain(chainId);
   const canWrap = isWethPool && !hasEnoughWeth && ethBalance > missingWeth + gasBuffer;
   const disableBuy = !hasValidBuyAmount || !connected || isTransacting || balancesLoading || (!hasEnoughWeth && isWethPool);
 
@@ -610,7 +618,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
                 </div>
               </div>
 
-              {!hasEnoughWeth && canWrap && (
+              {((!hasEnoughWeth && canWrap && isWethSupported) || (isWethPool && !isWethSupported)) && (
                 <div className="rounded-md border border-neutral-200 dark:border-neutral-700/60 bg-neutral-50 dark:bg-neutral-800/30 px-3 py-2.5 text-xs flex flex-col gap-2.5 mt-2 transition-all">
                   <div className="text-neutral-600 dark:text-neutral-400 flex flex-col space-y-1">
                     <span className="flex justify-between items-center">
@@ -622,14 +630,21 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
                       <span className="font-medium text-neutral-900 dark:text-neutral-300">{toDisplayAmount(ethBalance, 18, 6)} ETH</span>
                     </span>
                   </div>
-                  <Button
-                    onClick={() => wrap(missingWeth)}
-                    disabled={wrapStatus === 'pending'}
-                    variant="secondary"
-                    className="w-full h-8 bg-neutral-200 dark:bg-neutral-700/80 text-neutral-900 dark:text-white hover:bg-neutral-300 dark:hover:bg-neutral-600 font-medium text-xs transition-colors"
-                  >
-                    {wrapStatus === 'pending' ? 'Wrapping...' : 'Wrap ETH to WETH'}
-                  </Button>
+                  
+                  {isWethSupported ? (
+                    <Button
+                      onClick={() => wrap(missingWeth)}
+                      disabled={wrapStatus === 'pending'}
+                      variant="secondary"
+                      className="w-full h-8 bg-neutral-200 dark:bg-neutral-700/80 text-neutral-900 dark:text-white hover:bg-neutral-300 dark:hover:bg-neutral-600 font-medium text-xs transition-colors"
+                    >
+                      {wrapStatus === 'pending' ? 'Wrapping...' : 'Wrap ETH to WETH'}
+                    </Button>
+                  ) : (
+                    <div className="w-full text-center py-1 mt-1 font-medium text-yellow-600 dark:text-yellow-500">
+                      WETH wrapping unsupported natively on this network. Please wrap your ETH externally.
+                    </div>
+                  )}
                 </div>
               )}
 

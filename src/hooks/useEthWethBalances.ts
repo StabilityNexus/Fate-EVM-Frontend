@@ -3,11 +3,13 @@ import { getWethConfig } from '@/lib/weth';
 
 export function useEthWethBalances({ chainId, address, enabled }: { chainId: number; address?: `0x${string}`; enabled?: boolean }) {
   let wethAddress: `0x${string}` | undefined;
+  let isWethSupported = false;
   try {
     const weth = getWethConfig(chainId);
     wethAddress = weth.address;
+    isWethSupported = true;
   } catch (e) {
-    // Unsupported chain, wethAddress remains undefined
+    isWethSupported = false;
   }
 
   const eth = useBalance({ 
@@ -28,6 +30,7 @@ export function useEthWethBalances({ chainId, address, enabled }: { chainId: num
   });
 
   return {
+    isWethSupported,
     ethBalance: eth.data?.value ?? BigInt(0),
     wethBalance: wethBal.data?.value ?? BigInt(0),
     isLoading: eth.isLoading || wethBal.isLoading,

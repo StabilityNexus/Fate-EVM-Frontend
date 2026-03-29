@@ -11,7 +11,9 @@ export function useWrapEthToWeth(chainId: number, onSuccess?: () => void) {
     const weth = getWethConfig(chainId);
     wethAddress = weth.address;
   } catch (e) {
-    // Supported chain is optional
+    // Ignore error if current chain is not an EVM chain or WETH wrapping is unsupported.
+    // Silently handle the case where the chain does not support wrap/unwrap operations 
+    // because wrapping is only available on supported networks, allowing this hook to gracefully no-op.
   }
 
   const { writeContractAsync } = useWriteContract();
