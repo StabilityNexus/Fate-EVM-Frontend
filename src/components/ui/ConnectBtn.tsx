@@ -342,6 +342,31 @@ export default function ConnectBtn({ renderTrigger }: ConnectBtnProps) {
     setIsAccountModalOpen(true);
   }, []);
 
+  // Dev-only helper to allow automated UI verification without a wallet extension.
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "development") return;
+    const w = window as unknown as {
+      __fateWalletModals?: {
+        openConnect: () => void;
+        openAccount: (view: "account" | "network") => void;
+        closeAll: () => void;
+      };
+    };
+
+    w.__fateWalletModals = {
+      openConnect: openConnectModal,
+      openAccount: openAccountModal,
+      closeAll: () => {
+        setIsConnectModalOpen(false);
+        setIsAccountModalOpen(false);
+      },
+    };
+
+    return () => {
+      delete w.__fateWalletModals;
+    };
+  }, [openAccountModal, openConnectModal]);
+
   const [mounted, setMounted] = useState(false);
   const [imgErrors, setImgErrors] = useState<Record<string, boolean>>({});
   const [copySuccess, setCopySuccess] = useState(false);
@@ -686,7 +711,7 @@ export default function ConnectBtn({ renderTrigger }: ConnectBtnProps) {
                       className="w-full flex items-center justify-between p-3.5 rounded-2xl bg-zinc-50 dark:bg-zinc-900/50 border border-transparent hover:border-zinc-200 dark:hover:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors group disabled:opacity-50 text-left"
                     >
                       <div className="flex items-center gap-3">
-                        <div className="relative w-10 h-10 rounded-xl bg-white dark:bg-zinc-950 border border-zinc-100 dark:border-zinc-800 flex items-center justify-center shrink-0 shadow-sm overflow-hidden">
+                        <div className="relative w-10 h-10 rounded-2xl bg-white dark:bg-zinc-950 border border-zinc-100 dark:border-zinc-800 flex items-center justify-center shrink-0 shadow-sm overflow-hidden">
                           {hasImgError ? (
                             <span className="text-zinc-400 font-bold select-none text-sm">
                               {info.name.charAt(0)}
@@ -770,10 +795,10 @@ export default function ConnectBtn({ renderTrigger }: ConnectBtnProps) {
                     <CloseIcon />
                   </motion.button>
                 </div>
-                <div className="flex flex-col items-center gap-3 mb-8">
+                <div className="flex flex-col items-center gap-4 mb-6">
                   <motion.div
                     layoutId="wallet-chip-modal-wrapper"
-                    className="w-[60px] h-[60px] bg-zinc-50 dark:bg-zinc-900 rounded-2xl border border-zinc-100 dark:border-zinc-800 flex items-center justify-center overflow-hidden shadow-sm"
+                    className="w-[72px] h-[72px] bg-zinc-50 dark:bg-zinc-900 rounded-[20px] border border-zinc-100 dark:border-zinc-800 flex items-center justify-center overflow-hidden shadow-sm"
                   >
                     {activeConnector ? (
                       (() => {
@@ -789,8 +814,8 @@ export default function ConnectBtn({ renderTrigger }: ConnectBtnProps) {
                           <Image
                             src={info.logo}
                             alt={info.name}
-                            width={36}
-                            height={36}
+                            width={52}
+                            height={52}
                             className="object-contain"
                             onError={() => handleImgError(activeConnector.id)}
                           />
@@ -800,43 +825,41 @@ export default function ConnectBtn({ renderTrigger }: ConnectBtnProps) {
                       <span className="text-zinc-400">W</span>
                     )}
                   </motion.div>
-                  <div className="text-center">
-                    <p
-                      className="text-[22px] font-bold text-zinc-900 dark:text-white font-mono tracking-tight"
-                      title={address}
-                    >
-                      {truncateAddress(address)}
-                    </p>
-                    <motion.button
-                      whileTap={buttonTap}
-                      onClick={() => setViewState("network")}
-                      className="mt-3 w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 bg-zinc-50 dark:bg-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors group cursor-pointer"
-                      aria-label="Switch network"
-                    >
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={`w-2 h-2 rounded-full ${networkState === "CONNECTED_UNSUPPORTED" || networkState === "CONNECTED_UNKNOWN" ? "bg-red-500 animate-pulse" : "bg-emerald-500"}`}
-                        />
-                        <span className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">
-                          {networkState === "CONNECTED_UNSUPPORTED"
-                            ? "Wrong Network"
-                            : networkState === "CONNECTED_UNKNOWN"
-                              ? `Unknown (${chainId})`
-                              : (activeChain?.name ?? "Loading...")}
-                        </span>
-                      </div>
-                      <ChevronDownIcon className="w-5 h-5 text-zinc-400 group-hover:text-zinc-600 dark:group-hover:text-zinc-200 transition-colors" />
-                    </motion.button>
-                  </div>
+                  <p
+                    className="text-[22px] font-bold text-zinc-900 dark:text-white font-mono tracking-tight text-center"
+                    title={address}
+                  >
+                    {truncateAddress(address)}
+                  </p>
+                  <motion.button
+                    whileTap={buttonTap}
+                    onClick={() => setViewState("network")}
+                    className="w-full flex items-center justify-between gap-3 px-4 py-2.5 rounded-full border border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 bg-zinc-50 dark:bg-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors group cursor-pointer"
+                    aria-label="Switch network"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`w-2 h-2 rounded-full ${networkState === "CONNECTED_UNSUPPORTED" || networkState === "CONNECTED_UNKNOWN" ? "bg-red-500 animate-pulse" : "bg-emerald-500"}`}
+                      />
+                      <span className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">
+                        {networkState === "CONNECTED_UNSUPPORTED"
+                          ? "Wrong Network"
+                          : networkState === "CONNECTED_UNKNOWN"
+                            ? `Unknown (${chainId})`
+                            : (activeChain?.name ?? "Loading...")}
+                      </span>
+                    </div>
+                    <ChevronDownIcon className="w-5 h-5 text-zinc-400 group-hover:text-zinc-600 dark:group-hover:text-zinc-200 transition-colors" />
+                  </motion.button>
                 </div>
-                <div className="flex flex-col gap-2">
+                <div className="flex flex-col gap-3">
                   <div className="grid grid-cols-2 gap-2">
                     <motion.button
                       whileTap={buttonTap}
                       onClick={handleCopyAddress}
-                      className="flex items-center justify-center gap-2 h-[44px] rounded-xl bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-sm font-semibold text-zinc-700 dark:text-zinc-300"
+                      className="flex items-center justify-center gap-2 h-[44px] rounded-2xl bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-sm font-semibold text-zinc-700 dark:text-zinc-300"
                     >
-                      <CopyIcon copied={copySuccess} />{" "}
+                      <CopyIcon copied={copySuccess} />
                       {copySuccess ? "Copied!" : "Copy"}
                     </motion.button>
                     {explorerAddressUrl ? (
@@ -845,23 +868,23 @@ export default function ConnectBtn({ renderTrigger }: ConnectBtnProps) {
                         href={explorerAddressUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center justify-center gap-2 h-[44px] rounded-xl bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-sm font-semibold text-zinc-700 dark:text-zinc-300"
+                        className="flex items-center justify-center gap-2 h-[44px] rounded-2xl bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-sm font-semibold text-zinc-700 dark:text-zinc-300"
                       >
                         <ExplorerIcon /> Explorer
                       </motion.a>
                     ) : (
-                      <div className="flex items-center justify-center gap-2 h-[44px] rounded-xl bg-zinc-50/50 dark:bg-zinc-900/20 border border-transparent text-sm font-semibold text-zinc-400 dark:text-zinc-600 cursor-not-allowed">
+                      <div className="flex items-center justify-center gap-2 h-[44px] rounded-2xl bg-zinc-50/50 dark:bg-zinc-900/20 border border-transparent text-sm font-semibold text-zinc-400 dark:text-zinc-600 cursor-not-allowed">
                         <ExplorerIcon className="w-4 h-4 opacity-50" /> Explorer
                       </div>
                     )}
                   </div>
-                  <div className="h-px w-full bg-zinc-100 dark:bg-zinc-800 my-2" />
+                  <div className="h-px w-full bg-zinc-100 dark:bg-zinc-800" />
                   <motion.button
                     whileTap={buttonTap}
                     onClick={handleDisconnect}
                     className="flex items-center justify-center gap-2 h-[44px] rounded-xl text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors text-sm font-semibold group"
                   >
-                    <DisconnectIcon className="w-4 h-4 transition-transform group-hover:-translate-x-0.5" />{" "}
+                    <DisconnectIcon className="w-4 h-4 transition-transform group-hover:-translate-x-0.5" />
                     Disconnect
                   </motion.button>
                 </div>

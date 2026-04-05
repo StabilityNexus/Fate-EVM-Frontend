@@ -53,21 +53,31 @@ export function ChainSwitcher({
             whileTap={!isActive && !isLoading ? buttonTap : {}}
             disabled={isActive || isLoading}
             onClick={() => handleSwitchChain(chain.id)}
-            className={`w-full flex items-center justify-between p-3.5 rounded-2xl transition-all border ${isActive ? 'bg-zinc-100 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700' : 'bg-transparent border-transparent hover:bg-zinc-50 dark:hover:bg-zinc-900'} ${isOtherLoading ? 'opacity-50' : ''}`}
+            className={`w-full flex items-center gap-3 p-3.5 rounded-2xl transition-all border ${isActive ? 'bg-zinc-100 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700' : 'bg-transparent border-transparent hover:bg-zinc-50 dark:hover:bg-zinc-900'} ${isOtherLoading ? 'opacity-50' : ''}`}
           >
-            <div className="flex items-center gap-3">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${isActive ? 'bg-zinc-200 dark:bg-zinc-700' : 'bg-zinc-100 dark:bg-zinc-800'}`}>
-                 <span className="w-2.5 h-2.5 rounded-full bg-current opacity-80" />
+            <div className="flex items-center gap-3 min-w-0 flex-1">
+              <div
+                className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${isActive ? 'bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200' : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500'}`}
+              >
+                 <span className="w-3.5 h-3.5 rounded-full bg-current" />
               </div>
-              <span className="text-[15px] font-semibold text-zinc-900 dark:text-zinc-100">{chain.name}</span>
+              <span className="text-[15px] font-semibold text-zinc-900 dark:text-zinc-100 truncate">
+                {chain.name}
+              </span>
             </div>
-            {isActive && (
-              <div className="flex items-center gap-1.5 text-[13px] font-medium text-emerald-600 dark:text-emerald-400">
-                Connected <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />
+
+            {(isActive || isLoading) && (
+              <div className="ml-auto flex items-center gap-2 shrink-0">
+                {isActive && (
+                  <div className="flex items-center gap-1.5 text-[13px] font-medium text-emerald-600 dark:text-emerald-400">
+                    <span>Connected</span>
+                    <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />
+                  </div>
+                )}
+                {isLoading && (
+                  <div className="w-4 h-4 border-2 border-zinc-500 border-t-transparent animate-spin rounded-full" />
+                )}
               </div>
-            )}
-            {isLoading && (
-              <div className="w-4 h-4 border-2 border-zinc-500 border-t-transparent animate-spin rounded-full" />
             )}
           </motion.button>
         );
