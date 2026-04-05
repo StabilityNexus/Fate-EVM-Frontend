@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useWriteContract, useConfig } from 'wagmi';
 import { waitForTransactionReceipt } from '@wagmi/core';
 import { getWethConfig, WETH_ABI } from '@/lib/weth';
@@ -10,17 +10,21 @@ export function useWrapEthToWeth(chainId: number, onSuccess?: () => void) {
   try {
     const weth = getWethConfig(chainId);
     wethAddress = weth.address;
-  } catch (e) {
-    // Ignore error if current chain is not an EVM chain or WETH wrapping is unsupported.
-    // Silently handle the case where the chain does not support wrap/unwrap operations 
-    // because wrapping is only available on supported networks, allowing this hook to gracefully no-op.
+  } catch {
+    // Silently handle unsupported chains
   }
 
   const { writeContractAsync } = useWriteContract();
   const config = useConfig();
   const [status, setStatus] = useState<'idle' | 'pending' | 'success' | 'error'>('idle');
+  const inFlightRef = useRef(false);
 
   async function wrap(amountWei: bigint) {
+    if (inFlightRef.current) {
+      toast.info("A wrapping transaction is already in progress");
+      return;
+    }
+
     if (!wethAddress) {
       setStatus('error');
       toast.error("WETH wrapping not supported on this chain");
@@ -33,11 +37,7 @@ export function useWrapEthToWeth(chainId: number, onSuccess?: () => void) {
       return;
     }
 
-    if (status === 'pending') {
-      toast.info("A wrapping transaction is already in progress");
-      return;
-    }
-
+    inFlightRef.current = true;
     setStatus('pending');
     let loadingToast: string | number | undefined;
     try {
@@ -83,6 +83,7 @@ export function useWrapEthToWeth(chainId: number, onSuccess?: () => void) {
       }
       toast.error(errorMessage);
     } finally {
+      inFlightRef.current = false;
       if (loadingToast !== undefined) {
         toast.dismiss(loadingToast);
       }

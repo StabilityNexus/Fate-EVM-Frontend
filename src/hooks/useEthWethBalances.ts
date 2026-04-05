@@ -8,7 +8,7 @@ export function useEthWethBalances({ chainId, address, enabled }: { chainId: num
     const weth = getWethConfig(chainId);
     wethAddress = weth.address;
     isWethSupported = true;
-  } catch (e) {
+  } catch {
     isWethSupported = false;
   }
 
