@@ -24,6 +24,28 @@ import { useChainChangeWatcher } from "@/hooks/useChainChangeWatcher";
 import { ChainSwitcher } from "./ChainSwitcher";
 import { toast } from "sonner";
 
+type ConnectBtnTriggerProps = {
+  isConnected: boolean;
+  isConnecting: boolean;
+  networkState:
+    | "DISCONNECTED"
+    | "CONNECTING"
+    | "CONNECTED_SUPPORTED"
+    | "CONNECTED_UNSUPPORTED"
+    | "CONNECTED_UNKNOWN";
+  chainId: number;
+  address: `0x${string}` | undefined;
+  truncatedAddress: string;
+  activeChainName: string | undefined;
+  isSwitchPending: boolean;
+  openConnectModal: () => void;
+  openAccountModal: (view: "account" | "network") => void;
+};
+
+type ConnectBtnProps = {
+  renderTrigger?: (props: ConnectBtnTriggerProps) => React.ReactNode;
+};
+
 // ─── helpers ────────────────────────────────────────────────────────────────
 const truncateAddress = (addr: `0x${string}` | undefined): string => {
   if (!addr) return "";
@@ -128,24 +150,24 @@ const DisconnectIcon = ({ className = "w-4 h-4" }) => (
 
 // ─── framer motion variants ─────────────────────────────────────────────────
 const overlayVariants: Variants = {
-  hidden: { opacity: 0, backdropFilter: "blur(0px)" },
-  visible: { opacity: 1, backdropFilter: "blur(4px)" },
-  exit: { opacity: 0, backdropFilter: "blur(0px)" },
+  hidden: { opacity: 0 },
+  visible: { opacity: 1, transition: { duration: 0.2, ease: "easeOut" } },
+  exit: { opacity: 0, transition: { duration: 0.15, ease: "easeIn" } },
 };
 
 const modalVariants: Variants = {
-  hidden: { opacity: 0, scale: 0.96, y: 10 },
+  hidden: { opacity: 0, scale: 0.93, y: 16 },
   visible: {
     opacity: 1,
     scale: 1,
     y: 0,
-    transition: { type: "spring", damping: 25, stiffness: 300, mass: 0.8 },
+    transition: { type: "spring", damping: 22, stiffness: 320, mass: 0.7 },
   },
   exit: {
     opacity: 0,
-    scale: 0.96,
-    y: 10,
-    transition: { duration: 0.15, ease: "easeOut" },
+    scale: 0.93,
+    y: 12,
+    transition: { duration: 0.15, ease: "easeIn" },
   },
 };
 
@@ -269,9 +291,10 @@ function ModalOverlay({
           onPointerDown={(e) => {
             if (e.target === e.currentTarget) onClose();
           }}
-          className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-zinc-950/40"
+          className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md"
+          style={{ WebkitBackdropFilter: "blur(12px)" }}
         >
-          <div ref={dialogRef} tabIndex={-1} className="outline-none">
+          <div ref={dialogRef} tabIndex={-1} className="outline-none w-full flex items-center justify-center">
             {children}
           </div>
         </motion.div>
@@ -281,7 +304,7 @@ function ModalOverlay({
   );
 }
 
-export default function ConnectBtn() {
+export default function ConnectBtn({ renderTrigger }: ConnectBtnProps) {
   const {
     address,
     isConnected,
@@ -309,6 +332,16 @@ export default function ConnectBtn() {
   const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
   const [viewState, setViewState] = useState<"account" | "network">("account");
+
+  const openConnectModal = useCallback(() => {
+    resetConnect();
+    setIsConnectModalOpen(true);
+  }, [resetConnect]);
+
+  const openAccountModal = useCallback((view: "account" | "network") => {
+    setViewState(view);
+    setIsAccountModalOpen(true);
+  }, []);
 
   const [mounted, setMounted] = useState(false);
   const [imgErrors, setImgErrors] = useState<Record<string, boolean>>({});
@@ -517,15 +550,25 @@ export default function ConnectBtn() {
   // ── UI UI Render Components (Pure Derivation) ──
   let walletUI;
 
-  if (!isConnected) {
+  if (renderTrigger) {
+    walletUI = renderTrigger({
+      isConnected,
+      isConnecting,
+      networkState,
+      chainId,
+      address,
+      truncatedAddress: truncateAddress(address),
+      activeChainName: activeChain?.name,
+      isSwitchPending,
+      openConnectModal,
+      openAccountModal,
+    });
+  } else if (!isConnected) {
     walletUI = (
       <motion.button
         whileTap={buttonTap}
         id="connect-wallet-btn"
-        onClick={() => {
-          resetConnect();
-          setIsConnectModalOpen(true);
-        }}
+        onClick={openConnectModal}
         className="h-[44px] bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 px-6 rounded-full font-medium hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors whitespace-nowrap shadow-sm text-sm"
       >
         {isConnecting ? "Connecting…" : "Connect Wallet"}
@@ -539,10 +582,7 @@ export default function ConnectBtn() {
       <motion.button
         whileHover={{ y: -1 }}
         whileTap={buttonTap}
-        onClick={() => {
-          setViewState("network");
-          setIsAccountModalOpen(true);
-        }}
+        onClick={() => openAccountModal("network")}
         className="flex items-center gap-2 h-[44px] pl-2 pr-3 rounded-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors shadow-sm group"
       >
         <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 hover:opacity-80 transition-opacity cursor-pointer">
@@ -564,10 +604,7 @@ export default function ConnectBtn() {
       <motion.button
         whileHover={{ y: -1 }}
         whileTap={buttonTap}
-        onClick={() => {
-          setViewState("account");
-          setIsAccountModalOpen(true);
-        }}
+        onClick={() => openAccountModal("account")}
         className="flex items-center gap-2 h-[44px] pl-2 pr-3 rounded-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors shadow-sm group"
       >
         <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:opacity-80 transition-opacity cursor-pointer">
@@ -587,7 +624,9 @@ export default function ConnectBtn() {
   // ── Unified Render Tree to preserve AnimatePresence ──
   return (
     <>
-      <div className="flex items-center">{walletUI}</div>
+      <div className={renderTrigger ? "w-full" : "flex items-center"}>
+        {walletUI}
+      </div>
 
       <ModalOverlay
         isOpen={isConnectModalOpen}
@@ -599,23 +638,28 @@ export default function ConnectBtn() {
       >
         <motion.div
           variants={modalVariants}
-          className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 w-full max-w-[360px] rounded-3xl overflow-hidden shadow-2xl"
+          initial="hidden"
+          animate="visible"
+          exit="exit"
+          className="bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-700/50 w-full max-w-[380px] rounded-[28px] overflow-hidden shadow-[0_32px_64px_-12px_rgba(0,0,0,0.25)] dark:shadow-[0_32px_64px_-12px_rgba(0,0,0,0.6)]"
         >
           <div className="p-6">
             <div className="flex justify-between items-center mb-6">
               <h2
                 id="connect-modal-title"
-                className="text-lg font-bold text-zinc-900 dark:text-zinc-100 tracking-tight"
+                className="text-lg font-bold text-zinc-900 dark:text-white tracking-tight"
               >
                 Connect Wallet
               </h2>
               <motion.button
                 whileTap={buttonTap}
+                whileHover={{ scale: 1.05 }}
                 onClick={() => {
                   setIsConnectModalOpen(false);
                   resetConnect();
                 }}
-                className="p-1.5 text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full transition-colors"
+                className="p-2 text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full transition-all duration-150"
+                aria-label="Close"
               >
                 <CloseIcon />
               </motion.button>
@@ -643,12 +687,13 @@ export default function ConnectBtn() {
                     <motion.button
                       key={connector.id}
                       whileTap={buttonTap}
+                      whileHover={{ scale: 1.01 }}
                       disabled={isConnectPending}
                       onClick={() => handleConnect(connector)}
-                      className="w-full flex items-center justify-between p-3.5 rounded-2xl bg-zinc-50 dark:bg-zinc-900/50 border border-transparent hover:border-zinc-200 dark:hover:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors group disabled:opacity-50 text-left"
+                      className="w-full flex items-center justify-between p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-100 dark:border-zinc-700/60 hover:border-zinc-300 dark:hover:border-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all duration-150 group disabled:opacity-50 text-left"
                     >
                       <div className="flex items-center gap-3">
-                        <div className="relative w-10 h-10 rounded-xl bg-white dark:bg-zinc-950 border border-zinc-100 dark:border-zinc-800 flex items-center justify-center shrink-0 shadow-sm overflow-hidden">
+                        <div className="relative w-11 h-11 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-700 flex items-center justify-center shrink-0 shadow-sm overflow-hidden">
                           {hasImgError ? (
                             <span className="text-zinc-400 font-bold select-none text-sm">
                               {info.name.charAt(0)}
@@ -663,12 +708,14 @@ export default function ConnectBtn() {
                             />
                           )}
                         </div>
-                        <span className="font-semibold text-[15px] text-zinc-900 dark:text-zinc-100">
+                        <span className="font-semibold text-[15px] text-zinc-900 dark:text-white">
                           {info.name}
                         </span>
                       </div>
-                      {isThisPending && (
-                        <div className="w-4 h-4 mr-2 border-2 border-zinc-900 dark:border-zinc-100 border-t-transparent animate-spin rounded-full shrink-0" />
+                      {isThisPending ? (
+                        <div className="w-4 h-4 mr-1 border-2 border-zinc-900 dark:border-zinc-100 border-t-transparent animate-spin rounded-full shrink-0" />
+                      ) : (
+                        <svg className="w-4 h-4 text-zinc-300 dark:text-zinc-600 group-hover:text-zinc-500 dark:group-hover:text-zinc-400 transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
                       )}
                     </motion.button>
                   );
@@ -679,18 +726,20 @@ export default function ConnectBtn() {
                   target="_blank"
                   rel="noopener noreferrer"
                   whileTap={buttonTap}
-                  className="w-full flex items-center justify-between p-3.5 rounded-2xl bg-zinc-50 dark:bg-zinc-900/50 border border-transparent hover:border-zinc-200 dark:hover:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors group text-left"
+                  whileHover={{ scale: 1.01 }}
+                  className="w-full flex items-center justify-between p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-100 dark:border-zinc-700/60 hover:border-zinc-300 dark:hover:border-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all duration-150 group text-left"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="relative w-10 h-10 rounded-xl bg-white dark:bg-zinc-950 border border-zinc-100 dark:border-zinc-800 flex items-center justify-center shrink-0 shadow-sm overflow-hidden">
+                    <div className="relative w-11 h-11 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-700 flex items-center justify-center shrink-0 shadow-sm overflow-hidden">
                       <span className="text-zinc-400 font-bold select-none text-sm">
                         W
                       </span>
                     </div>
-                    <span className="font-semibold text-[15px] text-zinc-900 dark:text-zinc-100">
+                    <span className="font-semibold text-[15px] text-zinc-900 dark:text-white">
                       Install Wallet
                     </span>
                   </div>
+                  <svg className="w-4 h-4 text-zinc-300 dark:text-zinc-600 group-hover:text-zinc-500 dark:group-hover:text-zinc-400 transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
                 </motion.a>
               )}
             </div>
@@ -705,7 +754,10 @@ export default function ConnectBtn() {
       >
         <motion.div
           variants={modalVariants}
-          className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 w-full max-w-[360px] rounded-[28px] overflow-hidden shadow-2xl relative"
+          initial="hidden"
+          animate="visible"
+          exit="exit"
+          className="bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-700/50 w-full max-w-[380px] rounded-[28px] overflow-hidden shadow-[0_32px_64px_-12px_rgba(0,0,0,0.25)] dark:shadow-[0_32px_64px_-12px_rgba(0,0,0,0.6)] relative"
         >
           <AnimatePresence mode="wait" initial={false}>
             {viewState === "account" && (
@@ -720,14 +772,16 @@ export default function ConnectBtn() {
                 <div className="flex justify-between items-center mb-6">
                   <h2
                     id="account-modal-title"
-                    className="text-lg font-bold text-zinc-900 dark:text-zinc-100 tracking-tight"
+                    className="text-lg font-bold text-zinc-900 dark:text-white tracking-tight"
                   >
                     Account
                   </h2>
                   <motion.button
                     whileTap={buttonTap}
+                    whileHover={{ scale: 1.05 }}
                     onClick={() => setIsAccountModalOpen(false)}
-                    className="p-1.5 text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full transition-colors"
+                    className="p-2 text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full transition-all duration-150"
+                    aria-label="Close"
                   >
                     <CloseIcon />
                   </motion.button>
@@ -735,7 +789,7 @@ export default function ConnectBtn() {
                 <div className="flex flex-col items-center gap-3 mb-8">
                   <motion.div
                     layoutId="wallet-chip-modal-wrapper"
-                    className="w-[60px] h-[60px] bg-zinc-50 dark:bg-zinc-900 rounded-2xl border border-zinc-100 dark:border-zinc-800 flex items-center justify-center overflow-hidden shadow-sm"
+                    className="w-[64px] h-[64px] bg-zinc-100 dark:bg-zinc-800 rounded-2xl border border-zinc-200 dark:border-zinc-700 flex items-center justify-center overflow-hidden shadow-md"
                   >
                     {activeConnector ? (
                       (() => {
@@ -762,7 +816,7 @@ export default function ConnectBtn() {
                       <span className="text-zinc-400">W</span>
                     )}
                   </motion.div>
-                  <div className="text-center">
+                  <div className="text-center w-full">
                     <p
                       className="text-[22px] font-bold text-zinc-900 dark:text-white font-mono tracking-tight"
                       title={address}
@@ -771,8 +825,9 @@ export default function ConnectBtn() {
                     </p>
                     <motion.button
                       whileTap={buttonTap}
+                      whileHover={{ scale: 1.01 }}
                       onClick={() => setViewState("network")}
-                      className="mt-3 w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 bg-zinc-50 dark:bg-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors group cursor-pointer"
+                      className="mt-3 w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-700/70 hover:border-zinc-300 dark:hover:border-zinc-600 bg-zinc-50 dark:bg-zinc-800/60 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all duration-150 group cursor-pointer"
                       aria-label="Switch network"
                     >
                       <div className="flex items-center gap-2">
@@ -787,7 +842,7 @@ export default function ConnectBtn() {
                               : (activeChain?.name ?? "Loading...")}
                         </span>
                       </div>
-                      <ChevronDownIcon className="w-5 h-5 text-zinc-400 group-hover:text-zinc-600 dark:group-hover:text-zinc-200 transition-colors" />
+                      <ChevronDownIcon className="w-4 h-4 text-zinc-400 group-hover:text-zinc-600 dark:group-hover:text-zinc-300 transition-colors" />
                     </motion.button>
                   </div>
                 </div>
@@ -795,8 +850,9 @@ export default function ConnectBtn() {
                   <div className="grid grid-cols-2 gap-2">
                     <motion.button
                       whileTap={buttonTap}
+                      whileHover={{ scale: 1.02 }}
                       onClick={handleCopyAddress}
-                      className="flex items-center justify-center gap-2 h-[44px] rounded-xl bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-sm font-semibold text-zinc-700 dark:text-zinc-300"
+                      className="flex items-center justify-center gap-2 h-[46px] rounded-xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700/60 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-600 transition-all duration-150 text-sm font-semibold text-zinc-700 dark:text-zinc-200"
                     >
                       <CopyIcon copied={copySuccess} />{" "}
                       {copySuccess ? "Copied!" : "Copy"}
@@ -804,24 +860,26 @@ export default function ConnectBtn() {
                     {explorerAddressUrl ? (
                       <motion.a
                         whileTap={buttonTap}
+                        whileHover={{ scale: 1.02 }}
                         href={explorerAddressUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center justify-center gap-2 h-[44px] rounded-xl bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-sm font-semibold text-zinc-700 dark:text-zinc-300"
+                        className="flex items-center justify-center gap-2 h-[46px] rounded-xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700/60 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-600 transition-all duration-150 text-sm font-semibold text-zinc-700 dark:text-zinc-200"
                       >
                         <ExplorerIcon /> Explorer
                       </motion.a>
                     ) : (
-                      <div className="flex items-center justify-center gap-2 h-[44px] rounded-xl bg-zinc-50/50 dark:bg-zinc-900/20 border border-transparent text-sm font-semibold text-zinc-400 dark:text-zinc-600 cursor-not-allowed">
+                      <div className="flex items-center justify-center gap-2 h-[46px] rounded-xl bg-zinc-50/50 dark:bg-zinc-900/20 border border-transparent text-sm font-semibold text-zinc-400 dark:text-zinc-600 cursor-not-allowed">
                         <ExplorerIcon className="w-4 h-4 opacity-50" /> Explorer
                       </div>
                     )}
                   </div>
-                  <div className="h-px w-full bg-zinc-100 dark:bg-zinc-800 my-2" />
+                  <div className="h-px w-full bg-zinc-100 dark:bg-zinc-800 my-1" />
                   <motion.button
                     whileTap={buttonTap}
+                    whileHover={{ scale: 1.01 }}
                     onClick={handleDisconnect}
-                    className="flex items-center justify-center gap-2 h-[44px] rounded-xl text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors text-sm font-semibold group"
+                    className="flex items-center justify-center gap-2 h-[46px] rounded-xl text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 border border-transparent hover:border-red-100 dark:hover:border-red-500/20 transition-all duration-150 text-sm font-semibold group"
                   >
                     <DisconnectIcon className="w-4 h-4 transition-transform group-hover:-translate-x-0.5" />{" "}
                     Disconnect
@@ -841,8 +899,10 @@ export default function ConnectBtn() {
                 <div className="flex items-center gap-3 mb-6">
                   <motion.button
                     whileTap={buttonTap}
+                    whileHover={{ scale: 1.05 }}
                     onClick={() => setViewState("account")}
-                    className="p-1.5 -ml-1.5 text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full transition-colors"
+                    className="p-2 -ml-2 text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full transition-all duration-150"
+                    aria-label="Back to account"
                   >
                     <svg
                       className="w-5 h-5"
@@ -856,7 +916,7 @@ export default function ConnectBtn() {
                       <polyline points="15 18 9 12 15 6" />
                     </svg>
                   </motion.button>
-                  <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 tracking-tight">
+                  <h2 className="text-lg font-bold text-zinc-900 dark:text-white tracking-tight">
                     Switch Networks
                   </h2>
                 </div>
