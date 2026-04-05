@@ -8,7 +8,8 @@ import { CoinABI } from "@/utils/abi/Coin";
 import { ChainlinkOracleABI } from "@/utils/abi/ChainlinkOracle";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
-import { formatUnits, isAddress, Address, PublicClient, createPublicClient, http } from "viem";
+import { formatUnits, isAddress, createPublicClient, http } from "viem";
+import type { Address, PublicClient } from "viem";
 import { FatePoolFactories } from "@/utils/addresses";
 import { getPriceFeedName } from "@/utils/supportedChainFeed";
 import { getChainConfig } from "@/utils/chainConfig";
@@ -404,7 +405,11 @@ function ExploreFatePoolsClient() {
 
   const fetchAllPools = useCallback(async (showToast = true): Promise<void> => {
     const now = Date.now();
-    if (now - lastFetchTime < FETCH_COOLDOWN) { if (showToast) { toast.info("Refreshed recently. Please wait a moment."); } return; }
+    if (now - lastFetchTime < FETCH_COOLDOWN) { 
+      if (showToast) { toast.info("Refreshed recently. Please wait a moment."); } 
+      setRefreshing(false);
+      return; 
+    }
     setLastFetchTime(now);
     setLoading(true);
 

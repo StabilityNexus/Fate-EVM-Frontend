@@ -40,15 +40,6 @@ html {
     color 0.1s ease-in-out;
 }
 
-/* Ensure body also has the correct background */
-body {
-  background-color: var(--background);
-  color: var(--foreground);
-  transition:
-    background-color 0.1s ease-in-out,
-    color 0.1s ease-in-out;
-}
-
 /* Additional theme flash prevention */
 html.dark {
   background-color: #0a0a0a;
