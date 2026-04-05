@@ -36,7 +36,7 @@ export const getExplorerUrl = (
 export const getAddressExplorerUrl = (
   address: `0x${string}`,
   chainId: number,
-: string => {
+): string => {
   const baseUrl = getExplorerBaseUrl(chainId);
   if (!baseUrl) {
     throw new Error(`Unsupported chain for explorer url: ${chainId}`);
