@@ -86,7 +86,9 @@ export default function CreateFatePool() {
 
   // B1 fix: dedicated hash state so success/redirect fires ONLY when the
   // pool createPool tx confirms — not when an adapter or approve tx does.
-  const [poolDeployHash, setPoolDeployHash] = useState<`0x${string}` | undefined>(undefined);
+  const [poolDeployHash, setPoolDeployHash] = useState<
+    `0x${string}` | undefined
+  >(undefined);
 
   const {
     isLoading: isDeployingTx,
@@ -269,18 +271,16 @@ export default function CreateFatePool() {
       }
 
       if (!currentChainId) {
-        toast.error("Please connect to a supported network");
-        return;
+        throw new Error("Chain ID not available");
+      }
+
+      if (!address) {
+        throw new Error("Wallet address not available");
       }
 
       const FACTORY_ADDRESS = FatePoolFactories[currentChainId];
       if (!FACTORY_ADDRESS) {
         toast.error("Factory address not found for this chain");
-        return;
-      }
-
-      if (!address) {
-        toast.error("Please connect your wallet");
         return;
       }
 
@@ -312,7 +312,7 @@ export default function CreateFatePool() {
           if (
             !adapterFactoryAddress ||
             adapterFactoryAddress ===
-            "0x0000000000000000000000000000000000000000"
+              "0x0000000000000000000000000000000000000000"
           ) {
             throw new Error(
               `ChainlinkAdapterFactory not deployed on chain ${currentChainId}. Please deploy the adapter factory first.`,
@@ -323,7 +323,7 @@ export default function CreateFatePool() {
           if (
             !formData.priceFeedAddress ||
             formData.priceFeedAddress ===
-            "0x0000000000000000000000000000000000000000"
+              "0x0000000000000000000000000000000000000000"
           ) {
             throw new Error(
               "Price feed address is required for Chainlink oracle.",
@@ -428,7 +428,7 @@ export default function CreateFatePool() {
           if (
             !adapterFactoryAddress ||
             adapterFactoryAddress ===
-            "0x0000000000000000000000000000000000000000"
+              "0x0000000000000000000000000000000000000000"
           ) {
             throw new Error(
               `HebeswapAdapterFactory not deployed on chain ${currentChainId}. Please deploy the adapter factory first.`,
@@ -439,14 +439,14 @@ export default function CreateFatePool() {
           if (
             !formData.hebeswapPairAddress ||
             formData.hebeswapPairAddress ===
-            "0x0000000000000000000000000000000000000000"
+              "0x0000000000000000000000000000000000000000"
           ) {
             throw new Error("Hebeswap pair address is required.");
           }
           if (
             !formData.hebeswapQuoteToken ||
             formData.hebeswapQuoteToken ===
-            "0x0000000000000000000000000000000000000000"
+              "0x0000000000000000000000000000000000000000"
           ) {
             throw new Error("Hebeswap quote token address is required.");
           }
@@ -562,8 +562,12 @@ export default function CreateFatePool() {
 
         if (initialDepositValue > 0) {
           try {
+            if (!publicClient) {
+              throw new Error("Public client not available");
+            }
+
             // Get token decimals
-            const decimals = (await publicClient!.readContract({
+            const decimals = (await publicClient.readContract({
               address: baseTokenAddress as `0x${string}`,
               abi: ERC20_ABI,
               functionName: "decimals",
@@ -593,7 +597,7 @@ export default function CreateFatePool() {
             });
 
             // Check current allowance before approving
-            const currentAllowance = (await publicClient!.readContract({
+            const currentAllowance = (await publicClient.readContract({
               address: baseTokenAddress as `0x${string}`,
               abi: ERC20_ABI,
               functionName: "allowance",
@@ -623,7 +627,7 @@ export default function CreateFatePool() {
 
               // Wait for approval transaction
               toast.info("Waiting for approval transaction...");
-              await publicClient!.waitForTransactionReceipt({
+              await publicClient.waitForTransactionReceipt({
                 hash: approveTxHash,
                 timeout: 60_000,
               });
