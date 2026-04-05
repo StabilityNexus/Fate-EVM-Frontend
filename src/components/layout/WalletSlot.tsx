@@ -11,7 +11,8 @@ export default function WalletSlot() {
       <ConnectBtn
         renderTrigger={(p) => {
           const chainMeta = getChainMeta(p.chainId);
-          const chainLabel = chainMeta?.shortName ?? chainMeta?.name ?? "Unknown";
+          const chainLabel =
+            chainMeta?.shortName ?? chainMeta?.name ?? "Unknown";
           const connectedChainName = p.activeChainName ?? chainLabel;
 
           const isWrongNetwork =
