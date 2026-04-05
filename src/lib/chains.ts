@@ -1,15 +1,37 @@
-import { config } from '../utils/wagmiConfig';
+import type { Chain } from 'wagmi/chains';
+import { sepolia } from 'wagmi/chains';
+import { ethereumClassic } from '@/utils/chains/EthereumClassic';
 
 export interface ChainMeta {
   id: number;
   name: string;
   shortName: string;
   explorerBaseUrl: string;
-  nativeCurrency: { symbol: string; decimals: number };
+  nativeCurrency: {
+    symbol: string;
+    decimals: number;
+    name?: string;
+  };
+  rpcUrls?: {
+    default: {
+      http: string[];
+    };
+  };
+  blockExplorers?: {
+    default: {
+      name: string;
+      url: string;
+    };
+  };
   isTestnet: boolean;
 }
 
-export const SUPPORTED_CHAIN_IDS: number[] = config.chains.map((chain) => chain.id);
+export const SUPPORTED_CHAINS: Chain[] = [
+  sepolia,
+  ethereumClassic,
+];
+
+export const SUPPORTED_CHAIN_IDS: number[] = SUPPORTED_CHAINS.map((chain) => chain.id);
 
 export const CHAIN_METADATA: Record<number, ChainMeta> = {
   1: {
@@ -26,6 +48,25 @@ export const CHAIN_METADATA: Record<number, ChainMeta> = {
     shortName: 'ETH',
     explorerBaseUrl: 'https://optimistic.etherscan.io',
     nativeCurrency: { symbol: 'ETH', decimals: 18 },
+    isTestnet: false,
+  },
+  61: {
+    id: 61,
+    name: 'Ethereum Classic',
+    shortName: 'ETC',
+    explorerBaseUrl: 'https://blockscout.com/etc/mainnet',
+    nativeCurrency: { name: 'Ethereum Classic', symbol: 'ETC', decimals: 18 },
+    rpcUrls: {
+      default: {
+        http: ['https://etc.rivet.link'],
+      },
+    },
+    blockExplorers: {
+      default: {
+        name: 'Blockscout',
+        url: 'https://blockscout.com/etc/mainnet',
+      },
+    },
     isTestnet: false,
   },
   137: {
@@ -57,7 +98,18 @@ export const CHAIN_METADATA: Record<number, ChainMeta> = {
     name: 'Sepolia',
     shortName: 'ETH',
     explorerBaseUrl: 'https://sepolia.etherscan.io',
-    nativeCurrency: { symbol: 'ETH', decimals: 18 },
+    nativeCurrency: { name: 'Sepolia Ether', symbol: 'ETH', decimals: 18 },
+    rpcUrls: {
+      default: {
+        http: ['https://rpc.sepolia.org'],
+      },
+    },
+    blockExplorers: {
+      default: {
+        name: 'Etherscan',
+        url: 'https://sepolia.etherscan.io',
+      },
+    },
     isTestnet: true,
   },
 };
@@ -65,10 +117,10 @@ export const CHAIN_METADATA: Record<number, ChainMeta> = {
 export const UNKNOWN_CHAIN_LABEL = 'Unknown Network';
 
 export function getChainMeta(chainId?: number): ChainMeta | null {
-  if (typeof chainId !== "number") return null;
+  if (typeof chainId !== 'number') return null;
   return CHAIN_METADATA[chainId] ?? null;
 }
 
 export function isSupportedChain(chainId?: number): boolean {
-  return typeof chainId === "number" && config.chains.some(c => c.id === chainId);
+  return typeof chainId === 'number' && SUPPORTED_CHAIN_IDS.includes(chainId);
 }
