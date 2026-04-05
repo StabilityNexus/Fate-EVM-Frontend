@@ -1,6 +1,6 @@
-import { getChainMeta } from '@/lib/chains';
+import { getChainMeta } from "@/lib/chains";
 
-const stripTrailingSlashes = (value: string) => value.replace(/\/+$/, '');
+const stripTrailingSlashes = (value: string) => value.replace(/\/+$/, "");
 
 const getExplorerBaseUrl = (chainId: number): string | null => {
   const meta = getChainMeta(chainId);

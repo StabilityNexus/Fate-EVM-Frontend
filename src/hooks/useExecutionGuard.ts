@@ -32,7 +32,7 @@ export function useExecutionGuard() {
       try {
         const result = await fn();
         return result;
-      } catch (error) {
+      } catch {
         // Swallow instead of rethrowing, since we want to avoid uncaught promise rejections
         // and let inner functions handle their own toast notifications.
         return undefined;

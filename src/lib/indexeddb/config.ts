@@ -1,6 +1,8 @@
 // src/lib/indexeddb/config.ts
 // Centralized IndexedDB configuration and schema definitions
 
+import { SUPPORTED_CHAIN_IDS as CHAIN_SUPPORTED_IDS } from '@/lib/chains';
+
 export interface DatabaseConfig {
   name: string;
   version: number;
@@ -112,11 +114,9 @@ export const CACHE_CONFIG = {
   cleanupInterval: 24 * 60 * 60 * 1000, // 24 hours in milliseconds
 } as const;
 
-// Supported chain IDs
-export type SupportedChainId = 61 | 11155111;
-
-// Single source of truth for supported chain IDs
-export const SUPPORTED_CHAIN_IDS: readonly SupportedChainId[] = [61, 11155111] as const;
+// Supported chain IDs derived from the canonical list
+export type SupportedChainId = (typeof CHAIN_SUPPORTED_IDS)[number];
+export const SUPPORTED_CHAIN_IDS = CHAIN_SUPPORTED_IDS;
 
 // Data type definitions (keeping existing interfaces)
 export interface PoolDetails {

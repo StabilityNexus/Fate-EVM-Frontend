@@ -39,6 +39,7 @@ const WalletSlot = () => {
   const isUnsupported =
     isConnected && currentChainId != null && !isSupportedChain(currentChainId);
   const chainName = getChainMeta(currentChainId)?.shortName ?? "Unknown";
+  const preferredChainLabel = getChainMeta(chains[0]?.id ?? undefined)?.name ?? "supported network";
 
   // Wrong network
   if (isUnsupported) {
@@ -50,7 +51,7 @@ const WalletSlot = () => {
           }}
           disabled={isSwitchPending}
           className="flex flex-col items-center justify-center py-3.5 w-full transition-colors disabled:opacity-60"
-          aria-label={`Wrong network. Switch to ${chains[0]?.name ?? "supported network"}`}
+          aria-label={`Wrong network. Switch to ${preferredChainLabel}`}
         >
           <AlertTriangle
             size={ICON_SIZE}

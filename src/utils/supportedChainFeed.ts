@@ -1,3 +1,5 @@
+import { SUPPORTED_CHAIN_IDS } from '@/lib/chains';
+
 // Supported chains configuration with price feed options
 export const CHAIN_PRICE_FEED_OPTIONS: Record<number, { address: string; name: string }[]> = {
   // Sepolia Testnet
@@ -15,7 +17,7 @@ export const CHAIN_PRICE_FEED_OPTIONS: Record<number, { address: string; name: s
 };
 
 // Get all supported chain IDs
-export const SUPPORTED_CHAINS = Object.keys(CHAIN_PRICE_FEED_OPTIONS).map(Number);
+export const SUPPORTED_CHAINS = [...SUPPORTED_CHAIN_IDS];
 
 // Helper function to get price feed name by address and chain ID
 export const getPriceFeedName = (address: string, chainId: number): string => {

@@ -1,5 +1,5 @@
-import type { Chain } from 'viem';
-import { SUPPORTED_CHAINS, getChainMeta } from '@/lib/chains';
+import type { Chain } from "viem";
+import { SUPPORTED_CHAINS, getChainMeta } from "@/lib/chains";
 
 export interface ChainConfig {
   chain: Chain;
