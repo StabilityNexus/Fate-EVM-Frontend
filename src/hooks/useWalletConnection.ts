@@ -76,7 +76,7 @@ export function useWalletConnection(): WalletConnectionState {
   const isOnSupportedChain = isSupportedChain(chainId);
   const currentChainMeta = getChainMeta(chainId);
   const isOnUnknownChain = isConnected && !isOnSupportedChain && currentChainMeta === null;
-  const isOnUnsupportedChain = isConnected && !isOnSupportedChain;
+  const isOnUnsupportedChain = isConnected && !isOnSupportedChain && currentChainMeta !== null;
   
   const networkState: WalletConnectionState['networkState'] = !isConnected && !isConnecting 
     ? 'DISCONNECTED'

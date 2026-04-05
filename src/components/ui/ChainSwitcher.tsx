@@ -1,5 +1,5 @@
 import React from 'react';
-import { motion } from 'framer-motion';
+import { motion, type HTMLMotionProps } from 'framer-motion';
 
 type ChainSwitcherProps = {
   chainId: number;
@@ -8,8 +8,7 @@ type ChainSwitcherProps = {
   isSwitchPending: boolean;
   targetChainId: React.MutableRefObject<number | null>;
   handleSwitchChain: (cId: number) => void;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  buttonTap: any;
+  buttonTap: HTMLMotionProps<'button'>['whileTap'];
 };
 
 const AlertTriangleIcon = ({ className }: { className?: string }) => (

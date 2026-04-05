@@ -118,7 +118,7 @@ export const getWalletInfo = (connector: Connector): WalletInfo => {
   // 2. Substring match (handles "io.metamask.metamask", etc.)
   for (const [key, value] of Object.entries(WALLET_MAP)) {
     const normalizedKey = key.toLowerCase();
-    if (normalizedId.includes(normalizedKey) || normalizedKey.includes(normalizedId)) {
+    if (normalizedId.includes(normalizedKey)) {
       return value;
     }
   }

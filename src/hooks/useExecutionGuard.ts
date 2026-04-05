@@ -32,10 +32,10 @@ export function useExecutionGuard() {
       try {
         const result = await fn();
         return result;
-      } catch {
-        // Swallow instead of rethrowing, since we want to avoid uncaught promise rejections
-        // and let inner functions handle their own toast notifications.
-        return undefined;
+      } catch (error) {
+        // Preconditions above are user-facing. If the guarded function fails,
+        // rethrow so higher-level error handlers (e.g. withErrorHandling) can run.
+        throw error;
       }
     },
     [isConnected, networkState]
