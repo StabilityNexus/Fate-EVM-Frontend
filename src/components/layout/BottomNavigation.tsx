@@ -1,25 +1,13 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import {
-  Search,
-  Plus,
-  Wallet,
-  Play,
-  User,
-  X,
-  ChevronDown,
-  AlertTriangle,
-} from "lucide-react";
+import { Search, Plus, Play, User, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { isAddress } from "viem";
-import { useAccount, useSwitchChain, useChainId } from "wagmi";
-import ConnectBtn from "@/components/ui/ConnectBtn";
-import { isSupportedChain, getChainMeta } from "@/lib/chains";
-
+import WalletSlot from "@/components/layout/WalletSlot";
 
 const ACTIVE_ICON = "text-[var(--nav-active)]";
 const ACTIVE_LABEL = "text-[var(--nav-active)] font-semibold";
@@ -30,124 +18,29 @@ const ACTIVE_BAR =
 const ICON_SIZE = 22;
 const ICON_STROKE = 1.75;
 
-
-const WalletSlot = () => {
-  const { address, isConnected } = useAccount();
-  const { chains, switchChain, isPending: isSwitchPending } = useSwitchChain();
-  const currentChainId = useChainId();
-
-  const isUnsupported =
-    isConnected && currentChainId != null && !isSupportedChain(currentChainId);
-  const chainName = getChainMeta(currentChainId)?.shortName ?? "Unknown";
-  const preferredChainLabel = getChainMeta(chains[0]?.id ?? undefined)?.name ?? "supported network";
-
-  // Wrong network
-  if (isUnsupported) {
-    return (
-      <div className="flex items-center justify-center w-full">
-        <button
-          onClick={() => {
-            if (chains[0]) switchChain({ chainId: chains[0].id });
-          }}
-          disabled={isSwitchPending}
-          className="flex flex-col items-center justify-center py-3.5 w-full transition-colors disabled:opacity-60"
-          aria-label={`Wrong network. Switch to ${preferredChainLabel}`}
-        >
-          <AlertTriangle
-            size={ICON_SIZE}
-            strokeWidth={ICON_STROKE}
-            className="text-red-500"
-            aria-hidden="true"
-          />
-          <span className="text-[11px] mt-1 text-red-500 font-semibold">
-            {isSwitchPending ? "Switching…" : "Wrong Net"}
-          </span>
-        </button>
-      </div>
-    );
-  }
-
-  
-  if (isConnected && address) {
-    
-    return (
-      <div className="flex items-center justify-center w-full relative">
-        
-        <div
-          className="absolute inset-0 flex items-center justify-center overflow-hidden opacity-0"
-          aria-hidden="true"
-        >
-          <ConnectBtn />
-        </div>
-
-        
-        <div className="flex flex-col items-center justify-center py-2.5 px-1 w-full gap-1 pointer-events-none select-none">
-          <div className="flex items-center gap-1 bg-white/[0.06] rounded-full px-3 py-1">
-            <span className="text-[11px] font-medium text-[var(--nav-active)] max-w-[72px] truncate leading-none">
-              {chainName}
-            </span>
-            <ChevronDown
-              size={10}
-              strokeWidth={2.5}
-              className="text-[var(--nav-active)]/70 shrink-0"
-              aria-hidden="true"
-            />
-          </div>
-
-          <div className="flex items-center gap-1 rounded-full px-2 py-0.5">
-            <Wallet
-              size={12}
-              strokeWidth={1.75}
-              className="text-white/35 shrink-0"
-              aria-hidden="true"
-            />
-            <span className="text-[10px] font-medium text-white/45 truncate max-w-[60px] leading-none">
-              {address.substring(0, 6)}…{address.substring(address.length - 4)}
-            </span>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Disconnected
-  return (
-    <div className="flex items-center justify-center w-full relative">
-     
-      <div
-        className="absolute inset-0 flex items-center justify-center overflow-hidden opacity-0"
-        aria-hidden="true"
-      >
-        <ConnectBtn />
-      </div>
-
-        
-      <div
-        className="flex flex-col items-center justify-center py-3.5 w-full pointer-events-none select-none"
-        aria-hidden="true"
-      >
-        <Wallet
-          size={ICON_SIZE}
-          strokeWidth={ICON_STROKE}
-          className="text-[var(--nav-active)]"
-        />
-        <span className="text-[11px] mt-1 text-[var(--nav-active)] font-semibold">
-          Connect
-        </span>
-      </div>
-    </div>
-  );
-};
-
-  // ─── BottomNavigation ─────────────────────────────────────────────────────────
+// ─── BottomNavigation ─────────────────────────────────────────────────────────
 
 const BottomNavigation: React.FC = () => {
   const pathname = usePathname();
   const router = useRouter();
   const [isUsePoolOpen, setIsUsePoolOpen] = useState(false);
   const [poolAddress, setPoolAddress] = useState("");
+  const useButtonRef = useRef<HTMLButtonElement | null>(null);
+  const usePoolModalRef = useRef<HTMLDivElement | null>(null);
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
 
-  const handleUsePoolClick = () => setIsUsePoolOpen(true);
+  const closeUsePool = useCallback(() => {
+    setIsUsePoolOpen(false);
+  }, []);
+
+  const handleUsePoolClick = () => {
+    previouslyFocusedRef.current =
+      useButtonRef.current ??
+      (document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null);
+    setIsUsePoolOpen(true);
+  };
 
   const handlePoolSubmit = () => {
     if (!poolAddress.trim()) {
@@ -161,9 +54,82 @@ const BottomNavigation: React.FC = () => {
     }
 
     router.push(`/pool?id=${poolAddress}`);
-    setIsUsePoolOpen(false);
+    closeUsePool();
     setPoolAddress("");
   };
+
+  useEffect(() => {
+    if (!isUsePoolOpen) return;
+
+    const getFocusable = () => {
+      const root = usePoolModalRef.current;
+      if (!root) return [] as HTMLElement[];
+      return Array.from(
+        root.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((el) => !el.hasAttribute("disabled") && el.tabIndex !== -1);
+    };
+
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        closeUsePool();
+        return;
+      }
+
+      if (e.key !== "Tab") return;
+
+      const focusable = getFocusable();
+      if (focusable.length === 0) {
+        e.preventDefault();
+        usePoolModalRef.current?.focus();
+        return;
+      }
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+
+      if (e.shiftKey) {
+        if (
+          !active ||
+          active === first ||
+          !usePoolModalRef.current?.contains(active)
+        ) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else {
+        if (
+          !active ||
+          active === last ||
+          !usePoolModalRef.current?.contains(active)
+        ) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    };
+
+    document.addEventListener("keydown", handler);
+
+    queueMicrotask(() => {
+      const input = document.getElementById(
+        "pool-address-input",
+      ) as HTMLInputElement | null;
+      if (input) {
+        input.focus();
+      } else {
+        const focusable = getFocusable();
+        focusable[0]?.focus();
+      }
+    });
+
+    return () => {
+      document.removeEventListener("keydown", handler);
+      previouslyFocusedRef.current?.focus?.();
+    };
+  }, [closeUsePool, isUsePoolOpen]);
 
   const navItems = [
     {
@@ -201,7 +167,10 @@ const BottomNavigation: React.FC = () => {
       <Icon
         size={ICON_SIZE}
         strokeWidth={ICON_STROKE}
-        className={cn("transition-colors", isActive ? ACTIVE_ICON : INACTIVE_ICON)}
+        className={cn(
+          "transition-colors",
+          isActive ? ACTIVE_ICON : INACTIVE_ICON,
+        )}
         aria-hidden="true"
       />
       <span
@@ -217,6 +186,7 @@ const BottomNavigation: React.FC = () => {
 
   const UseButton = () => (
     <button
+      ref={useButtonRef}
       onClick={handleUsePoolClick}
       className="relative flex flex-col items-center justify-center py-3.5 flex-1 transition-colors"
       aria-label="Open pool by address"
@@ -227,7 +197,9 @@ const BottomNavigation: React.FC = () => {
         className={cn("transition-colors", INACTIVE_ICON)}
         aria-hidden="true"
       />
-      <span className={cn("text-[11px] mt-1 transition-colors", INACTIVE_LABEL)}>
+      <span
+        className={cn("text-[11px] mt-1 transition-colors", INACTIVE_LABEL)}
+      >
         Use
       </span>
     </button>
@@ -268,8 +240,15 @@ const BottomNavigation: React.FC = () => {
           role="dialog"
           aria-modal="true"
           aria-labelledby="use-pool-modal-title"
+          onPointerDown={(e) => {
+            if (e.target === e.currentTarget) closeUsePool();
+          }}
         >
-          <div className="bg-zinc-900 rounded-2xl p-6 w-full max-w-md shadow-2xl">
+          <div
+            ref={usePoolModalRef}
+            tabIndex={-1}
+            className="bg-zinc-900 rounded-2xl p-6 w-full max-w-md shadow-2xl outline-none"
+          >
             <div className="flex items-center justify-between mb-4">
               <h3
                 id="use-pool-modal-title"
@@ -278,7 +257,7 @@ const BottomNavigation: React.FC = () => {
                 Use Pool
               </h3>
               <button
-                onClick={() => setIsUsePoolOpen(false)}
+                onClick={closeUsePool}
                 className="p-2 hover:bg-zinc-800 rounded-full transition-colors"
                 aria-label="Close use pool modal"
               >
@@ -307,7 +286,7 @@ const BottomNavigation: React.FC = () => {
 
               <div className="flex gap-3">
                 <button
-                  onClick={() => setIsUsePoolOpen(false)}
+                  onClick={closeUsePool}
                   className="flex-1 px-4 py-3 text-gray-300 bg-zinc-800 rounded-xl hover:bg-zinc-700 transition-colors text-sm font-medium"
                 >
                   Cancel
