@@ -1,6 +1,5 @@
-import { Chain } from "viem";
-import { sepolia } from "viem/chains";
-import { ethereumClassic } from "./chains/EthereumClassic";
+import type { Chain } from 'viem';
+import { SUPPORTED_CHAINS, getChainMeta } from '@/lib/chains';
 
 export interface ChainConfig {
   chain: Chain;
@@ -8,12 +7,12 @@ export interface ChainConfig {
 }
 
 export const getChainConfig = (chainId: number): ChainConfig | null => {
-  switch (chainId) {
-    case sepolia.id: // 11155111
-      return { chain: sepolia, name: "Sepolia Testnet" };
-    case 61: // Ethereum Classic
-      return { chain: ethereumClassic, name: "Ethereum Classic" };
-    default:
-      return null;
-  }
+  const chain = SUPPORTED_CHAINS.find((c) => c.id === chainId);
+  if (!chain) return null;
+
+  const meta = getChainMeta(chainId);
+  return {
+    chain,
+    name: meta?.name ?? chain.name,
+  };
 };
