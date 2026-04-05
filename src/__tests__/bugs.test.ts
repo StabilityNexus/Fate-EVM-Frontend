@@ -195,9 +195,10 @@ describe("B6 – pendingApproval cleared on error", () => {
     const isConfirmed = true;
     const isTransactionPending = false;
     if (isConfirmed && !isTransactionPending) {
-      if (pendingApproval && (pendingApproval as any).type === "buy") {
+      const pending = pendingApproval;
+      if (pending !== null && pending.type === "buy") {
         // BUG: this runs even though the approval was rejected
-        unintendedCalls.push(`buy(${(pendingApproval as any).amount})`);
+        unintendedCalls.push(`buy(${pending.amount})`);
         setPendingApproval(null);
       }
     }
@@ -226,8 +227,9 @@ describe("B6 – pendingApproval cleared on error", () => {
     const isConfirmed = true;
     const isTransactionPending = false;
     if (isConfirmed && !isTransactionPending) {
-      if (pendingApproval && (pendingApproval as any).type === "buy") {
-        unintendedCalls.push(`buy(${(pendingApproval as any).amount})`);
+      const pending = pendingApproval;
+      if (pending !== null && pending.type === "buy") {
+        unintendedCalls.push(`buy(${pending.amount})`);
         setPendingApproval(null);
       }
     }

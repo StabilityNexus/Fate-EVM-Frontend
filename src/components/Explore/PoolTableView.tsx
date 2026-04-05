@@ -1,3 +1,5 @@
+"use client";
+
 import React from "react";
 import { ExternalLink, TrendingUp, TrendingDown } from "lucide-react";
 import type { Pool } from "@/lib/types";

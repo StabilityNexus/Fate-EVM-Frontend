@@ -1,3 +1,5 @@
+"use client";
+
 import React from "react";
 import { ArrowRight, TrendingUp, TrendingDown, Info, Zap } from "lucide-react";
 import { RangeSlider } from "./RangeSlider";

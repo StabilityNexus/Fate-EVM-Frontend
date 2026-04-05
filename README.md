@@ -89,7 +89,7 @@ Built with cutting-edge Web3 technologies, Fate Protocol delivers high-performan
 - **Wagmi v2** for Web3 hooks
 - **Ethers.js v6** for Ethereum interactions
 - **Viem** for lightweight blockchain calls
-- **Rainbow-Kit** supporting 10+ wallets
+- **Custom wallet modal** built on wagmi
 - **TanStack React Query** for data sync
 
 ### Smart Contracts

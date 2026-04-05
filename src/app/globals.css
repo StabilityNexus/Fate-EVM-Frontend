@@ -109,7 +109,7 @@ body {
   width: 1.5rem;
   transition: transform 0.2s;
   transform: rotate(0) scale(1);
-  color: currentColor;
+  color: currentcolor;
 }
 
 .hero-button {
@@ -200,11 +200,6 @@ body {
   100% {
     transform: translate(0, 0);
   }
-}
-
-/* Custom wallet button styling - Unified with app design */
-.connect-btn {
-  @apply bg-black dark:bg-white text-white dark:text-black font-semibold rounded-lg transition-all duration-200 hover:opacity-90 active:scale-95;
 }
 
 /* Fix exclamation icon color to red */

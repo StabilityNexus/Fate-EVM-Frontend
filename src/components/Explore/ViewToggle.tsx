@@ -1,3 +1,5 @@
+"use client";
+
 import React from "react";
 import { Grid2X2, List } from "lucide-react";
 

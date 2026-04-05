@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   ValidationError,
@@ -86,6 +86,10 @@ describe("validation: symbols, names, fees", () => {
 });
 
 describe("validation: rate limiting", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("limits within a window and resets after window passes", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
@@ -98,7 +102,6 @@ describe("validation: rate limiting", () => {
     // Advance beyond window → should reset
     vi.setSystemTime(new Date("2026-01-01T00:00:02.000Z"));
     expect(checkRateLimit(key, 2, 1000)).toBe(true);
-
-    vi.useRealTimers();
   });
 });
+

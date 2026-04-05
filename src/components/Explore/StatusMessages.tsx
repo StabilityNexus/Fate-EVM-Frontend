@@ -1,3 +1,5 @@
+"use client";
+
 // src/components/Explore/StatusMessages.tsx
 import React from "react";
 import { AlertCircle, RefreshCw } from "lucide-react";

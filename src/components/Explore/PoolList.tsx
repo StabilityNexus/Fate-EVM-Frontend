@@ -1,3 +1,5 @@
+"use client";
+
 import React from "react";
 import { PredictionCard } from "@/components/FatePoolCard/FatePoolCard";
 import PoolTableView from "./PoolTableView";
