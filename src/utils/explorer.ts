@@ -1,14 +1,15 @@
-// Explorer utility for Fate-EVM-Frontend
-// Supported chains: Ethereum Classic (61), Sepolia (11155111)
+import { getChainMeta } from '@/lib/chains';
 
-const TX_EXPLORER_URLS: Record<number, string> = {
-  11155111: 'https://sepolia.etherscan.io/tx/',   // Sepolia Testnet
-  61:       'https://etc.blockscout.com/tx/',      // Ethereum Classic
-};
+const stripTrailingSlashes = (value: string) => value.replace(/\/+$/, '');
 
-const ADDRESS_EXPLORER_URLS: Record<number, string> = {
-  11155111: 'https://sepolia.etherscan.io/address/',  // Sepolia Testnet
-  61:       'https://etc.blockscout.com/address/',    // Ethereum Classic
+const getExplorerBaseUrl = (chainId: number): string | null => {
+  const meta = getChainMeta(chainId);
+  if (!meta) return null;
+
+  const baseUrl = meta.blockExplorers?.default?.url ?? meta.explorerBaseUrl;
+  if (!baseUrl) return null;
+
+  return stripTrailingSlashes(baseUrl);
 };
 
 /**
@@ -21,9 +22,9 @@ export const getExplorerUrl = (
   hash: `0x${string}`,
   chainId: number,
 ): string | null => {
-  const baseUrl = TX_EXPLORER_URLS[chainId];
+  const baseUrl = getExplorerBaseUrl(chainId);
   if (!baseUrl) return null;
-  return `${baseUrl}${hash}`;
+  return `${baseUrl}/tx/${hash}`;
 };
 
 /**
@@ -36,7 +37,7 @@ export const getAddressExplorerUrl = (
   address: `0x${string}`,
   chainId: number,
 ): string | null => {
-  const baseUrl = ADDRESS_EXPLORER_URLS[chainId];
+  const baseUrl = getExplorerBaseUrl(chainId);
   if (!baseUrl) return null;
-  return `${baseUrl}${address}`;
+  return `${baseUrl}/address/${address}`;
 };
