@@ -9,7 +9,7 @@ import {
   useWriteContract,
   useWaitForTransactionReceipt
 } from 'wagmi';
-import { formatUnits, parseUnits, type Address, createPublicClient, http, isAddress } from 'viem';
+import { formatUnits, parseUnits, type Address, createPublicClient, http, isAddress, zeroAddress } from 'viem';
 import { PredictionPoolABI } from '@/utils/abi/PredictionPool';
 import { CoinABI } from '@/utils/abi/Coin';
 import { ERC20ABI } from '@/utils/abi/ERC20';
@@ -1159,6 +1159,11 @@ export default function InteractionClient() {
 
     if (!isAddress(newOracleAddress)) {
       toast.error('Invalid oracle address format');
+      return;
+    }
+
+    if (newOracleAddress.toLowerCase() === zeroAddress) {
+      toast.error('Oracle address cannot be zero address');
       return;
     }
 

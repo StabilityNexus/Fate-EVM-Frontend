@@ -1,0 +1,215 @@
+name: "ETH to WETH Conversion Flow"
+description: >
+  Tests that a user can wrap ETH into WETH on Sepolia testnet, verify
+  the WETH balance updates, then use that WETH inside the Fate pool
+  (buy Bull/Bear tokens). Also tests the reverse: unwrap WETH back to ETH.
+
+platform: "nextjs"
+base_url: "http://localhost:3000"
+
+# ─────────────────────────────────────────────────────────────────────
+# Pre-conditions
+# ─────────────────────────────────────────────────────────────────────
+prerequisites:
+  - MetaMask (or similar injected wallet) installed in the test browser
+  - Test wallet funded with Sepolia ETH (get from https://sepoliafaucet.com)
+  - Network set to Sepolia (chainId 11155111)
+  - Sepolia WETH contract: 0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14
+
+# ─────────────────────────────────────────────────────────────────────
+# Scenario 1 — Wrap ETH → WETH (via external page or wallet)
+# ─────────────────────────────────────────────────────────────────────
+scenarios:
+  - id: "wrap_eth_to_weth"
+    name: "Wrap ETH to WETH on Sepolia"
+    steps:
+      - id: "open_uniswap_wrap"
+        action: navigate
+        url: "https://app.uniswap.org/swap?chain=sepolia&inputCurrency=ETH&outputCurrency=0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14"
+        description: "Open Uniswap on Sepolia with ETH→WETH route pre-filled"
+
+      - id: "connect_wallet_uniswap"
+        action: click
+        target:
+          text: "Connect"
+          visual: "connect_wallet_button"
+        description: "Connect wallet on Uniswap"
+
+      - id: "confirm_wallet_connection"
+        action: wait
+        condition: "wallet address visible in header"
+        timeout: 15000
+
+      - id: "enter_eth_amount"
+        action: type
+        target:
+          placeholder: "0"
+          label: "You pay"
+        value: "0.01"
+        description: "Enter 0.01 ETH to wrap"
+
+      - id: "click_wrap_button"
+        action: click
+        target:
+          text: "Wrap"
+        description: "Click Wrap to convert ETH to WETH"
+
+      - id: "confirm_in_wallet"
+        action: wait
+        condition: "MetaMask transaction confirmation popup visible"
+        timeout: 10000
+
+      - id: "approve_wallet_tx"
+        action: click
+        target:
+          text: "Confirm"
+          visual: "metamask_confirm_button"
+
+      - id: "wait_for_wrap_success"
+        action: wait
+        condition: "transaction success toast or 'Transaction submitted' message visible"
+        timeout: 30000
+
+      - id: "verify_weth_received"
+        action: assert
+        assertion: "WETH balance in wallet is greater than 0"
+        description: >
+          Check MetaMask token balance — you should now have 0.01 WETH.
+          Add the token manually if needed: 0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14
+
+# ─────────────────────────────────────────────────────────────────────
+# Scenario 2 — Use WETH in a Fate Pool (buy Bull tokens)
+# ─────────────────────────────────────────────────────────────────────
+  - id: "buy_bull_with_weth"
+    name: "Buy Bull tokens using WETH in Fate pool"
+    depends_on: "wrap_eth_to_weth"
+    steps:
+      - id: "navigate_to_fate"
+        action: navigate
+        url: "http://localhost:3000"
+        description: "Open the Fate EVM Frontend"
+
+      - id: "connect_wallet_fate"
+        action: click
+        target:
+          text: "Connect Wallet"
+        description: "Connect wallet on Fate"
+
+      - id: "wait_wallet_connected"
+        action: wait
+        condition: "wallet address shown in top bar"
+        timeout: 15000
+
+      - id: "go_to_explore"
+        action: click
+        target:
+          text: "Explore Pools"
+          visual: "explore_pools_nav_item"
+
+      - id: "wait_pools_loaded"
+        action: wait
+        condition: "at least one pool card visible"
+        timeout: 10000
+
+      - id: "open_pool"
+        action: click
+        target:
+          visual: "first_pool_card"
+          description: "Click the first available pool"
+
+      - id: "wait_pool_page"
+        action: wait
+        condition: "Bull Vault and Bear Vault sections visible"
+        timeout: 10000
+
+      - id: "note_weth_balance"
+        action: read
+        target:
+          text_contains: "Max:"
+          section: "BUY"
+        description: "Record the 'Max: X.XXXX WETH' value shown above buy input"
+
+      - id: "enter_buy_amount"
+        action: type
+        target:
+          placeholder: "Enter WETH amount"
+          section: "Bull Vault"
+        value: "0.001"
+        description: "Enter 0.001 WETH to buy Bull tokens"
+
+      - id: "click_buy_bull"
+        action: click
+        target:
+          text: "Buy"
+          section: "Bull Vault"
+        description: "Submit the buy transaction"
+
+      - id: "handle_approval_if_needed"
+        action: conditional
+        condition: "MetaMask approval popup visible"
+        if_true:
+          - action: click
+            target:
+              text: "Confirm"
+              visual: "metamask_confirm_button"
+          - action: wait
+            condition: "approval confirmed, second transaction popup visible"
+            timeout: 20000
+          - action: click
+            target:
+              text: "Confirm"
+              visual: "metamask_confirm_button"
+
+      - id: "wait_buy_success"
+        action: wait
+        condition: "toast message 'Transaction submitted' or success visible"
+        timeout: 30000
+
+      - id: "assert_bull_position_updated"
+        action: assert
+        assertion: "YOUR POSITION > Tokens shows a value > 0 in Bull Vault"
+        description: "Confirm Bull token balance is now non-zero"
+
+# ─────────────────────────────────────────────────────────────────────
+# Scenario 3 — Unwrap WETH → ETH (reverse)
+# ─────────────────────────────────────────────────────────────────────
+  - id: "unwrap_weth_to_eth"
+    name: "Unwrap WETH back to ETH on Sepolia"
+    steps:
+      - id: "open_uniswap_unwrap"
+        action: navigate
+        url: "https://app.uniswap.org/swap?chain=sepolia&inputCurrency=0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14&outputCurrency=ETH"
+        description: "Open Uniswap with WETH→ETH route pre-filled"
+
+      - id: "enter_weth_amount"
+        action: type
+        target:
+          placeholder: "0"
+          label: "You pay"
+        value: "0.005"
+        description: "Enter 0.005 WETH to unwrap"
+
+      - id: "click_unwrap"
+        action: click
+        target:
+          text: "Unwrap"
+
+      - id: "confirm_unwrap_wallet"
+        action: wait
+        condition: "MetaMask confirmation popup"
+        timeout: 10000
+
+      - id: "approve_unwrap"
+        action: click
+        target:
+          text: "Confirm"
+          visual: "metamask_confirm_button"
+
+      - id: "wait_unwrap_success"
+        action: wait
+        condition: "transaction success visible"
+        timeout: 30000
+
+      - id: "assert_eth_balance_increased"
+        action: assert
+        assertion: "ETH balance in wallet increased (minus gas)"
