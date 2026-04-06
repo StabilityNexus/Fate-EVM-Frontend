@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { type Address } from 'viem';
 
 // Mock wagmi hooks
 vi.mock('wagmi', () => ({
@@ -19,6 +20,8 @@ import { renderHook } from '@testing-library/react';
 import { useEthWethBalances } from '../useEthWethBalances';
 import { getWethConfig } from '@/lib/weth';
 
+const MOCK_ADDRESS: Address = '0x1111111111111111111111111111111111111111';
+
 describe('useEthWethBalances', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -32,7 +35,7 @@ describe('useEthWethBalances', () => {
       });
 
       const { result } = renderHook(() => 
-        useEthWethBalances({ chainId: 1, address: '0x123' as any })
+        useEthWethBalances({ chainId: 1, address: MOCK_ADDRESS })
       );
 
       expect(result.current.isWethSupported).toBe(false);
@@ -46,7 +49,7 @@ describe('useEthWethBalances', () => {
       });
 
       const { result } = renderHook(() => 
-        useEthWethBalances({ chainId: 8453, address: '0x123' as any })
+        useEthWethBalances({ chainId: 8453, address: MOCK_ADDRESS })
       );
 
       expect(result.current.isWethSupported).toBe(true);
@@ -62,7 +65,7 @@ describe('useEthWethBalances', () => {
       });
 
       const { result } = renderHook(() => 
-        useEthWethBalances({ chainId: 8453, address: '0x123' as any, enabled: false })
+        useEthWethBalances({ chainId: 8453, address: MOCK_ADDRESS, enabled: false })
       );
 
       // When enabled is false, balances should be zero
@@ -78,7 +81,7 @@ describe('useEthWethBalances', () => {
       });
 
       const { result } = renderHook(() => 
-        useEthWethBalances({ chainId: 8453, address: '0x123' as any, enabled: true })
+        useEthWethBalances({ chainId: 8453, address: MOCK_ADDRESS, enabled: true })
       );
 
       // Should be enabled - logic depends on hook implementation

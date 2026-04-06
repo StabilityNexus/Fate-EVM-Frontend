@@ -110,5 +110,26 @@ describe('format utilities', () => {
       expect(toExactAmount(BigInt('1000000000000000000'), 18)).toBe('1');
       expect(toExactAmount(BigInt('1234567890123456789'), 18)).toBe('1.234567890123456789');
     });
+
+    it('handles extremely large BigInt values without throwing', () => {
+      const largeValue = BigInt('999999999999999999999999999999999999999');
+      const result = toExactAmount(largeValue, 18);
+      expect(result).toBeDefined();
+      expect(typeof result).toBe('string');
+      expect(result.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('normalizeAmountInput edge cases', () => {
+    it('rejects scientific notation (e.g., 1e18)', () => {
+      expect(normalizeAmountInput('1e18')).toBe('');
+    });
+
+    it('handles extremely large BigInt values without throwing in toDisplayAmount', () => {
+      const largeValue = BigInt('999999999999999999999999999999999999999');
+      const result = toDisplayAmount(largeValue, 18, 4);
+      expect(result).toBeDefined();
+      expect(typeof result).toBe('string');
+    });
   });
 });

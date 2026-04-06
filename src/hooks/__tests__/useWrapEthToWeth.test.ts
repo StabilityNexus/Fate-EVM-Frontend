@@ -5,10 +5,18 @@ vi.mock('@wagmi/core', () => ({
   waitForTransactionReceipt: vi.fn(),
 }));
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type WriteContractMockReturn = any;
+
 // Mock wagmi hooks
 vi.mock('wagmi', () => ({
-  useWriteContract: vi.fn(() => ({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  useWriteContract: vi.fn((): WriteContractMockReturn => ({
     writeContractAsync: vi.fn(),
+    writeContract: vi.fn(),
+    isLoading: false,
+    isSuccess: false,
+    pending: false,
   })),
   useConfig: vi.fn(() => ({})),
 }));

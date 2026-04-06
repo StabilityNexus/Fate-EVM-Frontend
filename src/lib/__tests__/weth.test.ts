@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getWethConfig, WETH_ABI, WETH_BY_CHAIN_ID } from '../weth';
+import { getWethConfig, getGasBufferForChain, WETH_ABI } from '../weth';
 import { parseUnits } from 'viem';
 
 describe('weth', () => {
@@ -56,15 +56,6 @@ describe('weth', () => {
 });
 
 describe('getGasBufferForChain', () => {
-  // Import dynamically since it's not exported from weth.ts
-  const getGasBufferForChain = (chainId: number): bigint => {
-    const l2ChainIds = [8453, 84532, 42161, 421614, 10, 11155420];
-    if (l2ChainIds.includes(chainId)) {
-      return parseUnits('0.0001', 18);
-    }
-    return parseUnits('0.002', 18);
-  };
-
   const l2Chains = [8453, 84532, 42161, 421614, 10, 11155420];
   const mainnetLikeChains = [11155111]; // Sepolia is testnet but not L2
 

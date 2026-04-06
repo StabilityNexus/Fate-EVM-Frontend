@@ -22,12 +22,12 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Loading } from '@/components/ui/loading';
-import { formatNumber } from '@/utils/format';
+import { formatNumber, normalizeAmountInput, toDisplayAmount, toExactAmount, toDisplayAmountWithMin } from '@/utils/format';
 import { validateTransactionInput } from '@/lib/validation';
 import { withErrorHandling, createTransactionError } from '@/lib/errorHandler';
 import { useEthWethBalances } from '@/hooks/useEthWethBalances';
 import { useWrapEthToWeth } from '@/hooks/useWrapEthToWeth';
-import { getWethConfig } from '@/lib/weth';
+import { getWethConfig, getGasBufferForChain } from '@/lib/weth';
 
 // Note: ChainlinkAdapterFactories is imported but can be used for future oracle management features
 import TradingViewWidget from '@/components/ui/TradingViewWidget';
@@ -223,55 +223,6 @@ const usePool = (poolId: Address | undefined, isConnected: boolean) => {
 
 
 const formatValue = (value: number) => `${formatNumber(value, 3)} WETH`;
-
-const stripTrailingZeros = (value: string): string => {
-  if (!value.includes('.')) return value;
-  return value.replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1');
-};
-
-const truncateDecimalString = (value: string, maxDecimals: number): string => {
-  const trimmed = value.trim();
-  if (!trimmed || !/^\d*(\.\d*)?$/.test(trimmed)) return '';
-
-  const [integerPartRaw = '0', fractionalPartRaw = ''] = trimmed.split('.');
-  const integerPart = integerPartRaw.replace(/^0+(?=\d)/, '') || '0';
-  const fractionalPart = fractionalPartRaw.slice(0, maxDecimals).replace(/0+$/, '');
-
-  return fractionalPart ? `${integerPart}.${fractionalPart}` : integerPart;
-};
-
-const normalizeAmountInput = (value: string): string => {
-  const trimmed = value.trim();
-  if (!trimmed || !/^\d*(\.\d*)?$/.test(trimmed)) return '';
-
-  // Keep comparison exact in wei while capping user input at token precision.
-  return stripTrailingZeros(truncateDecimalString(trimmed, 18));
-};
-
-const toDisplayAmount = (value: bigint, tokenDecimals = 18, displayDecimals = 4): string => {
-  return truncateDecimalString(formatUnits(value, tokenDecimals), displayDecimals);
-};
-
-const toExactAmount = (value: bigint, tokenDecimals = 18): string => {
-  return formatUnits(value, tokenDecimals);
-};
-
-const toDisplayAmountWithMin = (value: bigint, tokenDecimals = 18, displayDecimals = 6): string => {
-  const display = toDisplayAmount(value, tokenDecimals, displayDecimals);
-  if (value > BigInt(0) && display === '0') {
-    return `< 0.${'0'.repeat(Math.max(displayDecimals - 1, 0))}1`;
-  }
-  return display;
-};
-
-const getGasBufferForChain = (chainId: number): bigint => {
-  // Use a smaller gas buffer for Layer 2s, but keep mainnet/testnet buffer at 0.002 ETH
-  const l2ChainIds = [8453, 84532, 42161, 421614, 10, 11155420];
-  if (l2ChainIds.includes(chainId)) {
-    return parseUnits('0.0001', 18);
-  }
-  return parseUnits('0.002', 18);
-};
 
 function VaultSection({ isBull, poolData, userTokens, price, value, symbol, connected, handlePoll, reserve, supply, tokenAddress }: {
   isBull: boolean;
@@ -683,9 +634,9 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
                 />
                 <div
                   className="mt-1 text-xs text-gray-500 dark:text-gray-400 cursor-pointer"
-                  onClick={() => setSellAmount(toDisplayAmount(userTokens, 18, 4))}
+                  onClick={() => setSellAmount(toExactAmount(userTokens, 18))}
                 >
-                  Max: {toDisplayAmount(userTokens, 18, 4)} {symbol}
+                  Max: {toExactAmount(userTokens, 18)} {symbol}
                 </div>
               </div>
               <Button

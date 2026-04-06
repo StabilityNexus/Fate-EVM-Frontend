@@ -1,10 +1,8 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { toDisplayAmountWithMin } from '@/utils/format';
 import { zeroAddress } from 'viem';
 import { isAddress } from 'viem';
-import { render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import InteractionClient from '../InteractionClient';
+import { updateOracle } from '@/lib/vaultUtils';
 
 // Mock wagmi hooks
 vi.mock('wagmi', () => ({

@@ -1,4 +1,4 @@
-import { type Address } from 'viem';
+import { parseUnits, type Address } from 'viem';
 
 export const WETH_BY_CHAIN_ID: Record<number, { address: Address; decimals: 18; symbol: 'WETH' }> = {
   11155111: { // Sepolia
@@ -42,6 +42,14 @@ export function getWethConfig(chainId: number) {
   const cfg = WETH_BY_CHAIN_ID[chainId];
   if (!cfg) throw new Error(`No WETH config for chain ${chainId}`);
   return cfg;
+}
+
+export function getGasBufferForChain(chainId: number): bigint {
+  const l2ChainIds = [8453, 84532, 42161, 421614, 10, 11155420];
+  if (l2ChainIds.includes(chainId)) {
+    return parseUnits('0.0001', 18);
+  }
+  return parseUnits('0.002', 18);
 }
 
 export const WETH_ABI = [
