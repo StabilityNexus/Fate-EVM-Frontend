@@ -34,6 +34,9 @@ export const config = (() => {
       [sepolia.id]: http(),
     },
     ssr: true, // Enable SSR for proper hydration
+    batch: {
+      multicall: true,
+    },
     // Add connection persistence
     // enableAnalytics: false, // Disable analytics to prevent connection issues
   });

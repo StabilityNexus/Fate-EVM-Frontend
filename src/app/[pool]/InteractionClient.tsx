@@ -659,11 +659,11 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
               )}
 
               <Button
-                onClick={() => handleBuy()}
+                onClick={() => canWrap ? wrap(missingWeth) : handleBuy()}
                 className={`w-full ${buttonColor} text-white`}
                 disabled={disableBuy}
               >
-                {isTransacting ? 'Processing...' : `Buy ${symbol} Tokens`}
+                {isTransacting ? 'Processing...' : isWethPool && !hasEnoughWeth ? (canWrap ? 'Wrap ETH to Continue' : 'Insufficient WETH') : `Buy ${symbol} Tokens`}
               </Button>
             </div>
           </div>
