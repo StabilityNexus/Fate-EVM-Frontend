@@ -11,14 +11,14 @@ import WalletButton from "../ui/walletButton";
 import BottomNavigation from "./BottomNavigation";
 import { cn } from "@/lib/utils";
 import { usePathname } from "next/navigation";
-import { useAccount } from "wagmi";
+// import { useAccount } from "wagmi";
 interface NavbarProps {
   className?: string;
 }
 
 const Navbar: React.FC<NavbarProps> = ({ className = "" }) => {
   const { resolvedTheme } = useTheme();
-  const { isConnected } = useAccount();
+  
   const pathname = usePathname();
   const [isThemeReady, setIsThemeReady] = useState(false);
 
@@ -104,7 +104,7 @@ const Navbar: React.FC<NavbarProps> = ({ className = "" }) => {
       </header>
 
       {/* Bottom Navigation */}
-      <BottomNavigation isConnected={isConnected} />
+      <BottomNavigation />
     </>
   );
 };
