@@ -11,7 +11,6 @@ import WalletButton from "../ui/walletButton";
 import BottomNavigation from "./BottomNavigation";
 import { cn } from "@/lib/utils";
 import { usePathname } from "next/navigation";
-// import { useAccount } from "wagmi";
 interface NavbarProps {
   className?: string;
 }
