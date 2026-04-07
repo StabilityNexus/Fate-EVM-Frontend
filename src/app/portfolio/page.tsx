@@ -24,7 +24,7 @@ import {
   Activity,
   DollarSign,
 } from "lucide-react";
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useAccount, useReadContracts } from "wagmi";
 import { formatUnits, Address, isAddress } from "viem";
 import { useRouter } from "next/navigation";
@@ -41,6 +41,7 @@ import { PredictionPoolFactoryABI } from "@/utils/abi/PredictionPoolFactory";
 import { ChainlinkOracleABI } from "@/utils/abi/ChainlinkOracle";
 import { ERC20ABI } from "@/utils/abi/ERC20";
 import { createPublicClient, http } from "viem";
+import { toast } from "sonner";
 
 // Helper function to get chain name
 const getChainName = (chainId: number): string => {
@@ -151,30 +152,26 @@ const calculateTokenMetricsWithEvents = async (
   try {
     let transactions: any[] = [];
     let minBlock = 0;
-    // 1. Load cached transactions from IndexedDB
-    try {
-      const allTransactions = await storage.getPortfolioTransactions(userAddress, chainId as SupportedChainId);
+    // 1. Load cached transactions from IndexedDB (safeReadOperation returns [] on failure, never throws)
+    const allTransactions = await storage.getPortfolioTransactions(userAddress, chainId as SupportedChainId);
 
-      // Filter for this specific pool and token type
-      transactions = allTransactions
-        .filter((tx: PortfolioTransaction) => tx.poolAddress === poolAddress && tx.tokenType === type)
-        .map(t => ({
-          type: t.action,  // Map 'action' to 'type' for consistency
-          blockNumber: BigInt(t.blockNumber),
-          amountAsset: t.value,
-          amountCoin: t.amount,
-          price: t.price,
-          transactionHash: t.transactionHash,
-          feePaid: t.fees,
-          timestamp: t.timestamp
-        }));
-      // Get the highest block number from cached transactions
-      if (transactions.length > 0) {
-        minBlock = Math.max(...transactions.map(t => Number(t.blockNumber)));
-        console.debug(`Loaded ${transactions.length} cached transactions for ${type}, highest block: ${minBlock}`);
-      }
-    } catch (e) {
-      console.warn('Failed to load cached transactions:', e);
+    // Filter for this specific pool and token type
+    transactions = allTransactions
+      .filter((tx: PortfolioTransaction) => tx.poolAddress === poolAddress && tx.tokenType === type)
+      .map(t => ({
+        type: t.action,  // Map 'action' to 'type' for consistency
+        blockNumber: BigInt(t.blockNumber),
+        amountAsset: t.value,
+        amountCoin: t.amount,
+        price: t.price,
+        transactionHash: t.transactionHash,
+        feePaid: t.fees,
+        timestamp: t.timestamp
+      }));
+    // Get the highest block number from cached transactions
+    if (transactions.length > 0) {
+      minBlock = Math.max(...transactions.map(t => Number(t.blockNumber)));
+      console.debug(`Loaded ${transactions.length} cached transactions for ${type}, highest block: ${minBlock}`);
     }
     // 2. Fetch NEW transactions from blockchain (incremental)
     // Use buffer to avoid missing transactions at block boundaries (reorgs, timing issues)
@@ -945,6 +942,7 @@ const HistoricalInvestmentsTable: React.FC<{
 };
 
 // History card component for showing past trades
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const HistoryCard: React.FC<{ pool: PoolData }> = ({ pool }) => {
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 mb-4">
@@ -1484,17 +1482,21 @@ const EnhancedPoolDataLoader = ({
   userAddress,
   chainId,
   onDataLoad,
+  onSettled,
 }: {
   poolAddress: string;
   index: number;
   userAddress?: string;
   chainId: number;
   onDataLoad: (data: PoolData) => void;
+  onSettled?: () => void;
 }) => {
   // Initialize storage hook for caching
   const storage = useFatePoolsStorage();
+  // onSettled must fire exactly once per loader instance (success OR permanent failure)
+  const settledRef = useRef(false);
   // Step 1: Get basic pool information
-  const { data: poolBasicData } = useReadContracts({
+  const { data: poolBasicData, status: poolBasicStatus, fetchStatus: poolBasicFetchStatus } = useReadContracts({
     contracts: [
       { address: poolAddress as Address, abi: PredictionPoolABI, functionName: 'poolName' },
       { address: poolAddress as Address, abi: PredictionPoolABI, functionName: 'baseToken' },
@@ -1518,7 +1520,7 @@ const EnhancedPoolDataLoader = ({
   const previousPrice = Number(formatUnits(poolBasicData?.[6]?.result as bigint || BigInt(0), 18));
 
   // Step 2: Get fee information
-  const { data: feeData } = useReadContracts({
+  const { data: feeData, fetchStatus: feeFetchStatus } = useReadContracts({
     contracts: poolAddress ? [
       { address: poolAddress as Address, abi: PredictionPoolABI, functionName: 'mintFee' },
       { address: poolAddress as Address, abi: PredictionPoolABI, functionName: 'burnFee' },
@@ -1531,7 +1533,7 @@ const EnhancedPoolDataLoader = ({
   });
 
   // Step 3: Get token metadata and supplies
-  const { data: tokenData } = useReadContracts({
+  const { data: tokenData, fetchStatus: tokenFetchStatus } = useReadContracts({
     contracts: bullTokenAddress && bearTokenAddress ? [
       { address: bullTokenAddress, abi: CoinABI, functionName: 'name' },
       { address: bullTokenAddress, abi: CoinABI, functionName: 'symbol' },
@@ -1547,7 +1549,7 @@ const EnhancedPoolDataLoader = ({
   });
 
   // Step 4: Get reserves (base token balances in bull/bear tokens)
-  const { data: reserveData } = useReadContracts({
+  const { data: reserveData, fetchStatus: reserveFetchStatus } = useReadContracts({
     contracts: baseToken && bullTokenAddress && bearTokenAddress ? [
       { address: baseToken, abi: ERC20ABI, functionName: 'balanceOf', args: [bullTokenAddress] },
       { address: baseToken, abi: ERC20ABI, functionName: 'balanceOf', args: [bearTokenAddress] },
@@ -1561,7 +1563,7 @@ const EnhancedPoolDataLoader = ({
   });
 
   // Step 5: Get user balances if user is connected
-  const { data: userBalanceData } = useReadContracts({
+  const { data: userBalanceData, fetchStatus: userBalanceFetchStatus } = useReadContracts({
     contracts: userAddress && bullTokenAddress && bearTokenAddress && baseToken ? [
       { address: bullTokenAddress, abi: CoinABI, functionName: 'balanceOf', args: [userAddress as Address] },
       { address: bearTokenAddress, abi: CoinABI, functionName: 'balanceOf', args: [userAddress as Address] },
@@ -1573,7 +1575,7 @@ const EnhancedPoolDataLoader = ({
   });
 
   // Step 6: Get underlying oracle address
-  const { data: underlyingOracleData } = useReadContracts({
+  const { data: underlyingOracleData, fetchStatus: underlyingOracleFetchStatus } = useReadContracts({
     contracts: oracleAddress && oracleAddress !== "0x0000000000000000000000000000000000000000" ? [
       { address: oracleAddress, abi: ChainlinkOracleABI, functionName: 'priceFeed' },
     ] : [],
@@ -1597,7 +1599,9 @@ const EnhancedPoolDataLoader = ({
       const baseTokenDecimals = Number(reserveData[3]?.result ?? 18);
       const bullReserve = Number(formatUnits((reserveData[0]?.result as bigint) ?? BigInt(0), baseTokenDecimals));
       const bearReserve = Number(formatUnits((reserveData[1]?.result as bigint) ?? BigInt(0), baseTokenDecimals));
-      const baseTokenSymbol = reserveData[2]?.result as string || 'UNKNOWN';
+      const rawSymbol = reserveData[2]?.result as string | undefined;
+      const symbolCallFailed = (reserveData[2] as { status?: string } | undefined)?.status === 'failure';
+      if (!rawSymbol && !symbolCallFailed) return; // Still in flight — wait for next render
       const baseTokenName = reserveData[4]?.result as string || 'Unknown Token';
 
       const userBullTokens = Number(formatUnits((userBalanceData?.[0]?.result as bigint) ?? BigInt(0), 18));
@@ -1622,12 +1626,17 @@ const EnhancedPoolDataLoader = ({
         currentPrice,
         bullReserve,
         bearReserve,
-        baseTokenSymbol
       });
 
       const underlyingOracleAddress = underlyingOracleData?.[0]?.result as string;
       const finalOracleAddress = underlyingOracleAddress || oracleAddress;
       const priceFeedName = getPriceFeedName(finalOracleAddress, chainId);
+
+      // Resolve base token symbol now that priceFeedName is available
+      const baseTokenSymbol = rawSymbol ||
+        // Derive from oracle feed name ("ETH / USD" → "ETH") when symbol() reverts on-chain
+        priceFeedName.split('/')[0].trim() ||
+        'TOKEN';
 
       // Calculate price metrics
       const priceChange = currentPrice - previousPrice;
@@ -1742,10 +1751,34 @@ const EnhancedPoolDataLoader = ({
         currentPrice: poolData.currentPrice
       });
       onDataLoad(poolData);
+      if (!settledRef.current) {
+        settledRef.current = true;
+        onSettled?.();
+      }
     };
 
     processPoolData();
-  }, [poolBasicData, tokenData, reserveData, userBalanceData, underlyingOracleData, feeData, poolAddress, onDataLoad, userAddress, chainId, index, baseToken, bearTokenAddress, bullTokenAddress, currentPrice, oracleAddress, poolName, previousPrice, storage]);
+  }, [poolBasicData, tokenData, reserveData, userBalanceData, underlyingOracleData, feeData, poolAddress, onDataLoad, onSettled, userAddress, chainId, index, baseToken, bearTokenAddress, bullTokenAddress, currentPrice, oracleAddress, poolName, previousPrice, storage]);
+
+  // Safety-net: fire onSettled when all queries reach a terminal state (success or
+  // permanent failure) on paths where processPoolData's early-returns never execute.
+  // Requires poolBasicStatus !== 'pending' to avoid firing before the first fetch runs.
+  useEffect(() => {
+    if (settledRef.current) return;
+    if (!userAddress) return;
+    if (poolBasicStatus === 'pending') return; // primary query hasn't settled yet
+    const allIdle =
+      poolBasicFetchStatus === 'idle' &&
+      feeFetchStatus === 'idle' &&
+      tokenFetchStatus === 'idle' &&
+      reserveFetchStatus === 'idle' &&
+      userBalanceFetchStatus === 'idle' &&
+      underlyingOracleFetchStatus === 'idle';
+    if (allIdle) {
+      settledRef.current = true;
+      onSettled?.();
+    }
+  }, [poolBasicStatus, poolBasicFetchStatus, feeFetchStatus, tokenFetchStatus, reserveFetchStatus, userBalanceFetchStatus, underlyingOracleFetchStatus, userAddress, onSettled]);
 
   return null;
 };
@@ -1756,9 +1789,18 @@ const BalanceFilteredPoolLoader: React.FC<{
   userAddress?: string;
   chainId: number;
   onDataLoad: (data: PoolData) => void;
-}> = ({ pools, userAddress, chainId, onDataLoad }) => {
+  onFilterComplete?: (count: number) => void;
+  onAllSettled?: () => void;
+}> = ({ pools, userAddress, chainId, onDataLoad, onFilterComplete, onAllSettled }) => {
   const [filteredPools, setFilteredPools] = useState<string[]>([]);
   const [isFiltering, setIsFiltering] = useState(true);
+  const [settledCount, setSettledCount] = useState(0);
+
+  useEffect(() => {
+    if (!isFiltering && filteredPools.length > 0 && settledCount === filteredPools.length) {
+      onAllSettled?.();
+    }
+  }, [settledCount, filteredPools.length, isFiltering, onAllSettled]);
   useEffect(() => {
     const filterPools = async () => {
       if (!userAddress || pools.length === 0) {
@@ -1766,6 +1808,7 @@ const BalanceFilteredPoolLoader: React.FC<{
         setIsFiltering(false);
         return;
       }
+
       console.log(`🔍 Pre-checking balances for ${pools.length} pools...`);
       setIsFiltering(true);
       try {
@@ -1781,12 +1824,12 @@ const BalanceFilteredPoolLoader: React.FC<{
               publicClient.readContract({
                 address: poolAddress as Address,
                 abi: PredictionPoolABI,
-                functionName: 'bullToken'
+                functionName: 'bullCoin'
               }),
               publicClient.readContract({
                 address: poolAddress as Address,
                 abi: PredictionPoolABI,
-                functionName: 'bearToken'
+                functionName: 'bearCoin'
               })
             ]);
             return {
@@ -1823,24 +1866,19 @@ const BalanceFilteredPoolLoader: React.FC<{
         console.log(`✅ Found ${poolsWithBalance.length} pools with balances out of ${pools.length} total`);
         
         setFilteredPools(poolsWithBalance);
+        onFilterComplete?.(poolsWithBalance.length);
       } catch (error) {
         console.error('Balance filtering failed:', error);
         // Fallback: load all pools if filtering fails
         setFilteredPools(pools);
+        onFilterComplete?.(pools.length);
       } finally {
         setIsFiltering(false);
       }
     };
     filterPools();
-  }, [pools, userAddress, chainId]);
-  if (isFiltering) {
-    return (
-      <div className="text-center py-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-yellow-500 mx-auto mb-4"></div>
-        <p className="text-gray-600 dark:text-gray-400">Filtering pools...</p>
-      </div>
-    );
-  }
+  }, [pools, userAddress, chainId, onFilterComplete]);
+  if (isFiltering) return null;
   return (
     <>
       {filteredPools.map((pool, index) => (
@@ -1851,6 +1889,7 @@ const BalanceFilteredPoolLoader: React.FC<{
           userAddress={userAddress}
           chainId={chainId}
           onDataLoad={onDataLoad}
+          onSettled={() => setSettledCount(c => c + 1)}
         />
       ))}
     </>
@@ -1864,8 +1903,10 @@ export default function PortfolioPage() {
   const [showBullDistribution, setShowBullDistribution] = useState(false);
   const [showBearDistribution, setShowBearDistribution] = useState(false);
   const [poolsData, setPoolsData] = useState<PoolData[]>([]);
-  const [isLoadingPools, setIsLoadingPools] = useState(false); // Start with false to show empty state immediately
+  const [isBalanceCheckDone, setIsBalanceCheckDone] = useState(false);
+  const [filteredPoolCount, setFilteredPoolCount] = useState<number | null>(null);
   const [isLoadingFromBlockchain, setIsLoadingFromBlockchain] = useState(false);
+  const [isAllLoadersSettled, setIsAllLoadersSettled] = useState(false);
 
   // IndexedDB storage hook (for portfolio cache only)
   const {
@@ -1881,9 +1922,14 @@ export default function PortfolioPage() {
   useEffect(() => {
     const initDB = async () => {
       if (typeof window !== 'undefined') {
-        const db = new FatePoolsIndexedDBManager();
-        await db.init();
-        setIndexedDB(db);
+        try {
+          const db = new FatePoolsIndexedDBManager();
+          await db.init();
+          setIndexedDB(db);
+        } catch (err) {
+          console.warn('IndexedDB unavailable, falling back to hook:', err);
+          toast.warning('Local cache unavailable. Data will load from blockchain.');
+        }
       }
     };
     initDB();
@@ -1905,7 +1951,7 @@ export default function PortfolioPage() {
   }, [chainId]);
 
   // Get all pools from factory
-  const { data: allPoolsData } = useReadContracts({
+  const poolsQuery = useReadContracts({
     contracts: (factoryAddress && isAddress(factoryAddress as Address) && factoryAddress !== ZERO_ADDRESS) ? [
       { address: factoryAddress as Address, abi: PredictionPoolFactoryABI, functionName: 'getAllPools' },
       { address: factoryAddress as Address, abi: PredictionPoolFactoryABI, functionName: 'getPoolCount' },
@@ -1915,6 +1961,7 @@ export default function PortfolioPage() {
       refetchInterval: 30000, // Refetch every 30 seconds for fresh data
     }
   });
+  const { data: allPoolsData, isPending: isPoolsQueryPending } = poolsQuery;
 
   const availablePools = useMemo(() => {
     const pools = allPoolsData?.[0]?.result as string[] || [];
@@ -2087,22 +2134,16 @@ export default function PortfolioPage() {
         setPoolsData(mappedData);
 
         // Force UI update and ensure loading state is cleared
-        setIsLoadingPools(false);
         setIsLoadingFromBlockchain(false); // This is cached data, not blockchain data
 
       } else {
-        // No cached data - this is a first-time user, try to load from blockchain
-
-        if (factoryAddress && factoryAddress !== "0x0000000000000000000000000000000000000000") {
-          setIsLoadingPools(true);
-        } else {
-          setIsLoadingPools(false);
-        }
+        // No cached data — first-time user, blockchain loaders will handle it
+        console.log('No cached data found, blockchain loaders will populate data');
       }
     } catch (error) {
       console.error("❌ Failed to load cached data:", error);
     }
-  }, [address, chainId, isDBInitialized, indexedDB, getPortfolioCache, factoryAddress, isLoadingFromBlockchain]);
+  }, [address, chainId, isDBInitialized, indexedDB, getPortfolioCache, isLoadingFromBlockchain]);
 
   // Save data to cache
   const saveDataToCache = useCallback(async (data: PoolData[]) => {
@@ -2234,24 +2275,12 @@ export default function PortfolioPage() {
         }
         console.log("Portfolio data and pool details cached successfully");
       }
+      setIsLoadingFromBlockchain(false);
     } catch (error) {
       console.error("Failed to save portfolio data to cache:", error);
+      setIsLoadingFromBlockchain(false);
     }
   }, [address, chainId, isDBInitialized, indexedDB, savePortfolioCache]);
-
-  // Initialize loading state based on connection
-  useEffect(() => {
-    if (!isConnected) {
-      setIsLoadingPools(false);
-    } else if (!factoryAddress) {
-      // No valid factory address - stop loading immediately
-      console.warn("No valid factory address for current chain, stopping loading");
-      setIsLoadingPools(false);
-    } else {
-      // Start loading data in background but don't show loading screen
-      setIsLoadingPools(false);
-    }
-  }, [isConnected, factoryAddress]);
 
   /**
    * OPTIMIZED PORTFOLIO LOADING STRATEGY
@@ -2263,36 +2292,44 @@ export default function PortfolioPage() {
    * 5. Instant UI: Portfolio shows data immediately, updates in real-time
    */
   useEffect(() => {
-    if (address && chainId && isDBInitialized && indexedDB) {
+    if (address && chainId && (isDBInitialized || indexedDB)) {
       loadCachedData();
     }
   }, [address, chainId, isDBInitialized, indexedDB, loadCachedData]);
-
-  // Reset data when user changes
-  useEffect(() => {
-    if (address) {
-      setPoolsData([]);
-      setIsLoadingPools(false); // Don't show loading screen
-    } else {
-      setPoolsData([]);
-      setIsLoadingPools(false);
-    }
-  }, [address, chainId]);
 
   // Only save data to cache when it comes from blockchain (not cache)
   // This prevents infinite loops between loadCachedData and saveDataToCache
 
   // Save data to cache only when loading from blockchain
+  // Always reset the flag — even when IndexedDB is unavailable — to prevent it getting stuck
   useEffect(() => {
-    if (isLoadingFromBlockchain && poolsData.length > 0 && address && chainId && isDBInitialized && indexedDB) {
+    if (!isLoadingFromBlockchain || poolsData.length === 0 || !address || !chainId) return;
+
+    if (isDBInitialized && indexedDB) {
       saveDataToCache(poolsData);
-      setIsLoadingFromBlockchain(false); // Reset flag after saving
+    } else {
+      // IndexedDB unavailable but blockchain data loaded — just clear the flag
+      setIsLoadingFromBlockchain(false);
     }
   }, [isLoadingFromBlockchain, poolsData, address, chainId, isDBInitialized, indexedDB, saveDataToCache]);
 
+  // Callback for when BalanceFilteredPoolLoader finishes checking user balances
+  const handleFilterComplete = useCallback((count: number) => {
+    setIsBalanceCheckDone(true);
+    setFilteredPoolCount(count);
+    if (count === 0) {
+      console.log('No pools with user positions found');
+    }
+  }, []);
 
-  // Remove the complex loading logic - let data load in background
-  // The portfolio will show empty state (0 values) immediately and populate as data loads
+  // If factory query succeeded but returned 0 pools, mark balance check as done
+  // (BalanceFilteredPoolLoader won’t render, so its callback won’t fire)
+  useEffect(() => {
+    if (!isPoolsQueryPending && factoryAddress && availablePools.length === 0) {
+      setIsBalanceCheckDone(true);
+      setFilteredPoolCount(0);
+    }
+  }, [isPoolsQueryPending, factoryAddress, availablePools.length]);
 
   // Calculate portfolio statistics
   const {
@@ -2413,23 +2450,13 @@ export default function PortfolioPage() {
     };
   }, [poolsData]);
 
-  // Debug logging (only when data changes)
+  // Reset data when user or chain changes
   useEffect(() => {
-    if (poolsData.length > 0) {
-      console.log("📊 Portfolio state updated:", {
-        poolsDataLength: poolsData.length,
-        samplePool: poolsData[0] ? {
-          id: poolsData[0].id,
-          name: poolsData[0].name,
-          bullBalance: poolsData[0].bullBalance,
-          bearBalance: poolsData[0].bearBalance,
-          currentPrice: poolsData[0].currentPrice
-        } : null
-      });
-    }
-  }, [poolsData]);
-
-  // Remove the loading screen - show portfolio immediately with 0 values
+    setPoolsData([]);
+    setIsBalanceCheckDone(false);
+    setFilteredPoolCount(null);
+    setIsAllLoadersSettled(false);
+  }, [address, chainId]);
 
   if (!isConnected) {
     return (
@@ -2467,43 +2494,14 @@ export default function PortfolioPage() {
             userAddress={address}
             chainId={chainId!}
             onDataLoad={handlePoolDataLoad}
+            onFilterComplete={handleFilterComplete}
+            onAllSettled={() => setIsAllLoadersSettled(true)}
           />
         )}
 
         {/* Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {poolsData.length === 0 ? (
-            // Show skeleton loading cards while data is being calculated
-            <>
-              <div className="bg-white dark:bg-neutral-900 border border-gray-200 dark:border-neutral-700 rounded-xl p-6 shadow-sm">
-                <div className="flex items-center space-x-4">
-                  <div className="w-12 h-12 bg-gray-200 dark:bg-neutral-700 rounded-lg animate-pulse"></div>
-                  <div className="flex-1">
-                    <div className="h-4 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse mb-2"></div>
-                    <div className="h-6 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse w-3/4"></div>
-                  </div>
-                </div>
-              </div>
-              <div className="bg-white dark:bg-neutral-900 border border-gray-200 dark:border-neutral-700 rounded-xl p-6 shadow-sm">
-                <div className="flex items-center space-x-4">
-                  <div className="w-12 h-12 bg-gray-200 dark:bg-neutral-700 rounded-lg animate-pulse"></div>
-                  <div className="flex-1">
-                    <div className="h-4 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse mb-2"></div>
-                    <div className="h-6 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse w-3/4"></div>
-                  </div>
-                </div>
-              </div>
-              <div className="bg-white dark:bg-neutral-900 border border-gray-200 dark:border-neutral-700 rounded-xl p-6 shadow-sm">
-                <div className="flex items-center space-x-4">
-                  <div className="w-12 h-12 bg-gray-200 dark:bg-neutral-700 rounded-lg animate-pulse"></div>
-                  <div className="flex-1">
-                    <div className="h-4 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse mb-2"></div>
-                    <div className="h-6 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse w-3/4"></div>
-                  </div>
-                </div>
-              </div>
-            </>
-          ) : (
+          {poolsData.length > 0 ? (
             <>
               <SummaryCard
                 title="Total Portfolio Value"
@@ -2537,55 +2535,63 @@ export default function PortfolioPage() {
                 trend={totalReturnPercentage >= 0 ? "up" : "down"}
               />
             </>
-          )}
-        </div>
-
-        {poolsData.length === 0 ? (
-          // Show skeleton loading while portfolio data is being calculated
-          <div className="space-y-6">
-            {/* Skeleton for Bull and Bear Position Charts */}
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-              {/* Bull Positions Chart Skeleton */}
+          ) : isPoolsQueryPending || (availablePools.length > 0 && !isBalanceCheckDone) || (isBalanceCheckDone && filteredPoolCount !== null && filteredPoolCount > 0 && !isAllLoadersSettled) ? (
+            // Skeleton while factory query, balance filtering, or data loading is in progress
+            <>
               <div className="bg-white dark:bg-neutral-900 border border-gray-200 dark:border-neutral-700 rounded-xl p-6 shadow-sm">
-                <div className="space-y-4">
-                  <div className="h-6 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse w-1/3"></div>
-                  <div className="h-48 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse"></div>
-                </div>
-              </div>
-
-              {/* Positions List Skeleton */}
-              <div className="xl:col-span-2 bg-white dark:bg-neutral-900 border border-gray-200 dark:border-neutral-700 rounded-xl p-6 shadow-sm">
-                <div className="space-y-4">
-                  <div className="h-6 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse w-1/2"></div>
-                  <div className="h-4 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse w-3/4"></div>
-                  <div className="space-y-3">
-                    {[1, 2, 3].map((i) => (
-                      <div key={i} className="flex items-center space-x-4 p-3 border border-gray-200 dark:border-neutral-700 rounded-lg">
-                        <div className="w-10 h-10 bg-gray-200 dark:bg-neutral-700 rounded-full animate-pulse"></div>
-                        <div className="flex-1 space-y-2">
-                          <div className="h-4 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse w-1/3"></div>
-                          <div className="h-3 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse w-1/2"></div>
-                        </div>
-                        <div className="text-right space-y-2">
-                          <div className="h-4 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse w-16"></div>
-                          <div className="h-3 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse w-12"></div>
-                        </div>
-                      </div>
-                    ))}
+                <div className="flex items-center space-x-4">
+                  <div className="w-12 h-12 bg-gray-200 dark:bg-neutral-700 rounded-lg animate-pulse"></div>
+                  <div className="flex-1">
+                    <div className="h-4 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse mb-2"></div>
+                    <div className="h-6 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse w-3/4"></div>
                   </div>
                 </div>
               </div>
-            </div>
-
-            {/* Bear Positions Chart Skeleton */}
-            <div className="bg-white dark:bg-neutral-900 border border-gray-200 dark:border-neutral-700 rounded-xl p-6 shadow-sm">
-              <div className="space-y-4">
-                <div className="h-6 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse w-1/3"></div>
-                <div className="h-48 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse"></div>
+              <div className="bg-white dark:bg-neutral-900 border border-gray-200 dark:border-neutral-700 rounded-xl p-6 shadow-sm">
+                <div className="flex items-center space-x-4">
+                  <div className="w-12 h-12 bg-gray-200 dark:bg-neutral-700 rounded-lg animate-pulse"></div>
+                  <div className="flex-1">
+                    <div className="h-4 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse mb-2"></div>
+                    <div className="h-6 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse w-3/4"></div>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
-        ) : poolsData.length > 0 ? (
+              <div className="bg-white dark:bg-neutral-900 border border-gray-200 dark:border-neutral-700 rounded-xl p-6 shadow-sm">
+                <div className="flex items-center space-x-4">
+                  <div className="w-12 h-12 bg-gray-200 dark:bg-neutral-700 rounded-lg animate-pulse"></div>
+                  <div className="flex-1">
+                    <div className="h-4 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse mb-2"></div>
+                    <div className="h-6 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse w-3/4"></div>
+                  </div>
+                </div>
+              </div>
+            </>
+          ) : (
+            // Zero-value cards while loading or no positions
+            <>
+              <SummaryCard
+                title="Total Portfolio Value"
+                value="0.00"
+                icon={DollarSign}
+                trend="neutral"
+              />
+              <SummaryCard
+                title="Total P&L"
+                value="+0.00"
+                icon={TrendingUp}
+                trend="neutral"
+              />
+              <SummaryCard
+                title="Total Return %"
+                value="+0.00%"
+                icon={Activity}
+                trend="neutral"
+              />
+            </>
+          )}
+        </div>
+
+        {poolsData.length > 0 ? (
           <div className="space-y-6">
             {/* Bull and Bear Position Charts */}
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
@@ -2665,118 +2671,103 @@ export default function PortfolioPage() {
               />
             )}
           </div>
-        ) : !isLoadingPools ? (
+        ) : !factoryAddress ? (
+          /* Wrong chain / contracts not deployed */
           <div className="space-y-6">
-            {/* Show history section if user has historical trades */}
-            {historicalPoolsData.length > 0 && (
-              <Card className="border-neutral-200 dark:border-neutral-700 dark:bg-neutral-800">
-                <CardHeader>
-                  <CardTitle className="text-xl text-neutral-900 dark:text-neutral-100 mb-2">
-                    Trading History
-                  </CardTitle>
-                  <p className="text-sm text-neutral-600 dark:text-neutral-400">
-                    {historicalPoolsData.length} completed position{historicalPoolsData.length !== 1 ? 's' : ''} with total P&L of {totalPnL >= 0 ? '+' : ''}{totalPnL.toFixed(4)} {historicalPoolsData[0]?.baseTokenSymbol || 'UNKNOWN'}
-                  </p>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4 max-h-[400px] overflow-y-auto">
-                    {historicalPoolsData.map((pool, index) => (
-                      <div
-                        key={pool.id}
-                        className="animate-in slide-in-from-bottom-4 duration-300"
-                        style={{ animationDelay: `${index * 100}ms` }}
-                      >
-                        <HistoryCard pool={pool} />
+            <Card className="border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-900/20 p-8 text-center">
+              <CardTitle className="text-yellow-800 dark:text-yellow-200 mb-2">
+                Contracts Not Deployed
+              </CardTitle>
+              <p className="text-yellow-700 dark:text-yellow-300 mb-4">
+                The Fate Protocol contracts are not yet deployed on {getChainName(chainId || 1)}.
+              </p>
+              <p className="text-yellow-600 dark:text-yellow-400 mb-6">
+                You can test the protocol on Sepolia testnet (contracts are deployed there) or wait for mainnet deployment.
+              </p>
+              <div className="flex gap-4 justify-center flex-wrap">
+                <Button
+                  onClick={() => router.push('/explorePools')}
+                  className="bg-yellow-600 hover:bg-yellow-700 text-white"
+                >
+                  Check Available Networks
+                </Button>
+                <Button
+                  onClick={() => router.push('/createPool')}
+                  variant="outline"
+                  className="border-yellow-600 text-yellow-600 hover:bg-yellow-600 hover:text-white"
+                >
+                  Create Pool (Testnet)
+                </Button>
+              </div>
+              <div className="mt-4 p-4 bg-yellow-100 dark:bg-yellow-800/30 rounded-lg">
+                <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                  <strong>Available Networks:</strong> Sepolia Testnet (Chain ID: 11155111)
+                </p>
+                <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-1">
+                  Switch to Sepolia testnet to interact with deployed contracts
+                </p>
+              </div>
+            </Card>
+          </div>
+        ) : isPoolsQueryPending || (availablePools.length > 0 && !isBalanceCheckDone) || (isBalanceCheckDone && filteredPoolCount !== null && filteredPoolCount > 0 && poolsData.length === 0) ? (
+          /* Still loading — show skeleton */
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+              <div className="bg-white dark:bg-neutral-900 border border-gray-200 dark:border-neutral-700 rounded-xl p-6 shadow-sm">
+                <div className="space-y-4">
+                  <div className="h-6 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse w-1/3"></div>
+                  <div className="h-48 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse"></div>
+                </div>
+              </div>
+              <div className="xl:col-span-2 bg-white dark:bg-neutral-900 border border-gray-200 dark:border-neutral-700 rounded-xl p-6 shadow-sm">
+                <div className="space-y-4">
+                  <div className="h-6 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse w-1/2"></div>
+                  <div className="h-4 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse w-3/4"></div>
+                  <div className="space-y-3">
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="flex items-center space-x-4 p-3 border border-gray-200 dark:border-neutral-700 rounded-lg">
+                        <div className="w-10 h-10 bg-gray-200 dark:bg-neutral-700 rounded-full animate-pulse"></div>
+                        <div className="flex-1 space-y-2">
+                          <div className="h-4 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse w-1/3"></div>
+                          <div className="h-3 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse w-1/2"></div>
+                        </div>
+                        <div className="text-right space-y-2">
+                          <div className="h-4 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse w-16"></div>
+                          <div className="h-3 bg-gray-200 dark:bg-neutral-700 rounded animate-pulse w-12"></div>
+                        </div>
                       </div>
                     ))}
                   </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Historical Investments Section - Show when no active positions */}
-            {historicalPoolsData.length > 0 && (
-              <HistoricalInvestmentsTable
-                historicalPools={historicalPoolsData}
-                userAddress={address}
-                chainId={chainId}
-              />
-            )}
-
-            {/* Contract deployment status message */}
-            {!factoryAddress && isConnected && (
-              <Card className="border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-900/20 p-8 text-center">
-                <CardTitle className="text-yellow-800 dark:text-yellow-200 mb-2">
-                  Contracts Not Deployed
-                </CardTitle>
-                <p className="text-yellow-700 dark:text-yellow-300 mb-4">
-                  The Fate Protocol contracts are not yet deployed on {getChainName(chainId || 1)}.
-                </p>
-                <p className="text-yellow-600 dark:text-yellow-400 mb-6">
-                  You can test the protocol on Sepolia testnet (contracts are deployed there) or wait for mainnet deployment.
-                </p>
-                <div className="flex gap-4 justify-center flex-wrap">
-                  <Button
-                    onClick={() => router.push('/explorePools')}
-                    className="bg-yellow-600 hover:bg-yellow-700 text-white"
-                  >
-                    Check Available Networks
-                  </Button>
-                  <Button
-                    onClick={() => router.push('/createPool')}
-                    variant="outline"
-                    className="border-yellow-600 text-yellow-600 hover:bg-yellow-600 hover:text-white"
-                  >
-                    Create Pool (Testnet)
-                  </Button>
                 </div>
-                <div className="mt-4 p-4 bg-yellow-100 dark:bg-yellow-800/30 rounded-lg">
-                  <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                    <strong>Available Networks:</strong> Sepolia Testnet (Chain ID: 11155111)
-                  </p>
-                  <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-1">
-                    Switch to Sepolia testnet to interact with deployed contracts
-                  </p>
-                  <div className="mt-2 p-2 bg-yellow-200 dark:bg-yellow-700/50 rounded text-xs">
-                    <p className="text-yellow-800 dark:text-yellow-200">
-                      <strong>Debug Info:</strong> Current chain: {getChainName(chainId || 1)} (ID: {chainId})
-                    </p>
-                    <p className="text-yellow-700 dark:text-yellow-300">
-                      Factory address: {factoryAddress || 'Not configured'}
-                    </p>
-                  </div>
-                </div>
-              </Card>
-            )}
-
-            {/* No active positions message */}
-            {factoryAddress && (
-              <Card className="border-neutral-200 dark:border-neutral-700 dark:bg-neutral-800 p-8 text-center">
-                <CardTitle className="text-neutral-900 dark:text-neutral-100 mb-2">
-                  {poolsData.length === 0 ? 'No Pools Found' : (historicalPoolsData.length > 0 ? 'No Active Positions' : 'No Positions Yet')}
-                </CardTitle>
-                <p className="text-neutral-600 dark:text-neutral-400 mb-6">
-                  {poolsData.length === 0
-                    ? (chainId === 11155111
-                      ? 'No prediction pools have been created on Sepolia testnet yet. Be the first to create one!'
-                      : 'No prediction pools found on this network. Try switching to a different network or check back later.')
-                    : (historicalPoolsData.length > 0
-                      ? 'You don\'t have any active positions, but you can see your trading history above.'
-                      : 'You don\'t have any positions in prediction pools yet.')
-                  }
-                </p>
-                <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                  <Button
-                    onClick={() => router.push('/explorePools')}
-                    className="bg-black hover:bg-gray-800 dark:bg-white dark:hover:bg-gray-200 text-white dark:text-black"
-                  >
-                    Explore Pools
-                  </Button>
-                </div>
-              </Card>
-            )}
+              </div>
+            </div>
           </div>
-        ) : null}
+        ) : (
+          /* Loading done, no positions found — show empty state */
+          <div className="space-y-6">
+            <Card className="border-neutral-200 dark:border-neutral-700 dark:bg-neutral-800 p-8 text-center">
+              <CardTitle className="text-neutral-900 dark:text-neutral-100 mb-2">
+                {availablePools.length === 0 ? 'No Pools Found' : 'No Positions Yet'}
+              </CardTitle>
+              <p className="text-neutral-600 dark:text-neutral-400 mb-6">
+                {availablePools.length === 0
+                  ? (chainId === 11155111
+                    ? 'No prediction pools have been created on Sepolia testnet yet. Be the first to create one!'
+                    : 'No prediction pools found on this network. Try switching to a different network or check back later.')
+                  : 'You don\'t have any positions in prediction pools yet. Explore pools to start trading.'
+                }
+              </p>
+              <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                <Button
+                  onClick={() => router.push('/explorePools')}
+                  className="bg-black hover:bg-gray-800 dark:bg-white dark:hover:bg-gray-200 text-white dark:text-black"
+                >
+                  Explore Pools
+                </Button>
+              </div>
+            </Card>
+          </div>
+        )}
       </div>
     </div>
   );
