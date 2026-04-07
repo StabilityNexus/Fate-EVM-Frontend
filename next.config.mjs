@@ -13,8 +13,8 @@ const nextConfig = {
       fs: false,
       net: false,
       tls: false,
-      "@react-native-async-storage/async-storage": false, 
-    config.resolve.fallback = { fs: false, net: false, tls: false };
+      "@react-native-async-storage/async-storage": false,
+    };
     config.resolve.alias = {
       ...(config.resolve.alias || {}),
       "@react-native-async-storage/async-storage": path.resolve(
