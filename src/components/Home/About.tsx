@@ -1,10 +1,10 @@
 "use client";
+import { CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import {
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "@/components/ui/card";
-import { CircleDollarSign, Infinity as InfinityIcon, Scale } from "lucide-react";
+  CircleDollarSign,
+  Infinity as InfinityIcon,
+  Scale,
+} from "lucide-react";
 import { motion } from "framer-motion";
 
 export default function AboutSection() {
@@ -24,10 +24,7 @@ export default function AboutSection() {
     },
     {
       icon: (
-        <motion.div
-          animate={{ rotate: [0, 360] }}
-          transition={{ duration: 4 }}
-        >
+        <motion.div animate={{ rotate: [0, 360] }} transition={{ duration: 4 }}>
           <InfinityIcon className="h-12 w-12 text-black dark:text-white" />
         </motion.div>
       ),
@@ -37,10 +34,7 @@ export default function AboutSection() {
     },
     {
       icon: (
-        <motion.div
-          animate={{ y: [-5, 5, -5] }}
-          transition={{ duration: 2 }}
-        >
+        <motion.div animate={{ y: [-5, 5, -5] }} transition={{ duration: 2 }}>
           <Scale className="h-12 w-12 text-black dark:text-white" />
         </motion.div>
       ),
@@ -53,7 +47,7 @@ export default function AboutSection() {
   return (
     <section
       id="features"
-      className="py-10 pb-32 bg-white dark:bg-black relative overflow-hidden"
+      className="cursor-auto py-10 pb-32 bg-white dark:bg-black relative overflow-hidden"
     >
       {/* Subtle Background Gradient */}
       <div className="absolute inset-0 bg-gradient-to-br from-white to-gray-300 dark:from-black dark:via-gray-900 dark:to-gray-800 opacity-60 blur-2xl pointer-events-none" />
@@ -86,7 +80,8 @@ export default function AboutSection() {
         {/* Meaningful Outro Statement */}
         <div className="mt-20 text-center text-black dark:text-white text-md md:text-lg">
           <p>
-            *In a world of uncertainty, we provide clarity — empowering you to predict, protect, and prosper.*
+            *In a world of uncertainty, we provide clarity — empowering you to
+            predict, protect, and prosper.*
           </p>
         </div>
 
@@ -97,10 +92,11 @@ export default function AboutSection() {
             __html: JSON.stringify({
               "@context": "https://schema.org",
               "@type": "SoftwareApplication",
-              "name": "Fate Protocol",
-              "applicationCategory": "FinanceApplication",
-              "description": "Fate Protocol is a decentralized finance (DeFi) platform that enables users to trade prediction markets through perpetual prediction pools. Users can buy bullCoins to bet on price increases or bearCoins to bet on price decreases, creating a dynamic hedging mechanism against price volatility risks.",
-              "featureList": [
+              name: "Fate Protocol",
+              applicationCategory: "FinanceApplication",
+              description:
+                "Fate Protocol is a decentralized finance (DeFi) platform that enables users to trade prediction markets through perpetual prediction pools. Users can buy bullCoins to bet on price increases or bearCoins to bet on price decreases, creating a dynamic hedging mechanism against price volatility risks.",
+              featureList: [
                 "Decentralized prediction markets on multiple blockchain networks",
                 "Perpetual prediction pools with continuous operation",
                 "Bull and Bear coin trading for price movement prediction",
@@ -108,16 +104,16 @@ export default function AboutSection() {
                 "Automated market making for efficient trading",
                 "Multi-chain support: Ethereum, Polygon, BSC, Base, Ethereum Classic",
                 "Transparent smart contracts ensuring fairness and security",
-                "DeFi trading platform for cryptocurrency price prediction"
+                "DeFi trading platform for cryptocurrency price prediction",
               ],
-              "operatingSystem": "Web Browser",
-              "offers": {
+              operatingSystem: "Web Browser",
+              offers: {
                 "@type": "Offer",
-                "price": "0",
-                "priceCurrency": "USD"
+                price: "0",
+                priceCurrency: "USD",
               },
-              "url": "https://evm.fate.stability.nexus"
-            })
+              url: "https://evm.fate.stability.nexus",
+            }),
           }}
         />
       </div>

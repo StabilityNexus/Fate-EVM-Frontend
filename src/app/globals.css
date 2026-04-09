@@ -293,3 +293,15 @@ body {
 .text-red-600 {
   color: #dc2626 !important;
 }
+
+/* Hide cursor ONLY in Hero section */
+`@media` (pointer: fine) {
+  .hero-cursor {
+    cursor: none;
+  }
+}
+
+.hero-cursor input,
+.hero-cursor textarea {
+  cursor: text !important;
+}
