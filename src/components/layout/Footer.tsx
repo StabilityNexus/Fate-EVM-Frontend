@@ -104,7 +104,7 @@ interface FooterProps {
 export default function Footer({ className = "", onKYAClick }: FooterProps) {
   const year = new Date().getFullYear();
   return (
-    <footer className={`w-full rounded-lg backdrop-blur-md bg-white/10 dark:bg-black shadow-lg border border-white/10 dark:border-black/10 ${className}`}>
+    <footer className={`w-full rounded-lg backdrop-blur-md bg-neutral-100 dark:bg-black shadow-lg border border-neutral-200 dark:border-black/10 ${className}`}>
       <div className="px-4 sm:px-8 py-6 pb-20 max-[900px]:pb-20 space-y-6">
         {/* Logo and Social Links */}
         <div className="flex flex-col  md:flex-row ">
@@ -124,7 +124,7 @@ export default function Footer({ className = "", onKYAClick }: FooterProps) {
                 priority
               />
             </Link>
-            <h5 className="text-md sm:hidden md:hidden flex justify-center items-center text-white dark:text-white">
+            <h5 className="text-md sm:hidden md:hidden flex justify-center items-center text-neutral-900 dark:text-white">
               A Project by Stability Nexus
             </h5>
           </div>
@@ -135,10 +135,10 @@ export default function Footer({ className = "", onKYAClick }: FooterProps) {
                 href={item.href}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="rounded-full bg-white/10 dark:bg-black/10 p-2 hover:bg-white/20 dark:hover:bg-black/20 transition-colors"
+                className="rounded-full bg-neutral-200/50 dark:bg-black/10 p-2 hover:bg-neutral-300/50 dark:hover:bg-white/20 transition-colors"
               >
                 <span className="sr-only">{item.name}</span>
-                <item.icon className="size-6 text-white dark:text-white" aria-hidden="true" />
+                <item.icon className="size-6 text-neutral-900 dark:text-white" aria-hidden="true" />
               </Link>
             ))}
           </div>
@@ -150,7 +150,7 @@ export default function Footer({ className = "", onKYAClick }: FooterProps) {
             href="https://stability.nexus/protocols"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-white dark:text-white hover:text-yellow-500 dark:hover:text-yellow-400 hover:underline hover:decoration-2 transition-colors"
+            className="text-neutral-900 dark:text-white hover:text-yellow-600 dark:hover:text-yellow-400 hover:underline hover:decoration-2 transition-colors"
           >
             Other Protocols
           </Link>
@@ -158,7 +158,7 @@ export default function Footer({ className = "", onKYAClick }: FooterProps) {
             href="https://stability.nexus/research"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-white dark:text-white hover:text-yellow-500 dark:hover:text-yellow-400 hover:underline hover:decoration-2 transition-colors"
+            className="text-neutral-900 dark:text-white hover:text-yellow-600 dark:hover:text-yellow-400 hover:underline hover:decoration-2 transition-colors"
           >
             Research
           </Link>
@@ -166,7 +166,7 @@ export default function Footer({ className = "", onKYAClick }: FooterProps) {
             href="https://news.stability.nexus/"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-white dark:text-white hover:text-yellow-500 dark:hover:text-yellow-400 hover:underline hover:decoration-2 transition-colors"
+            className="text-neutral-900 dark:text-white hover:text-yellow-600 dark:hover:text-yellow-400 hover:underline hover:decoration-2 transition-colors"
           >
             News
           </Link>
@@ -174,7 +174,7 @@ export default function Footer({ className = "", onKYAClick }: FooterProps) {
             href="https://docs.stability.nexus/"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-white dark:text-white hover:text-yellow-500 dark:hover:text-yellow-400 hover:underline hover:decoration-2 transition-colors"
+            className="text-neutral-900 dark:text-white hover:text-yellow-600 dark:hover:text-yellow-400 hover:underline hover:decoration-2 transition-colors"
           >
             Docs
           </Link>
@@ -182,7 +182,7 @@ export default function Footer({ className = "", onKYAClick }: FooterProps) {
             <button
               type="button"
               onClick={onKYAClick}
-              className="text-white dark:text-white hover:text-yellow-500 dark:hover:text-yellow-400 hover:underline hover:decoration-2 transition-colors"
+              className="text-neutral-900 dark:text-white hover:text-yellow-600 dark:hover:text-yellow-400 hover:underline hover:decoration-2 transition-colors"
             >
               KYA
             </button>
@@ -191,14 +191,14 @@ export default function Footer({ className = "", onKYAClick }: FooterProps) {
             href="https://terms.stability.nexus"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-white dark:text-white hover:text-yellow-500 dark:hover:text-yellow-400 hover:underline hover:decoration-2 transition-colors"
+            className="text-neutral-900 dark:text-white hover:text-yellow-600 dark:hover:text-yellow-400 hover:underline hover:decoration-2 transition-colors"
           >
             Terms and Conditions
           </Link>
         </div>
 
         {/* Copyright Statement */}
-        <div className="text-center text-sm text-gray-500 dark:text-gray-300 pt-4 border-t border-white/10 dark:border-black/10">
+        <div className="text-center text-sm text-gray-500 dark:text-gray-300 pt-4 border-t border-neutral-200 dark:border-black/10">
           <p>© {year} The Stable Order</p>
         </div>
       </div>
