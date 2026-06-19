@@ -270,6 +270,26 @@ export default function CreateFatePool() {
       const baseTokenAddress = formData.baseTokenAddress.trim();
       let oracleAddress: `0x${string}`;
 
+      // Pre-check base token decimals so creators get a clear message instead of an
+      // opaque on-chain revert. Coin.sol rejects tokens without decimals()
+      // (MissingDecimals) and tokens with more than 18 decimals (UnsupportedDecimals).
+      if (!publicClient) {
+        throw new Error("Public client not available");
+      }
+      let baseDecimals: number;
+      try {
+        baseDecimals = await publicClient.readContract({
+          address: baseTokenAddress as `0x${string}`,
+          abi: ERC20_ABI,
+          functionName: "decimals",
+        }) as number;
+      } catch {
+        throw new Error("Base token does not implement decimals(). Pool creation would revert (MissingDecimals).");
+      }
+      if (baseDecimals > 18) {
+        throw new Error(`Base token uses ${baseDecimals} decimals. Only tokens with 18 or fewer decimals are supported (UnsupportedDecimals).`);
+      }
+
       // Handle oracle creation based on type
       if (formData.oracleType === "chainlink") {
         // Get the Chainlink adapter factory address
@@ -433,23 +453,16 @@ export default function CreateFatePool() {
       
       if (initialDepositValue > 0) {
         try {
-          // Get token decimals
-          const decimals = await publicClient!.readContract({
-            address: baseTokenAddress as `0x${string}`,
-            abi: ERC20_ABI,
-            functionName: "decimals",
-          }) as number;
-
-          // Pre-check decimal places to avoid parseUnits error
+          // Pre-check decimal places to avoid parseUnits error (decimals already read above)
           const decimalParts = formData.initialDeposit.split('.');
           const fractionalDigits = decimalParts.length > 1 ? decimalParts[1].length : 0;
-          
-          if (fractionalDigits > decimals) {
-            throw new Error(`Amount has too many decimal places. Maximum allowed: ${decimals} decimal places, but got ${fractionalDigits}.`);
+
+          if (fractionalDigits > baseDecimals) {
+            throw new Error(`Amount has too many decimal places. Maximum allowed: ${baseDecimals} decimal places, but got ${fractionalDigits}.`);
           }
 
           // Convert initial deposit to token units
-          initialDepositAmount = parseUnits(formData.initialDeposit, decimals);
+          initialDepositAmount = parseUnits(formData.initialDeposit, baseDecimals);
 
           logger.debug("Initial deposit:", { initialDeposit: formData.initialDeposit, tokens: initialDepositAmount.toString(), units: "units" });
           

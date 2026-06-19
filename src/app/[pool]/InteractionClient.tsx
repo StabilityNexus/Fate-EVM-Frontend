@@ -58,6 +58,8 @@ const usePool = (poolId: Address | undefined, isConnected: boolean) => {
     treasury_fee: number;
     bull_percentage: number;
     bear_percentage: number;
+    base_decimals: number;
+    base_symbol: string;
     chainId: number;
   } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -94,6 +96,8 @@ const usePool = (poolId: Address | undefined, isConnected: boolean) => {
       { address: bearAddr, abi: CoinABI, functionName: 'totalSupply' },
       { address: baseToken, abi: ERC20ABI, functionName: 'balanceOf', args: [bullAddr] },
       { address: baseToken, abi: ERC20ABI, functionName: 'balanceOf', args: [bearAddr] },
+      { address: baseToken, abi: ERC20ABI, functionName: 'decimals' },
+      { address: baseToken, abi: ERC20ABI, functionName: 'symbol' },
     ] : [],
     query: {
       enabled: !!(bullAddr && bearAddr),
@@ -151,9 +155,12 @@ const usePool = (poolId: Address | undefined, isConnected: boolean) => {
       const bearSupply = tokenData?.[5]?.result as bigint || BigInt(0);
       const bullReserve = tokenData?.[6]?.result as bigint || BigInt(0);
       const bearReserve = tokenData?.[7]?.result as bigint || BigInt(0);
+      // Reserves are base-token balances, denominated in base-token decimals (not 18).
+      const baseDecimals = tokenData?.[8]?.result !== undefined ? Number(tokenData[8].result) : 18;
+      const baseSymbol = tokenData?.[9]?.result as string || 'tokens';
 
-      const totalReserves = Number(formatUnits(bullReserve, 18)) + Number(formatUnits(bearReserve, 18));
-      const bullPercentage = totalReserves > 0 ? (Number(formatUnits(bullReserve, 18)) / totalReserves) * 100 : 50;
+      const totalReserves = Number(formatUnits(bullReserve, baseDecimals)) + Number(formatUnits(bearReserve, baseDecimals));
+      const bullPercentage = totalReserves > 0 ? (Number(formatUnits(bullReserve, baseDecimals)) / totalReserves) * 100 : 50;
       const bearPercentage = 100 - bullPercentage;
 
       // const userBullBalance = userBalancesData?.[0]?.result as bigint || BigInt(0);
@@ -190,6 +197,8 @@ const usePool = (poolId: Address | undefined, isConnected: boolean) => {
         treasury_fee: poolFeeData?.[3]?.result ? Number(poolFeeData[3].result) / 1000 : 0,
         bull_percentage: bullPercentage,
         bear_percentage: bearPercentage,
+        base_decimals: baseDecimals,
+        base_symbol: baseSymbol,
         chainId: chain?.id || 11155111,
       };
 
@@ -211,12 +220,12 @@ const usePool = (poolId: Address | undefined, isConnected: boolean) => {
 };
 
 
-const formatValue = (value: number) => `${formatNumber(value, 3)} WETH`;
+const formatValue = (value: number, symbol: string) => `${formatNumber(value, 3)} ${symbol}`;
 
 // Timeout duration for stuck transactions (5 minutes)
 const TX_TIMEOUT_MS = 5 * 60 * 1000;
 
-function VaultSection({ isBull, poolData, userTokens, price, value, symbol, connected, handlePoll, reserve, supply, tokenAddress }: {
+function VaultSection({ isBull, poolData, userTokens, price, value, symbol, connected, handlePoll, reserve, supply, tokenAddress, baseDecimals, baseSymbol }: {
   isBull: boolean;
   poolData: {
     id: { id: string };
@@ -246,6 +255,8 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
   reserve: number;
   supply: number;
   tokenAddress: string;
+  baseDecimals: number;
+  baseSymbol: string;
 }) {
   const { address } = useAccount();
   const { writeContractAsync, data: hash, isPending: isTransactionPending } = useWriteContract();
@@ -334,7 +345,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
 
   const handleBuyTransaction = useCallback(async (amount: string) => {
     try {
-      const amountWei = parseUnits(amount, 18);
+      const amountWei = parseUnits(amount, baseDecimals);
 
       setPendingTransactionType('buy');
 
@@ -379,7 +390,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
       }
       pendingTransactionToastIdRef.current = null;
     }
-  }, [tokenAddress, address, writeContractAsync]);
+  }, [tokenAddress, address, writeContractAsync, baseDecimals]);
 
   const handleBuy = withErrorHandling(async () => {
     if (!address || !connected) {
@@ -409,12 +420,12 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
       throw createTransactionError(errorMessage);
     }
 
-    const amountWei = parseUnits(validatedInput.amount.toString(), 18);
+    const amountWei = parseUnits(validatedInput.amount.toString(), baseDecimals);
 
     // Check user's base token balance
     const userBaseTokenBalance = baseTokenBalance || BigInt(0);
     if (userBaseTokenBalance < amountWei) {
-      const errorMessage = `Insufficient balance. You have ${formatUnits(userBaseTokenBalance, 18)} base tokens available.`;
+      const errorMessage = `Insufficient balance. You have ${formatUnits(userBaseTokenBalance, baseDecimals)} ${baseSymbol} available.`;
       toast.error(errorMessage);
       throw createTransactionError(errorMessage);
     }
@@ -619,7 +630,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
       <div className="space-y-2 mb-4">
         <div className="flex justify-between text-sm">
           <span className="text-gray-600 dark:text-gray-400">Reserve</span>
-          <span className="font-medium text-black dark:text-white">{formatNumber(reserve, 6)} WETH</span>
+          <span className="font-medium text-black dark:text-white">{formatNumber(reserve, 6)} {baseSymbol}</span>
         </div>
         <div className="flex justify-between text-sm">
           <span className="text-gray-600 dark:text-gray-400">Supply</span>
@@ -627,7 +638,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
         </div>
         <div className="flex justify-between text-sm">
           <span className="text-gray-600 dark:text-gray-400">Price</span>
-          <span className="font-medium text-black dark:text-white">{formatNumber(price, 6)} WETH</span>
+          <span className="font-medium text-black dark:text-white">{formatNumber(price, 6)} {baseSymbol}</span>
         </div>
       </div>
 
@@ -652,7 +663,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600 dark:text-gray-400">Value</span>
-                <span className="font-medium text-black dark:text-white">{formatNumber(value, 4)} WETH</span>
+                <span className="font-medium text-black dark:text-white">{formatNumber(value, 4)} {baseSymbol}</span>
               </div>
             </div>
           </div>
@@ -664,7 +675,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
               <div>
                 <Input
                   type="number"
-                  placeholder="Enter WETH amount"
+                  placeholder={`Enter ${baseSymbol} amount`}
                   value={buyAmount}
                   onChange={(e) => setBuyAmount(e.target.value)}
                   className="w-full"
@@ -672,9 +683,9 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
                 />
                 <div
                   className="mt-1 text-xs text-gray-500 dark:text-gray-400 cursor-pointer"
-                  onClick={() => setBuyAmount(formatNumberDown(Number(formatUnits(baseTokenBalance, 18)), 4))}
+                  onClick={() => setBuyAmount(formatNumberDown(Number(formatUnits(baseTokenBalance, baseDecimals)), 4))}
                 >
-                  Max: {formatNumberDown(Number(formatUnits(baseTokenBalance, 18)), 4)} WETH
+                  Max: {formatNumberDown(Number(formatUnits(baseTokenBalance, baseDecimals)), 4)} {baseSymbol}
                 </div>
               </div>
               <Button
@@ -1214,6 +1225,8 @@ export default function InteractionClient() {
       treasury_fee: pool.treasury_fee || 0,
       bull_percentage: pool.bull_percentage || 50,
       bear_percentage: pool.bear_percentage || 50,
+      base_decimals: pool.base_decimals ?? 18,
+      base_symbol: pool.base_symbol || 'tokens',
       chainId: pool.chainId || 1,
     }
     : {
@@ -1233,12 +1246,14 @@ export default function InteractionClient() {
       treasury_fee: 0,
       bull_percentage: 50,
       bear_percentage: 50,
+      base_decimals: 18,
+      base_symbol: 'tokens',
       chainId: 1,
     }, [pool]);
 
   const calculations = useMemo(() => {
-    const bullReserveNum = Number(formatUnits(poolData.bull_reserve, 18));
-    const bearReserveNum = Number(formatUnits(poolData.bear_reserve, 18));
+    const bullReserveNum = Number(formatUnits(poolData.bull_reserve, poolData.base_decimals));
+    const bearReserveNum = Number(formatUnits(poolData.bear_reserve, poolData.base_decimals));
     const bullSupplyNum = Number(formatUnits(poolData.bull_token.fields.total_supply, 18));
     const bearSupplyNum = Number(formatUnits(poolData.bear_token.fields.total_supply, 18));
     const userBullTokens = Number(formatUnits(userBalances.bull_tokens, 18));
@@ -1476,7 +1491,7 @@ export default function InteractionClient() {
                     Total Value Locked
                   </div>
                   <div className="text-sm md:text-lg font-bold transition-all duration-300">
-                    {formatValue(calculations.totalReserves)}
+                    {formatValue(calculations.totalReserves, poolData.base_symbol)}
                   </div>
                   <div className="w-full rounded-full h-2 my-2 flex overflow-hidden bg-neutral-200 dark:bg-neutral-700">
                     <div
@@ -1522,6 +1537,8 @@ export default function InteractionClient() {
             reserve={calculations.bullReserveNum}
             supply={calculations.bullSupplyNum}
             tokenAddress={poolData.bull_token.id}
+            baseDecimals={poolData.base_decimals}
+            baseSymbol={poolData.base_symbol}
           />
 
           <div className="lg:col-span-2">
@@ -1550,7 +1567,7 @@ export default function InteractionClient() {
                       <div className="text-xs md:text-sm">
                         <div className="flex justify-between">
                           <span className="text-neutral-600 dark:text-neutral-400">Current price:</span>
-                          <span className="font-medium text-right">{calculations.bullPrice.toFixed(4)} WETH</span>
+                          <span className="font-medium text-right">{calculations.bullPrice.toFixed(4)} {poolData.base_symbol}</span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-neutral-600 dark:text-neutral-400">Underlying asset:</span>
@@ -1565,7 +1582,7 @@ export default function InteractionClient() {
                       <div className="text-xs md:text-sm">
                         <div className="flex justify-between">
                           <span className="text-neutral-600 dark:text-neutral-400">Current price:</span>
-                          <span className="font-medium text-right">{calculations.bearPrice.toFixed(4)} WETH</span>
+                          <span className="font-medium text-right">{calculations.bearPrice.toFixed(4)} {poolData.base_symbol}</span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-neutral-600 dark:text-neutral-400">Underlying asset:</span>
@@ -1673,6 +1690,8 @@ export default function InteractionClient() {
             reserve={calculations.bearReserveNum}
             supply={calculations.bearSupplyNum}
             tokenAddress={poolData.bear_token.id}
+            baseDecimals={poolData.base_decimals}
+            baseSymbol={poolData.base_symbol}
           />
         </div>
 

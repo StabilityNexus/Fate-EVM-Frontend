@@ -202,11 +202,16 @@ export async function getPoolStats(
     const poolContract = new ethers.Contract(vaultId, PredictionPoolABI, provider);
 
     const stats = await poolContract.getPoolStats();
-    
+
+    // Reserves are base-token balances (base decimals); prices are oracle WAD (18).
+    const baseTokenAddress: string = await poolContract.baseToken();
+    const baseToken = new ethers.Contract(baseTokenAddress, ['function decimals() view returns (uint8)'], provider);
+    const baseDecimals = Number(await baseToken.decimals());
+
     return {
-      bullReserves: Number(ethers.formatUnits(stats[0], 18)),
-      bearReserves: Number(ethers.formatUnits(stats[1], 18)),
-      totalReserves: Number(ethers.formatUnits(stats[2], 18)),
+      bullReserves: Number(ethers.formatUnits(stats[0], baseDecimals)),
+      bearReserves: Number(ethers.formatUnits(stats[1], baseDecimals)),
+      totalReserves: Number(ethers.formatUnits(stats[2], baseDecimals)),
       currentPrice: Number(ethers.formatUnits(stats[3], 18)),
       lastPrice: Number(ethers.formatUnits(stats[4], 18)),
     };
