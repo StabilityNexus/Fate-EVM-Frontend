@@ -681,12 +681,13 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
                   className="w-full"
                   disabled={isTransacting}
                 />
-                <div
-                  className="mt-1 text-xs text-gray-500 dark:text-gray-400 cursor-pointer"
+                <button
+                  type="button"
+                  className="mt-1 text-xs text-gray-500 dark:text-gray-400 cursor-pointer bg-transparent border-none p-0 text-left"
                   onClick={() => setBuyAmount(formatNumberDown(Number(formatUnits(baseTokenBalance, baseDecimals)), 4))}
                 >
                   Max: {formatNumberDown(Number(formatUnits(baseTokenBalance, baseDecimals)), 4)} {baseSymbol}
-                </div>
+                </button>
               </div>
               <Button
                 onClick={() => handleBuy()}
@@ -711,12 +712,13 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
                   className="w-full"
                   disabled={isTransacting}
                 />
-                <div
-                  className="mt-1 text-xs text-gray-500 dark:text-gray-400 cursor-pointer"
+                <button
+                  type="button"
+                  className="mt-1 text-xs text-gray-500 dark:text-gray-400 cursor-pointer bg-transparent border-none p-0 text-left"
                   onClick={() => setSellAmount(formatNumberDown(Number(formatUnits(userTokens, 18)), 4))}
                 >
                   Max: {formatNumberDown(Number(formatUnits(userTokens, 18)), 4)} {symbol}
-                </div>
+                </button>
               </div>
               <Button
                 onClick={() => handleSell()}
