@@ -283,8 +283,13 @@ export default function CreateFatePool() {
           abi: ERC20_ABI,
           functionName: "decimals",
         }) as number;
-      } catch {
-        throw new Error("Base token does not implement decimals(). Pool creation would revert (MissingDecimals).");
+      } catch (decimalsError) {
+        // A failure here is usually a token without decimals() (Coin.sol reverts MissingDecimals),
+        // but it can also be a transient RPC/network error. Log the cause and keep the message honest.
+        logger.error("Failed to read base token decimals()", decimalsError instanceof Error ? decimalsError : undefined);
+        throw new Error(
+          "Could not read decimals() on the base token. If it does not implement decimals(), pool creation will revert (MissingDecimals); otherwise this may be a temporary network/RPC issue, please retry."
+        );
       }
       if (baseDecimals > 18) {
         throw new Error(`Base token uses ${baseDecimals} decimals. Only tokens with 18 or fewer decimals are supported (UnsupportedDecimals).`);
