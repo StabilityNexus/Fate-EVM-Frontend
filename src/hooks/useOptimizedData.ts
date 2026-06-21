@@ -249,45 +249,4 @@ export const useOptimizedPools = (
     }
   );
 };
-
-// Debounced hook for search
-export const useDebouncedSearch = <T>(
-  searchFn: (query: string) => Promise<T>,
-  delay: number = 300
-) => {
-  const [query, setQuery] = useState('');
-  const [debouncedQuery, setDebouncedQuery] = useState('');
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-
-  useEffect(() => {
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-    }
-    
-    timeoutRef.current = setTimeout(() => {
-      setDebouncedQuery(query);
-    }, delay);
-    
-    return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-    };
-  }, [query, delay]);
-
-  const searchData = useOptimizedData(
-    `search_${debouncedQuery}`,
-    () => searchFn(debouncedQuery),
-    {
-      enabled: debouncedQuery.length > 2,
-      staleTime: 60 * 1000, // 1 minute
-      cacheTime: 5 * 60 * 1000 // 5 minutes
-    }
-  );
-
-  return {
-    ...searchData,
-    query,
-    setQuery
-  };
-};
+
