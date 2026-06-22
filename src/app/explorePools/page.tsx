@@ -1,5 +1,6 @@
 // src/app/explorePools/page.tsx
 "use client";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { useAccount, useWalletClient, useChainId } from "wagmi";
 import { PredictionPoolFactoryABI } from "@/utils/abi/PredictionPoolFactory";
@@ -50,6 +51,7 @@ function ExploreFatePoolsClient() {
   const [pools, setPools] = useState<Pool[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>("");
+  const debouncedSearchQuery = useDebouncedValue(searchQuery, 300);
   const [isCreatingPool, setIsCreatingPool] = useState<boolean>(false);
   const [chainStates, setChainStates] = useState<ChainLoadingState[]>([]);
   const [refreshing, setRefreshing] = useState<boolean>(false);
@@ -561,7 +563,7 @@ function ExploreFatePoolsClient() {
   const filteredPools = useMemo(
     (): Pool[] =>
       pools.filter((pool: Pool) => {
-        const searchLower = searchQuery.toLowerCase();
+        const searchLower = debouncedSearchQuery.toLowerCase();
         const priceFeedName = getPriceFeedName(pool.priceFeedAddress, pool.chainId);
         return (
           pool.name.toLowerCase().includes(searchLower) ||
@@ -571,7 +573,7 @@ function ExploreFatePoolsClient() {
           priceFeedName.toLowerCase().includes(searchLower)
         );
       }),
-    [pools, searchQuery]
+    [pools, debouncedSearchQuery]
   );
 
   const groupedPools = useMemo((): Record<number, Pool[]> => {
