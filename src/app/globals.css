@@ -340,7 +340,7 @@ body {
 }
 
 /* Hide cursor ONLY in Hero section */
-`@media` (pointer: fine) {
+@media (pointer: fine) {
   .hero-cursor {
     cursor: none;
   }
