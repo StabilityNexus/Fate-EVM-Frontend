@@ -138,19 +138,18 @@ export default function WalletButton() {
                         )}
                     </button>
 
-                    {copyStatus !== 'idle' && (
-                        <span
-                            className={
-                                copyFailed
-                                    ? 'text-sm text-red-600 dark:text-red-400'
-                                    : 'text-sm text-green-600 dark:text-green-400'
-                            }
-                            role="status"
-                            aria-live="polite"
-                        >
-                            {copied ? 'Copied!' : 'Unable to copy'}
-                        </span>
-                    )}
+                    <span
+                        className={
+                            copyFailed
+                                ? 'text-sm text-red-700 dark:text-red-400'
+                                : 'text-sm text-green-700 dark:text-green-400'
+                        }
+                        role="status"
+                        aria-live="polite"
+                        aria-atomic="true"
+                    >
+                        {copied ? 'Copied!' : copyFailed ? 'Unable to copy' : ''}
+                    </span>
                 </>
             )}
         </div>
