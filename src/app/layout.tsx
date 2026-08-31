@@ -109,7 +109,9 @@ export default function RootLayout({
                   } else {
                     document.documentElement.classList.remove('dark');
                   }
-                } catch (e) {}
+                } catch (e) {
+                  console.warn('Theme script localStorage fallback:', e);
+                }
               })();
             `,
           }}

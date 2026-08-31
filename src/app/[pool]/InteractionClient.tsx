@@ -1148,7 +1148,8 @@ export default function InteractionClient() {
         try {
           const boundaryBlock = await publicClient.getBlock({ blockNumber: boundaryNumber });
           boundary = { number: boundaryBlock.number, timestamp: boundaryBlock.timestamp };
-        } catch {
+        } catch (error) {
+          console.warn('Failed to fetch boundary block, falling back to default:', error);
         }
 
         const rebalanceTime = makeTimestampResolver(sharedLatestBlock, boundary)(latestEvent.blockNumber!);
