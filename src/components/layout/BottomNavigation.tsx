@@ -52,9 +52,9 @@ const BottomNavigation: React.FC = () => {
   };
 
   const navItems = [
-    { href: "/explorePools", icon: Search, label: "Explore", isActive: pathname === "/explorePools" },
-    { href: "/createPool", icon: Plus, label: "Create", isActive: pathname === "/createPool" },
-    { href: "/portfolio", icon: User, label: "Portfolio", isActive: pathname === "/portfolio" },
+    { href: "/explorePools", icon: Search, label: "Explore", isActive: pathname.startsWith("/explorePools") },
+    { href: "/createPool", icon: Plus, label: "Create", isActive: pathname.startsWith("/createPool") },
+    { href: "/portfolio", icon: User, label: "Portfolio", isActive: pathname.startsWith("/portfolio") },
   ];
 
   // Re-usable nav link tile
