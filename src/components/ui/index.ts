@@ -9,4 +9,4 @@ export { Label } from './label';
 export { Separator } from './separator';
 export { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './tooltip';
 export { default as WalletButton } from './walletButton';
-export { default as KYAModal } from './KYAModal';
+export { default as TermsOfUseModal } from './TermsOfUseModal';
