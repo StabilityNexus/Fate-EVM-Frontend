@@ -1,14 +1,14 @@
 "use client"
 
 import Footer from "@/components/layout/Footer";
-import { useKYAContext } from "@/context/KYAProvider";
+import { useTermsOfUseContext } from "@/context/TermsOfUseProvider";
 
 interface FooterWrapperProps {
   className?: string;
 }
 
 export default function FooterWrapper({ className }: FooterWrapperProps) {
-  const { openKYA } = useKYAContext();
+  const { openTerms } = useTermsOfUseContext();
 
-  return <Footer className={className} onKYAClick={openKYA} />;
+  return <Footer className={className} onTermsClick={openTerms} />;
 }
