@@ -2,16 +2,33 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { useTheme } from "next-themes";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { isAddress } from "viem";
 
 import { Loading } from "@/components/ui/loading";
 
 const Hero = () => {
   const { resolvedTheme } = useTheme();
+  const router = useRouter();
 
   const [isHovered, setIsHovered] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [poolAddress, setPoolAddress] = useState("");
   const [mounted, setMounted] = useState(false);
+
+  const isPoolAddressValid = isAddress(poolAddress.trim());
+
+  const closeModal = () => {
+    setIsModalOpen(false);
+    setPoolAddress("");
+  };
+
+  const handleContinue = () => {
+    if (!isPoolAddressValid) return;
+    router.push(`/pool?id=${poolAddress.trim()}`);
+    closeModal();
+  };
 
   //  Hero container ref
   const heroRef = useRef<HTMLDivElement | null>(null);
@@ -144,19 +161,28 @@ const Hero = () => {
 
             <input
               type="text"
+              value={poolAddress}
+              onChange={(e) => setPoolAddress(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleContinue();
+              }}
               className="w-full p-2 border rounded-full mb-4 dark:bg-gray-700 dark:text-white outline-none focus:outline-none focus:ring-0"
               placeholder="0x123...abc"
             />
 
             <div className="flex justify-end gap-2">
               <button
-                onClick={() => setIsModalOpen(false)}
+                onClick={closeModal}
                 className="border rounded-full px-4 py-2 bg-black text-white"
               >
                 Cancel
               </button>
 
-              <button className="border rounded-full px-4 py-2 bg-black text-white">
+              <button
+                onClick={handleContinue}
+                disabled={!isPoolAddressValid}
+                className="border rounded-full px-4 py-2 bg-black text-white disabled:opacity-40 disabled:cursor-not-allowed"
+              >
                 Continue
               </button>
             </div>
