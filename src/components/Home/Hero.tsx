@@ -137,43 +137,136 @@ const Hero = () => {
           cursor: none !important;
         }
       `}</style>
-      {isModalOpen && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black/50 z-50">
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-xl w-96">
-            <h2 className=" text-xl font-semibold mb-4 text-black dark:text-white ">
-              Enter Pool Address
-            </h2>
+      <PoolAddressModal
+        open={isModalOpen}
+        value={poolAddress}
+        isValid={isPoolAddressValid}
+        onValueChange={setPoolAddress}
+        onClose={closeModal}
+        onSubmit={handleContinue}
+      />
+    </div>
+  );
+};
 
-            <input
-              type="text"
-              value={poolAddress}
-              onChange={(e) => setPoolAddress(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") handleContinue();
-              }}
-              className="w-full p-2 border rounded-full mb-4 dark:bg-gray-700 dark:text-white outline-none focus:outline-none focus:ring-0"
-              placeholder="0x123...abc"
-            />
+type PoolAddressModalProps = {
+  open: boolean;
+  value: string;
+  isValid: boolean;
+  onValueChange: (value: string) => void;
+  onClose: () => void;
+  onSubmit: () => void;
+};
 
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={closeModal}
-                className="border rounded-full px-4 py-2 bg-black text-white"
-              >
-                Cancel
-              </button>
+const PoolAddressModal = ({
+  open,
+  value,
+  isValid,
+  onValueChange,
+  onClose,
+  onSubmit,
+}: PoolAddressModalProps) => {
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const previouslyFocused = useRef<HTMLElement | null>(null);
 
-              <button
-                onClick={handleContinue}
-                disabled={!isPoolAddressValid}
-                className="border rounded-full px-4 py-2 bg-black text-white disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                Continue
-              </button>
-            </div>
-          </div>
+  // Move focus into the dialog on open, restore it to the trigger on close.
+  useEffect(() => {
+    if (!open) return;
+
+    previouslyFocused.current = document.activeElement as HTMLElement | null;
+    inputRef.current?.focus();
+
+    return () => {
+      previouslyFocused.current?.focus?.();
+    };
+  }, [open]);
+
+  // Escape closes the dialog; Tab is trapped inside it.
+  useEffect(() => {
+    if (!open) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
+        return;
+      }
+
+      if (e.key !== "Tab" || !panelRef.current) return;
+
+      const focusable = panelRef.current.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      );
+      if (focusable.length === 0) return;
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  return (
+    <div
+      className="fixed inset-0 flex items-center justify-center bg-black/50 z-50"
+      onClick={onClose}
+    >
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="pool-address-modal-title"
+        onClick={(e) => e.stopPropagation()}
+        className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-xl w-96"
+      >
+        <h2
+          id="pool-address-modal-title"
+          className="text-xl font-semibold mb-4 text-black dark:text-white"
+        >
+          Enter Pool Address
+        </h2>
+
+        <input
+          ref={inputRef}
+          type="text"
+          value={value}
+          onChange={(e) => onValueChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") onSubmit();
+          }}
+          className="w-full p-2 border rounded-full mb-4 dark:bg-gray-700 dark:text-white outline-none focus:outline-none focus:ring-0"
+          placeholder="0x123...abc"
+        />
+
+        <div className="flex justify-end gap-2">
+          <button
+            onClick={onClose}
+            className="border rounded-full px-4 py-2 bg-black text-white"
+          >
+            Cancel
+          </button>
+
+          <button
+            onClick={onSubmit}
+            disabled={!isValid}
+            className="border rounded-full px-4 py-2 bg-black text-white disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            Continue
+          </button>
         </div>
-      )}
+      </div>
     </div>
   );
 };
