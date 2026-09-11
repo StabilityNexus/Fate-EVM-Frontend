@@ -331,16 +331,20 @@ const ButtonGroup = ({ setIsModalOpen, decorative = false }: ButtonGroupProps) =
         decorative ? "pointer-events-none" : "pointer-events-auto"
       }`}
     >
-      <Link href="/createPool" tabIndex={decorativeTabIndex}>
-        <button className={buttonClass} tabIndex={decorativeTabIndex}>
-          Create Pool
-        </button>
+      <Link
+        href="/createPool"
+        className={buttonClass}
+        tabIndex={decorativeTabIndex}
+      >
+        Create Pool
       </Link>
 
-      <Link href="/explorePools" tabIndex={decorativeTabIndex}>
-        <button className={buttonClass} tabIndex={decorativeTabIndex}>
-          Explore Pools
-        </button>
+      <Link
+        href="/explorePools"
+        className={buttonClass}
+        tabIndex={decorativeTabIndex}
+      >
+        Explore Pools
       </Link>
 
       <button
