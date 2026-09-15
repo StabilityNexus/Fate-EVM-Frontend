@@ -98,10 +98,10 @@ const navigation = [
 
 interface FooterProps {
   className?: string;
-  onKYAClick?: () => void;
+  onTermsClick?: () => void;
 }
 
-export default function Footer({ className = "", onKYAClick }: FooterProps) {
+export default function Footer({ className = "", onTermsClick }: FooterProps) {
   const year = new Date().getFullYear();
   return (
     <footer className={`w-full rounded-lg backdrop-blur-md bg-neutral-100 dark:bg-black shadow-lg border border-neutral-200 dark:border-black/10 ${className}`}>
@@ -178,23 +178,15 @@ export default function Footer({ className = "", onKYAClick }: FooterProps) {
           >
             Docs
           </Link>
-          {onKYAClick && (
+          {onTermsClick && (
             <button
               type="button"
-              onClick={onKYAClick}
+              onClick={onTermsClick}
               className="text-neutral-900 dark:text-white hover:text-yellow-600 dark:hover:text-yellow-400 hover:underline hover:decoration-2 transition-colors"
             >
-              KYA
+              Terms of Use
             </button>
           )}
-          <Link
-            href="https://terms.stability.nexus"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-neutral-900 dark:text-white hover:text-yellow-600 dark:hover:text-yellow-400 hover:underline hover:decoration-2 transition-colors"
-          >
-            Terms and Conditions
-          </Link>
         </div>
 
         {/* Copyright Statement */}
