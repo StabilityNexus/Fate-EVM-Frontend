@@ -1,4 +1,4 @@
-export const CoinABI=[
+export const CoinABI = [
   {
     "type": "constructor",
     "inputs": [
@@ -24,6 +24,11 @@ export const CoinABI=[
       },
       {
         "name": "_predictionPool",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "_accumulatorVault",
         "type": "address",
         "internalType": "address"
       },
@@ -59,6 +64,19 @@ export const CoinABI=[
         "name": "",
         "type": "uint256",
         "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "accumulatorVault",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
       }
     ],
     "stateMutability": "view"
@@ -139,6 +157,19 @@ export const CoinABI=[
         "name": "",
         "type": "uint256",
         "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "baseDecimals",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint8",
+        "internalType": "uint8"
       }
     ],
     "stateMutability": "view"
@@ -227,6 +258,32 @@ export const CoinABI=[
   {
     "type": "function",
     "name": "creatorFee",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "cumulativeFees",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "cumulativeVolume",
     "inputs": [],
     "outputs": [
       {
@@ -401,6 +458,19 @@ export const CoinABI=[
   },
   {
     "type": "function",
+    "name": "tradeCount",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "transfer",
     "inputs": [
       {
@@ -467,19 +537,6 @@ export const CoinABI=[
   },
   {
     "type": "function",
-    "name": "treasury",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "treasuryFee",
     "inputs": [],
     "outputs": [
@@ -531,16 +588,10 @@ export const CoinABI=[
   },
   {
     "type": "event",
-    "name": "Buy",
+    "name": "Burn",
     "inputs": [
       {
-        "name": "buyer",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
-      },
-      {
-        "name": "to",
+        "name": "from",
         "type": "address",
         "indexed": true,
         "internalType": "address"
@@ -553,6 +604,24 @@ export const CoinABI=[
       },
       {
         "name": "amountCoin",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "price",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "totalSupplyAfter",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "reserveAfter",
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
@@ -599,134 +668,6 @@ export const CoinABI=[
   },
   {
     "type": "event",
-    "name": "DetailedBuy",
-    "inputs": [
-      {
-        "name": "buyer",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
-      },
-      {
-        "name": "to",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
-      },
-      {
-        "name": "blockNumber",
-        "type": "uint256",
-        "indexed": true,
-        "internalType": "uint256"
-      },
-      {
-        "name": "amountAsset",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      },
-      {
-        "name": "amountCoin",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      },
-      {
-        "name": "pricePerCoin",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      },
-      {
-        "name": "totalSupplyBefore",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      },
-      {
-        "name": "totalSupplyAfter",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      },
-      {
-        "name": "reserveBalance",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      },
-      {
-        "name": "timestamp",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "DetailedSell",
-    "inputs": [
-      {
-        "name": "seller",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
-      },
-      {
-        "name": "blockNumber",
-        "type": "uint256",
-        "indexed": true,
-        "internalType": "uint256"
-      },
-      {
-        "name": "amountAsset",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      },
-      {
-        "name": "amountCoin",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      },
-      {
-        "name": "pricePerCoin",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      },
-      {
-        "name": "totalSupplyBefore",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      },
-      {
-        "name": "totalSupplyAfter",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      },
-      {
-        "name": "reserveBalance",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      },
-      {
-        "name": "timestamp",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
     "name": "FeeDistribution",
     "inputs": [
       {
@@ -744,7 +685,7 @@ export const CoinABI=[
       {
         "name": "blockNumber",
         "type": "uint256",
-        "indexed": true,
+        "indexed": false,
         "internalType": "uint256"
       },
       {
@@ -772,7 +713,7 @@ export const CoinABI=[
         "internalType": "uint256"
       },
       {
-        "name": "treasury",
+        "name": "accumulatorVault",
         "type": "address",
         "indexed": false,
         "internalType": "address"
@@ -780,7 +721,7 @@ export const CoinABI=[
       {
         "name": "creator",
         "type": "address",
-        "indexed": false,
+        "indexed": true,
         "internalType": "address"
       },
       {
@@ -794,10 +735,16 @@ export const CoinABI=[
   },
   {
     "type": "event",
-    "name": "Sell",
+    "name": "Mint",
     "inputs": [
       {
-        "name": "seller",
+        "name": "from",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "to",
         "type": "address",
         "indexed": true,
         "internalType": "address"
@@ -810,6 +757,24 @@ export const CoinABI=[
       },
       {
         "name": "amountCoin",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "price",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "totalSupplyAfter",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "reserveAfter",
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
@@ -941,6 +906,11 @@ export const CoinABI=[
   },
   {
     "type": "error",
+    "name": "MissingDecimals",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "OnlyPredictionPool",
     "inputs": []
   },
@@ -962,10 +932,12 @@ export const CoinABI=[
   },
   {
     "type": "error",
+    "name": "UnsupportedDecimals",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "ZeroAddress",
     "inputs": []
   }
 ]
-
-
-

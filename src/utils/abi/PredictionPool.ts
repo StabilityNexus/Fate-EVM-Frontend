@@ -1,4 +1,4 @@
-export const PredictionPoolABI=[
+export const PredictionPoolABI = [
   {
     "type": "constructor",
     "inputs": [
@@ -19,6 +19,11 @@ export const PredictionPoolABI=[
       },
       {
         "name": "_oracle",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "_accumulatorVault",
         "type": "address",
         "internalType": "address"
       },
@@ -79,6 +84,19 @@ export const PredictionPoolABI=[
         "name": "",
         "type": "uint256",
         "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "accumulatorVault",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
       }
     ],
     "stateMutability": "view"
@@ -150,11 +168,47 @@ export const PredictionPoolABI=[
   },
   {
     "type": "function",
+    "name": "fateOracle",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "contract IFateOracle"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "getCurrentPrice",
     "inputs": [],
     "outputs": [
       {
         "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getPoolCounters",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "cumulativeVolume",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "cumulativeFees",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "tradeCount",
         "type": "uint256",
         "internalType": "uint256"
       }
@@ -301,6 +355,19 @@ export const PredictionPoolABI=[
   },
   {
     "type": "function",
+    "name": "setFateOracle",
+    "inputs": [
+      {
+        "name": "newFateOracle",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "transferOwnership",
     "inputs": [
       {
@@ -350,6 +417,57 @@ export const PredictionPoolABI=[
       }
     ],
     "stateMutability": "view"
+  },
+  {
+    "type": "event",
+    "name": "FateOracleSet",
+    "inputs": [
+      {
+        "name": "previousFateOracle",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "newFateOracle",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "FateOracleUpdateFailed",
+    "inputs": [
+      {
+        "name": "fateOracleAddress",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "OracleUpdated",
+    "inputs": [
+      {
+        "name": "previousOracle",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "newOracle",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
   },
   {
     "type": "event",
@@ -498,6 +616,11 @@ export const PredictionPoolABI=[
   },
   {
     "type": "error",
+    "name": "NotIFateOracle",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "OwnableInvalidOwner",
     "inputs": [
       {
@@ -540,7 +663,3 @@ export const PredictionPoolABI=[
     ]
   }
 ]
-
-
-
-

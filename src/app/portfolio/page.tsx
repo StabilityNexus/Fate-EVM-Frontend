@@ -545,8 +545,8 @@ const calculateTokenMetricsWithEvents = async (
 };
 
 const COIN_TRADE_EVENTS = [
-  getAbiEvent(CoinABI, 'Buy'),
-  getAbiEvent(CoinABI, 'Sell'),
+  getAbiEvent(CoinABI, 'Mint'),
+  getAbiEvent(CoinABI, 'Burn'),
 ];
 
 const REORG_BUFFER = BigInt(100);
@@ -653,7 +653,7 @@ const fetchUserTransactions = async (
     const scannedThrough = scan.scannedSpan?.to ?? null;
 
     const user = userAddress as Address;
-    const matchesUser = (log: typeof scan.logs[number], field: 'to' | 'seller'): boolean => {
+    const matchesUser = (log: typeof scan.logs[number], field: 'to' | 'from'): boolean => {
       const candidate = (log.args as Record<string, unknown> | undefined)?.[field];
       return typeof candidate === 'string'
         && isAddress(candidate)
@@ -662,8 +662,8 @@ const fetchUserTransactions = async (
 
     // Matched on `to`, not `buyer`: you can buy for someone else, and the cost belongs to
     // whoever ends up holding the coins.
-    const buyLogs = scan.logs.filter((log) => log.eventName === 'Buy' && matchesUser(log, 'to'));
-    const sellLogs = scan.logs.filter((log) => log.eventName === 'Sell' && matchesUser(log, 'seller'));
+    const buyLogs = scan.logs.filter((log) => log.eventName === 'Mint' && matchesUser(log, 'to'));
+    const sellLogs = scan.logs.filter((log) => log.eventName === 'Burn' && matchesUser(log, 'from'));
 
     logger.debug('fetchUserTransactions: scan complete', {
       token: tokenAddress,

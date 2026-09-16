@@ -1,4 +1,28 @@
-export const PredictionPoolFactoryABI =[
+export const PredictionPoolFactoryABI = [
+  {
+    "type": "constructor",
+    "inputs": [
+      {
+        "name": "_accumulatorVault",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "accumulatorVault",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
   {
     "type": "function",
     "name": "allPools",
@@ -204,25 +228,6 @@ export const PredictionPoolFactoryABI =[
   },
   {
     "type": "function",
-    "name": "isValidOracle",
-    "inputs": [
-      {
-        "name": "",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "bool",
-        "internalType": "bool"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "poolsByCreator",
     "inputs": [
       {
@@ -244,19 +249,6 @@ export const PredictionPoolFactoryABI =[
       }
     ],
     "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "registerOracle",
-    "inputs": [
-      {
-        "name": "oracle",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
   },
   {
     "type": "event",
@@ -317,5 +309,3 @@ export const PredictionPoolFactoryABI =[
     ]
   }
 ]
-
-
