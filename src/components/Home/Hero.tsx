@@ -81,12 +81,7 @@ const Hero = () => {
         isModalOpen ? "" : "hero-hide-cursor"
       }`}
     >
-      {/*
-        Background Layer — purely visual. It supplies the inverted-colour
-        copy that shows through the mask hole in the foreground layer.
-        Hidden from assistive tech and the tab order so the hero is only
-        announced/tabbed once (the foreground layer is the real content).
-      */}
+      {/* Background Layer */}
       <div
         aria-hidden="true"
         className="absolute inset-0 flex flex-col items-center justify-center bg-black dark:bg-white"
@@ -99,7 +94,7 @@ const Hero = () => {
         />
       </div>
 
-      {/* Foreground Layer (MASK APPLIED HERE) — the real, interactive content */}
+      {/* Foreground Layer (MASK APPLIED HERE) */}
       <div
         className="absolute inset-0 flex flex-col items-center justify-center hero-cursor pointer-events-none"
         style={
@@ -170,7 +165,6 @@ const PoolAddressModal = ({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const previouslyFocused = useRef<HTMLElement | null>(null);
 
-  // Move focus into the dialog on open, restore it to the trigger on close.
   useEffect(() => {
     if (!open) return;
 
@@ -182,7 +176,6 @@ const PoolAddressModal = ({
     };
   }, [open]);
 
-  // Escape closes the dialog; Tab is trapped inside it.
   useEffect(() => {
     if (!open) return;
 
@@ -280,8 +273,6 @@ type HeroContentProps = {
   onHoverChange: (val: boolean) => void;
 };
 
-// Single source of truth for the hero copy + CTAs. Rendered twice — once as
-// the real content, once as a decorative layer for the spotlight mask.
 const HeroContent = ({
   decorative = false,
   textClassName,
@@ -322,8 +313,7 @@ const ButtonGroup = ({ setIsModalOpen, decorative = false }: ButtonGroupProps) =
   const buttonClass = `px-6 py-3 border rounded-full text-white mix-blend-difference cursor-none ${
     decorative ? "pointer-events-none" : "pointer-events-auto"
   }`;
-  // Keep the decorative copy out of the tab order (it lives inside an
-  // aria-hidden layer, so focusable descendants would be an a11y violation).
+  
   const decorativeTabIndex = decorative ? -1 : undefined;
 
   return (
