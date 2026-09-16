@@ -220,7 +220,7 @@ const PoolAddressModal = ({
 
   return (
     <div
-      className="fixed inset-0 flex items-center justify-center bg-black/50 z-50"
+      className="fixed inset-0 flex items-center justify-center bg-black/50 z-50 p-4"
       onClick={onClose}
     >
       <div
@@ -229,7 +229,7 @@ const PoolAddressModal = ({
         aria-modal="true"
         aria-labelledby="pool-address-modal-title"
         onClick={(e) => e.stopPropagation()}
-        className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-xl w-96"
+        className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-xl w-full max-w-sm"
       >
         <h2
           id="pool-address-modal-title"
@@ -248,6 +248,7 @@ const PoolAddressModal = ({
           }}
           className="w-full p-2 border rounded-full mb-4 dark:bg-gray-700 dark:text-white outline-none focus:outline-none focus:ring-0"
           placeholder="0x123...abc"
+          aria-label="Pool address"
         />
 
         <div className="flex justify-end gap-2">
