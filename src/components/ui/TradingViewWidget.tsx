@@ -20,7 +20,6 @@ const COIN_ID_MAPPINGS: Record<string, string> = {
   'solusd': 'solana',
   'avaxusd': 'avalanche-2',
   'adausd': 'cardano',
-  'etcusd': 'ethereum-classic',
   'maticusd': 'matic-network',
   'linkusd': 'chainlink',
   'daiusd': 'dai',

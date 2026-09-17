@@ -64,28 +64,13 @@ const ReviewStep: React.FC<ReviewStepProps> = ({
                 {formData.oracleType || "Not specified"}
               </span>
             </div>
-            {formData.oracleType === 'chainlink' ? (
+            {(
               <div className="flex justify-between">
                 <span className="text-gray-600 dark:text-gray-400">Chainlink Price Feed:</span>
                 <span className="font-medium text-black dark:text-white break-all">
                   {formData.priceFeedAddress || "Not specified"}
                 </span>
               </div>
-            ) : (
-              <>
-                <div className="flex justify-between">
-                  <span className="text-gray-600 dark:text-gray-400">Hebeswap Pair Address:</span>
-                  <span className="font-medium text-black dark:text-white break-all">
-                    {formData.hebeswapPairAddress || "Not specified"}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600 dark:text-gray-400">Quote Token Address:</span>
-                  <span className="font-medium text-black dark:text-white break-all">
-                    {formData.hebeswapQuoteToken || "Not specified"}
-                  </span>
-                </div>
-              </>
             )}
             <div className="flex justify-between">
               <span className="text-gray-600 dark:text-gray-400">Pool Creator:</span>

@@ -55,7 +55,6 @@ const getChainName = (chainId: number): string => {
     case 137: return 'Polygon';
     case 56: return 'BSC';
     case 8453: return 'Base';
-    case 61: return 'Ethereum Classic';
     case 11155111: return 'Sepolia Testnet';
     default: return `Chain ${chainId}`;
   }
@@ -553,7 +552,6 @@ const REORG_BUFFER = BigInt(100);
 
 const FALLBACK_LOOKBACK: Record<number, bigint> = {
   11155111: BigInt(100_000),
-  61: BigInt(50_000),
 };
 
 const resolveScanFloor = (chainId: number, head: bigint): bigint => {

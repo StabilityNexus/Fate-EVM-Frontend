@@ -5,7 +5,6 @@ export interface ChainConfig {
   name: string;
   factoryAddress: Address;
   chainlinkAdapterFactory?: Address;
-  hebeswapAdapterFactory?: Address;
   nativeTokenSymbol: string;
   explorerUrl?: string;
 }
@@ -63,7 +62,7 @@ export interface PredictionPool {
   vaultCreatorFee: number;
   treasuryFee: number;
   isInitialized?: boolean;
-  oracleType?: 'chainlink' | 'hebeswap';
+  oracleType?: 'chainlink';
 }
 
 export interface Pool extends PredictionPool {
@@ -110,16 +109,12 @@ export interface PriceFeedInfo {
 
 export interface OracleAdapter {
   address: Address;
-  type: 'chainlink' | 'hebeswap';
+  type: 'chainlink';
   priceFeed?: Address;
-  pair?: Address;
-  baseToken?: Address;
-  quoteToken?: Address;
 }
 
 export interface AdapterFactoryConfig {
   chainlinkFactory: Address;
-  hebeswapFactory: Address;
 }
 
 export interface PriceData {
@@ -172,10 +167,7 @@ export interface PoolCreationForm {
   name: string;
   baseToken: Address;
   priceFeed: Address;
-  oracleType: 'chainlink' | 'hebeswap';
-  hebeswapPair?: Address;
-  hebeswapBaseToken?: Address;
-  hebeswapQuoteToken?: Address;
+  oracleType: 'chainlink';
   bullSymbol: string;
   bearSymbol: string;
   initialFunding: string;

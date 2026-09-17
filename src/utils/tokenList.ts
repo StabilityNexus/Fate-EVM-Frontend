@@ -7,7 +7,6 @@ import ethereumTokens from "@/data/tokens/ethereum-tokens.json";
 import baseTokens from "@/data/tokens/base-tokens.json";
 import bscTokens from "@/data/tokens/binance-smart-chain-tokens.json";
 import polygonTokens from "@/data/tokens/polygon-pos-tokens.json";
-import etcTokens from "@/data/tokens/ethereum-classic-tokens.json";
 import milkomedaTokens from "@/data/tokens/cardano's-milkomeda-tokens.json";
 
 export interface Token {
@@ -32,7 +31,6 @@ const CHAIN_TOKENS: Readonly<Record<number, ReadonlyArray<Readonly<Token>>>> = O
   56: normalizeTokens(bscTokens as Token[]), // BSC
   137: normalizeTokens(polygonTokens as Token[]), // Polygon
   8453: normalizeTokens(baseTokens as Token[]), // Base
-  61: normalizeTokens(etcTokens as Token[]), // Ethereum Classic
   2001: normalizeTokens(milkomedaTokens as Token[]), // Milkomeda Cardano sidechain
 });
 
