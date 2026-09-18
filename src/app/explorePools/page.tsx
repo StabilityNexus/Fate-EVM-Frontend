@@ -38,8 +38,8 @@ const VOLUME_WINDOW_BLOCKS: Record<number, bigint> = {
 };
 
 const COIN_TRADE_EVENTS = [
-  getAbiEvent(CoinABI, 'Buy'),
-  getAbiEvent(CoinABI, 'Sell'),
+  getAbiEvent(CoinABI, 'Mint'),
+  getAbiEvent(CoinABI, 'Burn'),
 ];
 
 const fetchRecentVolume = async (
@@ -77,7 +77,7 @@ const fetchRecentVolume = async (
     .reduce((sum, log) => {
       const args = log.args as Record<string, unknown> | undefined;
       if (typeof args?.amountAsset !== 'bigint') return sum;
-      const fee = log.eventName === 'Sell' && typeof args.feePaid === 'bigint'
+      const fee = log.eventName === 'Burn' && typeof args.feePaid === 'bigint'
         ? args.feePaid
         : BigInt(0);
       return sum + args.amountAsset + fee;

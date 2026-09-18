@@ -153,8 +153,8 @@ export const TradeHistoryCard = ({
         )}
       </CardTitle>
       <p className="text-sm text-neutral-600 dark:text-neutral-400">
-        Built from this wallet&apos;s on-chain Buy and Sell events, newest first. Coins received by
-        transfer, or from a pool&apos;s initial supply, emit no such event and are not listed.
+        Built from this wallet&apos;s on-chain Mint and Burn events, newest first. A coin transfer burns
+        and re-mints, so it appears as a sell and a buy. Initial-supply coins emit no event and are not listed.
       </p>
     </CardHeader>
   );
