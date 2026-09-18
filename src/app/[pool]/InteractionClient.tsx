@@ -108,7 +108,7 @@ const usePool = (poolId: Address | undefined, isConnected: boolean) => {
       { address: baseToken, abi: ERC20ABI, functionName: 'balanceOf', args: [bearAddr] },
       { address: baseToken, abi: ERC20ABI, functionName: 'decimals' },
       { address: baseToken, abi: ERC20ABI, functionName: 'symbol' },
-      { address: oracle, abi: IOracleABI, functionName: 'getLatestPrice' },
+      { address: oracle, abi: IOracleABI, functionName: 'readValue' },
       { address: poolId as Address, abi: PredictionPoolABI, functionName: 'previousPrice' },
     ] : [],
     query: {
