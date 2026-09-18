@@ -344,7 +344,7 @@ const PoolConfigurationStep: React.FC<PoolConfigurationStepProps> = ({
         <div className="space-y-2">
           <div className="flex items-center gap-2">
             <Coins className="h-4 w-4 text-gray-600 dark:text-gray-400" />
-            <Label className="text-sm font-medium text-gray-600 dark:text-gray-400">
+            <Label htmlFor="price-feed-select" className="text-sm font-medium text-gray-600 dark:text-gray-400">
               Chainlink Price Feed *
             </Label>
             <TooltipProvider>
@@ -361,6 +361,7 @@ const PoolConfigurationStep: React.FC<PoolConfigurationStepProps> = ({
             </TooltipProvider>
           </div>
           <select
+            id="price-feed-select"
             value={formData.priceFeedAddress}
             onChange={(e) => updateFormData({ priceFeedAddress: e.target.value })}
             className={`w-full px-3 py-2.5 border rounded-md transition-all duration-200 cursor-pointer text-sm md:text-base ${
