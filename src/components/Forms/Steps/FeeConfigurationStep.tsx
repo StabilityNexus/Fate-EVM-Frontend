@@ -9,10 +9,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Info, Percent, Coins } from "lucide-react";
+import { Info, Percent } from "lucide-react";
 import type { FormData } from "../FormData";
-import { useChainId } from "wagmi";
-import { HEBESWAP_PAIRS } from "@/utils/hebeswapConfig";
 
 interface FeeConfigurationStepProps {
   formData: FormData;
@@ -25,7 +23,6 @@ const FeeConfigurationStep: React.FC<FeeConfigurationStepProps> = ({
   updateFormData,
   errors,
 }) => {
-  const chainId = useChainId();
   
   // Set default values if empty - only run once
   const hasSetDefaults = React.useRef(false);
@@ -54,16 +51,6 @@ const FeeConfigurationStep: React.FC<FeeConfigurationStepProps> = ({
     }
   };
 
-  const handleHebeswapPairChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const selectedPair = HEBESWAP_PAIRS.find(pair => pair.pairAddress === e.target.value);
-    if (selectedPair) {
-      updateFormData({
-        hebeswapPairAddress: selectedPair.pairAddress,
-        hebeswapQuoteToken: selectedPair.quoteToken
-      });
-    }
-  };
-
   return (
     <div className="space-y-6">
       <div className="text-center mb-6">
@@ -74,55 +61,6 @@ const FeeConfigurationStep: React.FC<FeeConfigurationStepProps> = ({
           Configure fee structure for your pool
         </p>
       </div>
-
-      {/* Hebeswap Pair Selection (only for Ethereum Classic) */}
-      {chainId === 61 && formData.oracleType === 'hebeswap' && (
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <Coins className="h-4 w-4 text-gray-600 dark:text-gray-400" />
-            <Label className="text-sm font-medium text-gray-600 dark:text-gray-400">
-              Hebeswap Trading Pair *
-            </Label>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Info className="h-4 w-4 text-gray-600/70 dark:text-gray-400/70 cursor-help" />
-                </TooltipTrigger>
-                <TooltipContent className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400">
-                  <p className="w-64 text-sm">
-                    Select a Hebeswap trading pair for price feeds on Ethereum Classic
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </div>
-          <select
-            value={formData.hebeswapPairAddress}
-            onChange={handleHebeswapPairChange}
-            className={`w-full px-3 py-2.5 border rounded-md transition-all duration-200 cursor-pointer ${
-              errors.hebeswapPairAddress 
-                ? "border-red-500 focus:border-red-500 focus:ring-1 focus:ring-red-500" 
-                : "border-gray-200 dark:border-gray-700 focus:border-black dark:focus:border-white focus:ring-2 focus:ring-black dark:focus:ring-white"
-            } text-black dark:text-white bg-white dark:bg-gray-800 focus:outline-none`}
-          >
-            <option value="" disabled className="text-gray-500">
-              Select a Hebeswap Pair
-            </option>
-            {HEBESWAP_PAIRS.map((pair) => (
-              <option 
-                key={pair.pairAddress} 
-                value={pair.pairAddress}
-                className="text-black dark:text-white bg-white dark:bg-gray-800"
-              >
-                {pair.description}
-              </option>
-            ))}
-          </select>
-          {errors.hebeswapPairAddress && (
-            <p className="text-red-500 text-sm">{errors.hebeswapPairAddress}</p>
-          )}
-        </div>
-      )}
 
       <div className="grid md:grid-cols-2 gap-4">
         <div className="space-y-2">

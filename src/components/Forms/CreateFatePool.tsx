@@ -16,8 +16,7 @@ import { toast } from "sonner";
 import { logger } from "@/lib/logger";
 import { PredictionPoolFactoryABI } from "@/utils/abi/PredictionPoolFactory";
 import { ChainlinkAdapterFactoryABI } from "@/utils/abi/ChainlinkAdapterFactory";
-import { HebeswapAdapterFactoryABI } from "@/utils/abi/HebeswapAdapterFactory";
-import { FatePoolFactories, ChainlinkAdapterFactories, HebeswapAdapterFactories } from "@/utils/addresses";
+import { FatePoolFactories, ChainlinkAdapterFactories } from "@/utils/addresses";
 import { SUPPORTED_CHAINS, getPriceFeedOptions } from "@/utils/supportedChainFeed";
 import { parseUnits } from "viem";
 
@@ -84,10 +83,8 @@ export default function CreateFatePool() {
   const [formData, setFormData] = useState<FormData>({
     poolName: "",
     baseTokenAddress: "",
-    oracleType: currentChainId === 61 ? "hebeswap" : "chainlink",
+    oracleType: "chainlink",
     priceFeedAddress: "",
-    hebeswapPairAddress: "",
-    hebeswapQuoteToken: "",
     bullCoinName: "",
     bullCoinSymbol: "",
     bearCoinName: "",
@@ -118,25 +115,9 @@ export default function CreateFatePool() {
     });
   }, []);
 
-  // Reset oracle configuration when chain changes
+  // A feed belongs to one chain, so clear the selection when the chain changes.
   useEffect(() => {
-    if (currentChainId === 61) {
-      // Ethereum Classic - use Hebeswap
-      updateFormData({ 
-        oracleType: 'hebeswap',
-        priceFeedAddress: '',
-        hebeswapPairAddress: '',
-        hebeswapQuoteToken: ''
-      });
-    } else {
-      // All other chains - use Chainlink
-      updateFormData({ 
-        oracleType: 'chainlink',
-        priceFeedAddress: '',
-        hebeswapPairAddress: '',
-        hebeswapQuoteToken: ''
-      });
-    }
+    updateFormData({ oracleType: 'chainlink', priceFeedAddress: '' });
   }, [currentChainId, updateFormData]);
 
   // Update creator address when wallet changes
@@ -171,27 +152,8 @@ export default function CreateFatePool() {
         newErrors.initialDeposit = "Initial deposit cannot be negative";
       }
       
-      // Validate oracle configuration based on type
-      if (formData.oracleType === 'chainlink') {
-        if (!formData.priceFeedAddress) {
-          newErrors.priceFeedAddress = "Please select a Chainlink price feed";
-        }
-      } else if (formData.oracleType === 'hebeswap') {
-        logger.debug('Validating Hebeswap configuration:', {
-          hebeswapPairAddress: formData.hebeswapPairAddress,
-          hebeswapQuoteToken: formData.hebeswapQuoteToken
-        });
-        
-        if (!formData.hebeswapPairAddress) {
-          newErrors.hebeswapPairAddress = "Hebeswap pair address is required";
-        } else if (!/^0x[a-fA-F0-9]{40}$/.test(formData.hebeswapPairAddress.trim())) {
-          newErrors.hebeswapPairAddress = "Invalid Hebeswap pair address format";
-        }
-        if (!formData.hebeswapQuoteToken) {
-          newErrors.hebeswapQuoteToken = "Quote token address is required";
-        } else if (!/^0x[a-fA-F0-9]{40}$/.test(formData.hebeswapQuoteToken.trim())) {
-          newErrors.hebeswapQuoteToken = "Invalid quote token address format";
-        }
+      if (!formData.priceFeedAddress) {
+        newErrors.priceFeedAddress = "Please select a Chainlink price feed";
       }
       
       logger.debug('Step 1 validation errors:', { errors: newErrors });
@@ -369,84 +331,6 @@ export default function CreateFatePool() {
         } catch (error) {
           logger.error("Error checking/creating Chainlink oracle adapter:", error instanceof Error ? error : undefined);
           throw new Error(`Failed to get Chainlink oracle adapter: ${error instanceof Error ? error.message : 'Unknown error'}`);
-        }
-      } else if (formData.oracleType === "hebeswap") {
-        // Get the Hebeswap adapter factory address
-        const adapterFactoryAddress = HebeswapAdapterFactories[currentChainId];
-        if (!adapterFactoryAddress || adapterFactoryAddress === "0x0000000000000000000000000000000000000000") {
-          throw new Error(`HebeswapAdapterFactory not deployed on chain ${currentChainId}. Please deploy the adapter factory first.`);
-        }
-
-        // Validate Hebeswap parameters
-        if (!formData.hebeswapPairAddress || formData.hebeswapPairAddress === "0x0000000000000000000000000000000000000000") {
-          throw new Error("Hebeswap pair address is required.");
-        }
-        if (!formData.hebeswapQuoteToken || formData.hebeswapQuoteToken === "0x0000000000000000000000000000000000000000") {
-          throw new Error("Hebeswap quote token address is required.");
-        }
-
-        const pairAddress = formData.hebeswapPairAddress as `0x${string}`;
-        const quoteTokenAddress = formData.hebeswapQuoteToken as `0x${string}`;
-
-        // Step 1: Check if adapter already exists
-        logger.debug("Checking if Hebeswap oracle adapter exists for pair:", { pairAddress });
-        toast.info("Checking for existing Hebeswap oracle adapter...");
-        
-        try {
-          if (!publicClient) {
-            throw new Error("Public client not available");
-          }
-
-          const existingAdapter = await publicClient.readContract({
-            address: adapterFactoryAddress as `0x${string}`,
-            abi: HebeswapAdapterFactoryABI,
-            functionName: "getAdapter",
-            args: [pairAddress, baseTokenAddress as `0x${string}`, quoteTokenAddress],
-          }) as `0x${string}`;
-
-          if (existingAdapter && existingAdapter !== "0x0000000000000000000000000000000000000000") {
-            logger.debug("Found existing Hebeswap oracle adapter:", { existingAdapter });
-            oracleAddress = existingAdapter;
-            toast.info("Using existing Hebeswap oracle adapter.");
-          } else {
-            // Step 2: Deploy new Hebeswap adapter
-            logger.debug("Creating new Hebeswap oracle adapter");
-            toast.info("Creating new Hebeswap oracle adapter... This may take a moment.");
-            
-            const adapterTxHash = await deployPool({
-              address: adapterFactoryAddress as `0x${string}`,
-              abi: HebeswapAdapterFactoryABI,
-              functionName: "createAdapter",
-              args: [pairAddress, baseTokenAddress as `0x${string}`, quoteTokenAddress],
-            }) as `0x${string}`;
-
-            logger.transaction("Hebeswap adapter creation transaction hash:", adapterTxHash);
-            
-            // Wait for the transaction to be mined
-            toast.info("Waiting for Hebeswap adapter creation transaction to be mined...");
-            
-            // Wait for the transaction receipt
-            const receipt = await publicClient.waitForTransactionReceipt({
-              hash: adapterTxHash,
-              timeout: 60_000, // 60 seconds timeout
-            });
-
-            logger.transaction("Hebeswap adapter creation transaction confirmed:", undefined, { receipt });
-            
-            // Query the adapter factory for the oracle address
-            oracleAddress = await publicClient.readContract({
-              address: adapterFactoryAddress as `0x${string}`,
-              abi: HebeswapAdapterFactoryABI,
-              functionName: "getAdapter",
-              args: [pairAddress, baseTokenAddress as `0x${string}`, quoteTokenAddress],
-            }) as `0x${string}`;
-            
-            logger.debug("Retrieved Hebeswap oracle address from factory:", { oracleAddress });
-            toast.success("Hebeswap oracle adapter created successfully!");
-          }
-        } catch (error) {
-          logger.error("Error checking/creating Hebeswap oracle adapter:", error instanceof Error ? error : undefined);
-          throw new Error(`Failed to get Hebeswap oracle adapter: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
       } else {
         throw new Error("Invalid oracle type selected");

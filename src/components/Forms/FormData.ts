@@ -1,10 +1,8 @@
 export interface FormData {
   poolName: string;
   baseTokenAddress: string;
-  oracleType: 'chainlink' | 'hebeswap';
+  oracleType: 'chainlink';
   priceFeedAddress: string;
-  hebeswapPairAddress: string;
-  hebeswapQuoteToken: string;
   bullCoinName: string;
   bullCoinSymbol: string;
   bearCoinName: string;

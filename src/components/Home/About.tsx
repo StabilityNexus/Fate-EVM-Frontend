@@ -102,7 +102,6 @@ export default function AboutSection() {
                 "Bull and Bear coin trading for price movement prediction",
                 "Real-time price feeds powered by Chainlink oracles",
                 "Automated market making for efficient trading",
-                "Multi-chain support: Ethereum, Polygon, BSC, Base, Ethereum Classic",
                 "Transparent smart contracts ensuring fairness and security",
                 "DeFi trading platform for cryptocurrency price prediction",
               ],

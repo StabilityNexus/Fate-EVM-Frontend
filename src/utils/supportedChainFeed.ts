@@ -6,8 +6,6 @@ export const CHAIN_PRICE_FEED_OPTIONS: Record<number, { address: string; name: s
     { address: "0x1b44F3514812d835EB1BDB0acB33d3fA3351Ee43", name: "BTC / USD" },
     { address: "0xB0C712f98daE15264c8E26132BCC91C40aD4d5F9", name: "AUD / USD" },
   ],
-  // Ethereum Classic: no verified feeds yet. Keep the key, SUPPORTED_CHAINS derives from it.
-  61: [],
 };
 
 // Get all supported chain IDs

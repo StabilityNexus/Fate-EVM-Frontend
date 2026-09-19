@@ -6,10 +6,6 @@ const DEFAULT_RPC_URLS: Record<number, string[]> = {
     "https://sepolia.drpc.org",
     "https://sepolia.gateway.tenderly.co",
   ],
-  61: [
-    "https://etc.rivet.link",
-    "https://etc.drpc.org",
-  ],
 };
 
 // User RPCs (prepended, take priority); filled later by the settings page.
@@ -39,10 +35,9 @@ export const getScanTransport = (chainId: number): Transport => {
 };
 
 // Every provider in a chain's list must accept the chunk, so use the smallest limit.
-// Measured 2026-07-29: drpc 10k on both chains, tenderly 1M, rivet 50k+.
+// Measured 2026-07-29: drpc 10k, tenderly 1M.
 const SCAN_CHUNK_SIZE: Record<number, bigint> = {
   11155111: BigInt(10_000),
-  61: BigInt(10_000),
 };
 
 const DEFAULT_SCAN_CHUNK_SIZE = BigInt(2_000);

@@ -1,7 +1,6 @@
 import {
   sepolia,
 } from "wagmi/chains";
-import { ethereumClassic } from "./chains/EthereumClassic";
 import { getDefaultConfig } from "@rainbow-me/rainbowkit";
 import { getTransport } from "./rpcTransport";
 
@@ -27,10 +26,8 @@ export const config = (() => {
     projectId: process.env.NEXT_PUBLIC_PROJECT_ID || "DEFAULT_PROJECT_ID",
     chains: [
       sepolia,    // 11155111 - Sepolia Testnet
-      ethereumClassic, // 61 - Ethereum Classic
     ],
     transports: {
-      [ethereumClassic.id]: getTransport(ethereumClassic.id),
       [sepolia.id]: getTransport(sepolia.id),
     },
     ssr: true, // Enable SSR for proper hydration

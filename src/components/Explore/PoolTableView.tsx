@@ -2,23 +2,11 @@ import React from "react";
 import { ExternalLink, TrendingUp, TrendingDown, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
 import type { Pool, PoolSortState, PoolSortField } from "@/lib/types";
 import { getPriceFeedName as getPriceFeedNameUtil } from "@/utils/supportedChainFeed";
-import { getHebeswapPairByAddress } from "@/utils/hebeswapConfig";
 import { formatTVL, formatNumber } from "@/utils/format";
 
 // Helper function to get oracle name/description
-const getOracleName = (oracleAddress: string, chainId: number): string => {
-  if (chainId === 61) {
-    // Ethereum Classic - check if it's a Hebeswap pair
-    const hebeswapPair = getHebeswapPairByAddress(oracleAddress);
-    if (hebeswapPair) {
-      return `${hebeswapPair.baseTokenSymbol}/${hebeswapPair.quoteTokenSymbol} Pair`;
-    }
-    return `${oracleAddress.slice(0, 6)}...${oracleAddress.slice(-4)}`;
-  } else {
-    // Other chains - use Chainlink price feed names
-    return getPriceFeedNameUtil(oracleAddress, chainId);
-  }
-};
+const getOracleName = (oracleAddress: string, chainId: number): string =>
+  getPriceFeedNameUtil(oracleAddress, chainId);
 
 interface PoolTableViewProps {
   pools: Pool[];
