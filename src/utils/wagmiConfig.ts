@@ -1,39 +1,17 @@
 import {
   sepolia,
 } from "wagmi/chains";
-import { getDefaultConfig } from "@rainbow-me/rainbowkit";
+import { createWalletLinkConfig } from "@stability-nexus/walletlink";
 import { getTransport } from "./rpcTransport";
 
-// const PROJECT_ID = process.env.NEXT_PUBLIC_PROJECT_ID ?? "DEFAULT_PROJECT_ID";
-
-// Memoize the config to prevent recreation
-let memoizedConfig: ReturnType<typeof getDefaultConfig> | null = null;
-
-export const config = (() => {
-  if (memoizedConfig) {
-    return memoizedConfig;
-  }
-
-  if (!process.env.NEXT_PUBLIC_PROJECT_ID) {
-    console.warn(
-      '⚠️ Reown Project ID is missing. Please set NEXT_PUBLIC_PROJECT_ID in your .env file.\n' +
-      'Get one for free at https://cloud.reown.com'
-    );
-  }
-
-  memoizedConfig = getDefaultConfig({
-    appName: "Fate Protocol",
-    projectId: process.env.NEXT_PUBLIC_PROJECT_ID || "DEFAULT_PROJECT_ID",
-    chains: [
-      sepolia,    // 11155111 - Sepolia Testnet
-    ],
-    transports: {
-      [sepolia.id]: getTransport(sepolia.id),
-    },
-    ssr: true, // Enable SSR for proper hydration
-    // Add connection persistence
-    // enableAnalytics: false, // Disable analytics to prevent connection issues
-  });
-
-  return memoizedConfig;
-})();
+// Wallet connection is handled in-browser via EIP-6963 discovery: no
+// WalletConnect relay and no projectId. Created once at module load.
+export const config = createWalletLinkConfig({
+  chains: [
+    sepolia,    // 11155111 - Sepolia Testnet
+  ],
+  transports: {
+    [sepolia.id]: getTransport(sepolia.id),
+  },
+  ssr: true, // Enable SSR for proper hydration
+});

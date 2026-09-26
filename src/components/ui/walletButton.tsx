@@ -1,15 +1,10 @@
 'use client';
-import { ConnectButton } from '@rainbow-me/rainbowkit';
+import { WalletLinkButton } from '@stability-nexus/walletlink';
 
 export default function WalletButton() {
     return (
         <div className="flex justify-end items-center">
-            <ConnectButton
-                showBalance={false}
-                accountStatus="address"
-                chainStatus="icon"
-                label="Connect Wallet"
-            />
+            <WalletLinkButton label="Connect Wallet" />
         </div>
     );
 }

@@ -6,7 +6,8 @@ Fate Protocol.
 ## Project Stack
 
 Next.js 15 (App Router), React 19, TypeScript 5, TailwindCSS with shadcn/ui,
-wagmi 2 + viem 2, RainbowKit. Statically exported.
+wagmi 2 + viem 2. Wallet connection uses `@stability-nexus/walletlink`
+(EIP-6963, no WalletConnect relay or projectId). Statically exported.
 
 ## Commands
 
@@ -64,8 +65,8 @@ export artifacts.
 
 ## Boundaries
 
-- Never commit `.env.local` or any secret. `NEXT_PUBLIC_PROJECT_ID` is required
-  to run the app locally.
+- Never commit `.env.local` or any secret. No project IDs or API keys are
+  required to run the app.
 - Never edit `node_modules/`, `.next/`, or `out/`.
 - Do not modify `next.config.mjs`, `tsconfig.json`, or `package.json` unless
   explicitly asked. The webpack `resolve.fallback` and `alias` entries there stub

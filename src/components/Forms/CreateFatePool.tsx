@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useAccount, useChainId, useWriteContract, useWaitForTransactionReceipt, usePublicClient } from "wagmi";
-import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { WalletLinkButton } from "@stability-nexus/walletlink";
 import { useRouter } from "next/navigation";
 import { AlertCircle } from "lucide-react";
 
@@ -488,7 +488,7 @@ export default function CreateFatePool() {
             <p className="text-sm md:text-base text-gray-600 dark:text-gray-300">
               Please connect your wallet to create a prediction pool
             </p>
-            <ConnectButton />
+            <WalletLinkButton />
           </div>
         </div>
       </div>

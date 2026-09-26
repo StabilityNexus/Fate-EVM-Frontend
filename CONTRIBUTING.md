@@ -26,18 +26,7 @@ Questions, ideas, or help with a first contribution:
    npm install
    ```
 
-3. **Configure environment:**
-
-   ```bash
-   cp env.example .env.local
-   ```
-
-   `NEXT_PUBLIC_PROJECT_ID` is a Reown project ID, free from
-   <https://cloud.reown.com>. Wallet connection will not work without it. RPC
-   endpoints are not required: keyless public defaults per chain live in
-   `src/utils/rpcTransport.ts`.
-
-4. **Run the dev server:**
+3. **Run the dev server:**
 
    ```bash
    npm run dev
