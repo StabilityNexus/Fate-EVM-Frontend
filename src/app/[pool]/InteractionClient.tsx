@@ -9,7 +9,7 @@ import {
   useWriteContract,
   useWaitForTransactionReceipt
 } from 'wagmi';
-import { formatUnits, parseUnits, type Address, createPublicClient, isAddress } from 'viem';
+import { formatUnits, parseUnits, type Address, createPublicClient, isAddress, BaseError, ContractFunctionRevertedError, ContractFunctionZeroDataError } from 'viem';
 import { PredictionPoolABI } from '@/utils/abi/PredictionPool';
 import { CoinABI } from '@/utils/abi/Coin';
 import { ERC20ABI } from '@/utils/abi/ERC20';
@@ -18,6 +18,7 @@ import { ChainlinkOracleABI } from '@/utils/abi/ChainlinkOracle';
 import { toast } from 'sonner';
 import { updateOracle } from '@/lib/vaultUtils';
 import { useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { getPriceFeedName, CHAIN_PRICE_FEED_OPTIONS } from '@/utils/supportedChainFeed';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Button } from '@/components/ui/button';
@@ -93,6 +94,15 @@ const usePool = (poolId: Address | undefined, isConnected: boolean) => {
   const bearAddr = poolData?.[2]?.result as Address;
   const oracle = poolData?.[4]?.result as Address;
   const poolName = poolData?.[5]?.result as string;
+  // bullCoin, bearCoin and oracle are what the rest of the page is built from; if any of them
+  // fails, tokenData below never loads. A revert or empty return means the address is not a pool
+  // on this network. Anything else (the RPC itself failing) is reported separately.
+  const poolReadError = poolData === undefined
+    ? undefined
+    : [1, 2, 4].map((i) => poolData[i]).find((r) => r?.status === 'failure')?.error;
+  const poolNotFound = poolReadError instanceof BaseError && poolReadError.walk(
+    (e) => e instanceof ContractFunctionRevertedError || e instanceof ContractFunctionZeroDataError
+  ) !== null;
 
   // The four rebalance-simulation inputs (both reserves, previousPrice, oraclePrice) share one
   // multicall so they resolve at the same block; splitting them risks a stale oldPrice.
@@ -153,10 +163,23 @@ const usePool = (poolId: Address | undefined, isConnected: boolean) => {
 
 
   useEffect(() => {
-    if (!poolId || !tokenData) {
+    if (!poolId) {
+      setError("This link does not include a valid pool address.");
+      setLoading(false);
+      return;
+    }
+    if (poolReadError) {
+      setError(poolNotFound
+        ? "No pool was found at this address on the connected network."
+        : "Could not load this pool. Check your connection and try again.");
+      setLoading(false);
+      return;
+    }
+    if (!tokenData) {
       setLoading(true);
       return;
     }
+    setError(null);
 
     try {
       const bullName = tokenData?.[0]?.result as string || 'Bull Token';
@@ -228,7 +251,7 @@ const usePool = (poolId: Address | undefined, isConnected: boolean) => {
       setError((e as Error).message || "Failed to load pool data");
       setLoading(false);
     }
-  }, [poolId, tokenData, userBalancesData, isConnected, poolName, baseToken, bullAddr, bearAddr, vaultCreator, chain, poolFeeData, oracle]);
+  }, [poolId, poolReadError, poolNotFound, tokenData, userBalancesData, isConnected, poolName, baseToken, bullAddr, bearAddr, vaultCreator, chain, poolFeeData, oracle]);
 
   const userBalances = {
     bull_tokens: userBalancesData?.[0]?.result as bigint || BigInt(0),
@@ -1532,6 +1555,9 @@ export default function InteractionClient() {
             Error Loading Pool
           </h2>
           <p className="text-neutral-600 dark:text-neutral-400">{error}</p>
+          <Button asChild variant="outline" className="mt-6">
+            <Link href="/explorePools">Browse pools</Link>
+          </Button>
         </div>
       </div>
     );
