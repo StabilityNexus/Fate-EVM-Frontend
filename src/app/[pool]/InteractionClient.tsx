@@ -75,7 +75,7 @@ const usePool = (poolId: Address | undefined, isConnected: boolean) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const { data: poolData, refetch: refetchPool } = useReadContracts({
+  const { data: poolData, error: poolQueryError, refetch: refetchPool } = useReadContracts({
     contracts: [
       { address: poolId, abi: PredictionPoolABI, functionName: 'baseToken' },
       { address: poolId, abi: PredictionPoolABI, functionName: 'bullCoin' },
@@ -94,19 +94,20 @@ const usePool = (poolId: Address | undefined, isConnected: boolean) => {
   const bearAddr = poolData?.[2]?.result as Address;
   const oracle = poolData?.[4]?.result as Address;
   const poolName = poolData?.[5]?.result as string;
-  // bullCoin, bearCoin and oracle are what the rest of the page is built from; if any of them
-  // fails, tokenData below never loads. A revert or empty return means the address is not a pool
-  // on this network. Anything else (the RPC itself failing) is reported separately.
-  const poolReadError = poolData === undefined
+  // baseToken, bullCoin, bearCoin and oracle are what the rest of the page is built from; if any
+  // of them fails, tokenData below never loads. A revert or empty return means the address is not
+  // a pool on this network. Anything else (the RPC itself failing, including the whole multicall
+  // failing as a query) is reported separately.
+  const poolReadError = poolQueryError ?? (poolData === undefined
     ? undefined
-    : [1, 2, 4].map((i) => poolData[i]).find((r) => r?.status === 'failure')?.error;
+    : [0, 1, 2, 4].map((i) => poolData[i]).find((r) => r?.status === 'failure')?.error);
   const poolNotFound = poolReadError instanceof BaseError && poolReadError.walk(
     (e) => e instanceof ContractFunctionRevertedError || e instanceof ContractFunctionZeroDataError
   ) !== null;
 
   // The four rebalance-simulation inputs (both reserves, previousPrice, oraclePrice) share one
   // multicall so they resolve at the same block; splitting them risks a stale oldPrice.
-  const { data: tokenData } = useReadContracts({
+  const { data: tokenData, error: tokenQueryError } = useReadContracts({
     contracts: bullAddr && bearAddr && oracle ? [
       { address: bullAddr, abi: CoinABI, functionName: 'name' },
       { address: bullAddr, abi: CoinABI, functionName: 'symbol' },
@@ -172,6 +173,11 @@ const usePool = (poolId: Address | undefined, isConnected: boolean) => {
       setError(poolNotFound
         ? "No pool was found at this address on the connected network."
         : "Could not load this pool. Check your connection and try again.");
+      setLoading(false);
+      return;
+    }
+    if (tokenQueryError) {
+      setError("Could not load this pool. Check your connection and try again.");
       setLoading(false);
       return;
     }
@@ -251,7 +257,7 @@ const usePool = (poolId: Address | undefined, isConnected: boolean) => {
       setError((e as Error).message || "Failed to load pool data");
       setLoading(false);
     }
-  }, [poolId, poolReadError, poolNotFound, tokenData, userBalancesData, isConnected, poolName, baseToken, bullAddr, bearAddr, vaultCreator, chain, poolFeeData, oracle]);
+  }, [poolId, poolReadError, poolNotFound, tokenQueryError, tokenData, userBalancesData, isConnected, poolName, baseToken, bullAddr, bearAddr, vaultCreator, chain, poolFeeData, oracle]);
 
   const userBalances = {
     bull_tokens: userBalancesData?.[0]?.result as bigint || BigInt(0),
