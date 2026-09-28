@@ -183,7 +183,15 @@ const BottomNavigation: React.FC = () => {
                     <DropdownMenuContent align="center">
                       <DropdownMenuItem
                         onSelect={() => {
-                          if (address) void navigator.clipboard?.writeText(address);
+                          if (!address) return;
+                          if (!navigator.clipboard) {
+                            toast.error("Could not copy address");
+                            return;
+                          }
+                          navigator.clipboard
+                            .writeText(address)
+                            .then(() => toast.success("Address copied"))
+                            .catch(() => toast.error("Could not copy address"));
                         }}
                         className="px-3 py-1.5 text-sm gap-2"
                       >
