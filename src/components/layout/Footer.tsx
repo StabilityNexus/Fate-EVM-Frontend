@@ -147,7 +147,7 @@ export default function Footer({ className = "", onTermsClick }: FooterProps) {
         {/* Navigation Links */}
         <div className="flex flex-wrap items-center justify-center gap-4 text-sm">
           <Link
-            href="https://stability.nexus/protocols"
+            href="https://stability.nexus/software"
             target="_blank"
             rel="noopener noreferrer"
             className="text-neutral-900 dark:text-white hover:text-yellow-600 dark:hover:text-yellow-400 hover:underline hover:decoration-2 transition-colors"
