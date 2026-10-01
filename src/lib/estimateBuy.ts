@@ -1,6 +1,5 @@
-// Client-side quote for Coin.buy(), kept in bigint end to end: Solidity and bigint both
-// truncate on division, so the port matches the chain exactly and a single Number() would not.
-// Mirrors Coin.sol / PredictionPool.sol; the ES2017 target rules out 0n literals.
+// Quote for Coin.buy(), in bigint so rounding matches the chain. BigInt(0) rather than 0n
+// because the build target is ES2017.
 
 const ZERO = BigInt(0);
 const ONE = BigInt(1);
@@ -9,18 +8,28 @@ const WAD_DECIMALS = BigInt(18);
 
 export const DENOMINATOR = BigInt(100000);
 
-// Warn when the rounded fee runs more than 10% above the nominal one, which only happens on dust.
+// Warn when rounding pushes the fee more than 10% above the normal rate. Only tiny amounts do that.
 const ROUNDING_WARN_NUM = BigInt(11);
 const ROUNDING_WARN_DEN = BigInt(10);
 
-// Coin.sol:335
-function divUp(a: bigint, b: bigint): bigint {
+export function divUp(a: bigint, b: bigint): bigint {
   return (a + b - ONE) / b;
 }
 
-// Coin.sol:326
-function scaleUp(a: bigint, baseDecimals: bigint): bigint {
+export function scaleUp(a: bigint, baseDecimals: bigint): bigint {
   return a * TEN ** (WAD_DECIMALS - baseDecimals);
+}
+
+export function scaleDown(a: bigint, baseDecimals: bigint): bigint {
+  return a / TEN ** (WAD_DECIMALS - baseDecimals);
+}
+
+export function feeRoundingInflated(totalFees: bigint, amount: bigint, nominalFeeRate: bigint): boolean {
+  return (
+    amount > ZERO &&
+    nominalFeeRate > ZERO &&
+    totalFees * DENOMINATOR * ROUNDING_WARN_DEN > amount * nominalFeeRate * ROUNDING_WARN_NUM
+  );
 }
 
 export type RebalanceTargets = {
@@ -28,9 +37,7 @@ export type RebalanceTargets = {
   bear: bigint;
 };
 
-// Reserves each coin holds after rebalance(), mirroring PredictionPool.sol:140-222 branch for
-// branch. Supply is untouched, so reserves are the only thing an oracle move changes. Returns
-// null where the real rebalance() reverts, so callers surface that instead of a fake number.
+// Reserves after rebalance(). Returns null where the real rebalance() would revert.
 export function simulateRebalance(
   bull: bigint,
   bear: bigint,
@@ -47,10 +54,9 @@ export function simulateRebalance(
   const adjustedBull = (bull * newPrice) / oldPrice;
   const adjustedBear = (bear * oldPrice) / newPrice;
   const denominator = adjustedBull + adjustedBear;
-  if (denominator === ZERO) return null; // PredictionPool.sol:190 require; a real buy() reverts here too
+  if (denominator === ZERO) return null;
 
   const targetBull = (total * adjustedBull) / denominator;
-  // rebalance() conserves total reserve, so the far side is the remainder.
   return { bull: targetBull, bear: total - targetBull };
 }
 
@@ -59,9 +65,9 @@ export type BuyQuoteInput = {
   isBull: boolean;
   bullReserve: bigint;
   bearReserve: bigint;
-  totalSupply: bigint;       // supply of the coin being bought
-  previousPrice: bigint;     // oracle price at the pool's last rebalance
-  oraclePrice: bigint;       // current oracle price the pending rebalance settles at
+  totalSupply: bigint;
+  previousPrice: bigint;     // oracle price at the last rebalance
+  oraclePrice: bigint;       // oracle price now
   mintFee: bigint;
   treasuryFee: bigint;
   creatorFee: bigint;
@@ -76,66 +82,55 @@ export type BuyQuote = {
   totalFees: bigint;
   amountAfterFees: bigint;
   coinsOut: bigint;          // WAD
-  effectivePrice: bigint;    // paid per coin incl. fees, scaled by DENOMINATOR
-  nominalFeeRate: bigint;    // the pool's three fees summed, DENOMINATOR terms
-  effectiveFeeRate: bigint;  // what this amount actually pays, DENOMINATOR terms
+  effectivePrice: bigint;    // DENOMINATOR terms
+  nominalFeeRate: bigint;    // DENOMINATOR terms
+  effectiveFeeRate: bigint;  // DENOMINATOR terms
   feeRoundingInflated: boolean;
 };
 
-// Each case is a real buy() revert.
-export type BuyQuoteFailure =
-  | 'rebalance-reverts'
-  | 'empty-reserve'
-  | 'amount-below-fees'
-  | 'unsupported-decimals';
+// cannot-quote groups the cases the user can do nothing about.
+export type BuyQuoteFailure = 'cannot-quote' | 'amount-below-fees';
 
 export type BuyQuoteResult =
   | { ok: true; quote: BuyQuote }
   | { ok: false; reason: BuyQuoteFailure };
 
-// buy() rebalances before snapshotting the price (Coin.sol:160 then :166), so this prices off
-// the post-rebalance reserve; reading priceBuy() directly would use the stale one.
+// buy() rebalances first, so the price comes from the reserve after that rebalance.
 export function estimateBuy(input: BuyQuoteInput): BuyQuoteResult {
   const {
     amountIn, isBull, bullReserve, bearReserve, totalSupply,
     previousPrice, oraclePrice, mintFee, treasuryFee, creatorFee, baseDecimals,
   } = input;
 
-  if (baseDecimals < 0 || baseDecimals > 18) return { ok: false, reason: 'unsupported-decimals' };
+  if (baseDecimals < 0 || baseDecimals > 18) return { ok: false, reason: 'cannot-quote' };
   const decimals = BigInt(baseDecimals);
 
   const targets = simulateRebalance(bullReserve, bearReserve, previousPrice, oraclePrice);
-  if (targets === null) return { ok: false, reason: 'rebalance-reverts' };
+  if (targets === null) return { ok: false, reason: 'cannot-quote' };
   const reserve = isBull ? targets.bull : targets.bear;
 
-  // calculateFees (Coin.sol:274-282): each fee rounds up independently, so small amounts can
-  // owe more than they carry.
+  // Each fee rounds up on its own, so a tiny amount can owe more than it is worth.
   const vaultAmount = divUp(amountIn * mintFee, DENOMINATOR);
   const treasuryAmount = divUp(amountIn * treasuryFee, DENOMINATOR);
   const creatorAmount = divUp(amountIn * creatorFee, DENOMINATOR);
   const totalFees = vaultAmount + treasuryAmount + creatorAmount;
-  if (totalFees > amountIn) return { ok: false, reason: 'amount-below-fees' }; // Coin.sol:234 underflow-reverts
+  if (totalFees > amountIn) return { ok: false, reason: 'amount-below-fees' };
 
   const amountAfterFees = amountIn - totalFees;
 
-  // Cross-multiplied, not divided: dividing first would discard the precision being measured.
+  // Compared cross-multiplied so nothing is lost to division.
   const nominalFeeRate = mintFee + treasuryFee + creatorFee;
   const effectiveFeeRate =
     amountIn === ZERO ? ZERO : (totalFees * DENOMINATOR) / amountIn;
-  const feeRoundingInflated =
-    amountIn > ZERO &&
-    nominalFeeRate > ZERO &&
-    totalFees * DENOMINATOR * ROUNDING_WARN_DEN >
-      amountIn * nominalFeeRate * ROUNDING_WARN_NUM;
+  const roundingInflated = feeRoundingInflated(totalFees, amountIn, nominalFeeRate);
 
-  // priceBuy() (Coin.sol:148) off the post-rebalance reserve.
   const price =
     totalSupply === ZERO
       ? DENOMINATOR
       : divUp(scaleUp(reserve, decimals) * DENOMINATOR, totalSupply);
-  if (price === ZERO) return { ok: false, reason: 'empty-reserve' };
+  if (price === ZERO) return { ok: false, reason: 'cannot-quote' };
 
-  const coinsOut = divUp(DENOMINATOR * scaleUp(amountAfterFees, decimals), price); // _mintCoins (Coin.sol:238)
+  const coinsOut = divUp(DENOMINATOR * scaleUp(amountAfterFees, decimals), price);
   const effectivePrice =
     coinsOut === ZERO ? ZERO : divUp(scaleUp(amountIn, decimals) * DENOMINATOR, coinsOut);
 
@@ -144,7 +139,7 @@ export function estimateBuy(input: BuyQuoteInput): BuyQuoteResult {
     quote: {
       amountIn, vaultAmount, treasuryAmount, creatorAmount,
       totalFees, amountAfterFees, coinsOut, effectivePrice,
-      nominalFeeRate, effectiveFeeRate, feeRoundingInflated,
+      nominalFeeRate, effectiveFeeRate, feeRoundingInflated: roundingInflated,
     },
   };
 }

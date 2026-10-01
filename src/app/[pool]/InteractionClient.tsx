@@ -28,6 +28,7 @@ import { formatNumber, formatNumberDown } from '@/utils/format';
 import { validateTransactionInput } from '@/lib/validation';
 import { withErrorHandling, createTransactionError } from '@/lib/errorHandler';
 import { estimateBuy, DENOMINATOR, type BuyQuoteFailure } from '@/lib/estimateBuy';
+import { estimateSell, type SellQuoteFailure } from '@/lib/estimateSell';
 
 // Note: ChainlinkAdapterFactories is imported but can be used for future oracle management features
 import TradingViewWidget from '@/components/ui/TradingViewWidget';
@@ -62,6 +63,7 @@ const usePool = (poolId: Address | undefined, isConnected: boolean) => {
     burn_fee: number;
     treasury_fee: number;
     mint_fee_rate?: bigint;
+    burn_fee_rate?: bigint;
     creator_fee_rate?: bigint;
     treasury_fee_rate?: bigint;
     previous_price?: bigint;
@@ -240,6 +242,7 @@ const usePool = (poolId: Address | undefined, isConnected: boolean) => {
         treasury_fee: poolFeeData?.[3]?.result ? Number(poolFeeData[3].result) / 1000 : 0,
         // The *_fee fields above are lossy display percentages; the estimate needs raw rates.
         mint_fee_rate: poolFeeData?.[0]?.result as bigint | undefined,
+        burn_fee_rate: poolFeeData?.[1]?.result as bigint | undefined,
         creator_fee_rate: poolFeeData?.[2]?.result as bigint | undefined,
         treasury_fee_rate: poolFeeData?.[3]?.result as bigint | undefined,
         previous_price: previousPrice,
@@ -279,10 +282,16 @@ const PRICE_DECIMALS = DENOMINATOR.toString().length - 1;
 
 const BUY_QUOTE_MESSAGES: Record<BuyQuoteFailure, string> = {
   'amount-below-fees': 'Too small to trade: fees round up to more than this amount.',
-  'empty-reserve': 'This side holds no reserve yet, so it cannot be priced.',
-  'rebalance-reverts': 'Cannot quote at the current oracle price.',
-  'unsupported-decimals': 'This pool\'s base token has unsupported decimals.',
+  'cannot-quote': 'Cannot quote this amount at the current pool state.',
 };
+
+const SELL_QUOTE_MESSAGES: Record<SellQuoteFailure, string> = {
+  'amount-below-fees': 'Too small to sell: fees round up to more than it is worth.',
+  'rounds-to-zero': 'Too small to sell: it rounds to nothing in the base token.',
+  'supply-would-be-zero': 'A pool cannot sell its whole supply. Leave at least a little behind.',
+  'cannot-quote': 'Cannot quote this amount at the current pool state.',
+};
+
 
 // Display only; the arithmetic is done in bigint upstream.
 const DISPLAY_DECIMALS = 6;
@@ -319,6 +328,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
     burn_fee: number;
     treasury_fee: number;
     mint_fee_rate?: bigint;
+    burn_fee_rate?: bigint;
     creator_fee_rate?: bigint;
     treasury_fee_rate?: bigint;
     previous_price?: bigint;
@@ -457,6 +467,46 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
       baseDecimals,
     });
   }, [buyAmount, baseDecimals, isBull, poolData]);
+
+  // Same shape as buyQuote, but coins go in and base tokens come out, so fees are taken off the output.
+  const sellQuote = useMemo(() => {
+    const {
+      burn_fee_rate, treasury_fee_rate, creator_fee_rate, previous_price, oracle_price,
+    } = poolData;
+    if (
+      burn_fee_rate === undefined || treasury_fee_rate === undefined ||
+      creator_fee_rate === undefined || previous_price === undefined || oracle_price === undefined
+    ) {
+      return null;
+    }
+
+    let amountIn: bigint;
+    try {
+      amountIn = parseUnits(sellAmount, 18);
+    } catch {
+      return null;
+    }
+    if (amountIn <= BigInt(0)) return null;
+
+    return estimateSell({
+      amountIn,
+      isBull,
+      bullReserve: poolData.bull_reserve,
+      bearReserve: poolData.bear_reserve,
+      totalSupply: isBull
+        ? poolData.bull_token.fields.total_supply
+        : poolData.bear_token.fields.total_supply,
+      previousPrice: previous_price,
+      oraclePrice: oracle_price,
+      burnFee: burn_fee_rate,
+      treasuryFee: treasury_fee_rate,
+      creatorFee: creator_fee_rate,
+      baseDecimals,
+    });
+  }, [sellAmount, baseDecimals, isBull, poolData]);
+
+  // The chain would burn the coins and pay nothing, so do not offer the transaction at all.
+  const sellPaysNothing = sellQuote !== null && !sellQuote.ok && sellQuote.reason === 'rounds-to-zero';
 
 
 
@@ -903,10 +953,80 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
                   Max: {formatNumberDown(Number(formatUnits(userTokens, 18)), 4)} {symbol}
                 </button>
               </div>
+              {sellQuote && (
+                <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/50 p-3 text-xs">
+                  {!sellQuote.ok ? (
+                    <p className="text-amber-700 dark:text-amber-500">{SELL_QUOTE_MESSAGES[sellQuote.reason]}</p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600 dark:text-gray-400">You sell</span>
+                        <span className="font-medium text-black dark:text-white">
+                          {formatCoin(sellQuote.quote.amountIn)} {symbol}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600 dark:text-gray-400">Worth</span>
+                        <span className="font-medium text-black dark:text-white">
+                          {formatBase(sellQuote.quote.amountBeforeFees, baseDecimals)} {baseSymbol}
+                        </span>
+                      </div>
+
+                      <div className="flex justify-between">
+                        <span className="text-gray-600 dark:text-gray-400">Fees</span>
+                        <span className="font-medium text-black dark:text-white">
+                          {formatBase(sellQuote.quote.totalFees, baseDecimals)} {baseSymbol}
+                        </span>
+                      </div>
+                      <div className="space-y-1 pl-3 text-gray-500 dark:text-gray-500">
+                        <div className="flex justify-between">
+                          <span>To the other side&apos;s reserve</span>
+                          <span>{formatBase(sellQuote.quote.vaultAmount, baseDecimals)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Treasury</span>
+                          <span>{formatBase(sellQuote.quote.treasuryAmount, baseDecimals)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Creator</span>
+                          <span>{formatBase(sellQuote.quote.creatorAmount, baseDecimals)}</span>
+                        </div>
+                      </div>
+
+                      {sellQuote.quote.feeRoundingInflated && (
+                        <p className="text-amber-700 dark:text-amber-500">
+                          Due to rounding of small values, this transaction will incur a fee of{" "}
+                          {formatFeeRate(sellQuote.quote.effectiveFeeRate)} instead of the typical{" "}
+                          {formatFeeRate(sellQuote.quote.nominalFeeRate)}.
+                        </p>
+                      )}
+
+                      <div className="flex justify-between border-t border-neutral-200 pt-1.5 dark:border-neutral-700">
+                        <span className="text-gray-600 dark:text-gray-400">You receive</span>
+                        <span className="font-medium text-black dark:text-white">
+                          {formatBase(sellQuote.quote.amountOut, baseDecimals)} {baseSymbol}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600 dark:text-gray-400">Effective price</span>
+                        <span className="font-medium text-black dark:text-white">
+                          {formatPrice(sellQuote.quote.effectivePrice)} {baseSymbol}
+                        </span>
+                      </div>
+
+                      <p className="pt-1 text-gray-500 dark:text-gray-500">
+                        Estimate. The oracle can move before your transaction confirms, which changes
+                        what you receive.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <Button
                 onClick={() => handleSell()}
                 className="w-full bg-gray-100 hover:bg-gray-200 text-black border border-gray-300"
-                disabled={!sellAmount || !connected || isTransacting}
+                disabled={!sellAmount || !connected || isTransacting || sellPaysNothing}
               >
                 {isTransacting ? 'Processing...' : `Sell ${symbol} Tokens`}
               </Button>
@@ -1389,6 +1509,7 @@ export default function InteractionClient() {
       burn_fee: pool.burn_fee || 0,
       treasury_fee: pool.treasury_fee || 0,
       mint_fee_rate: pool.mint_fee_rate,
+      burn_fee_rate: pool.burn_fee_rate,
       creator_fee_rate: pool.creator_fee_rate,
       treasury_fee_rate: pool.treasury_fee_rate,
       previous_price: pool.previous_price,
@@ -1415,6 +1536,7 @@ export default function InteractionClient() {
       burn_fee: 0,
       treasury_fee: 0,
       mint_fee_rate: undefined as bigint | undefined,
+      burn_fee_rate: undefined as bigint | undefined,
       creator_fee_rate: undefined as bigint | undefined,
       treasury_fee_rate: undefined as bigint | undefined,
       previous_price: undefined as bigint | undefined,
