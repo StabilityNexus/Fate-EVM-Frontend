@@ -26,24 +26,16 @@ Questions, ideas, or help with a first contribution:
    npm install
    ```
 
-3. **Configure environment:**
-
-   ```bash
-   cp env.example .env.local
-   ```
-
-   `NEXT_PUBLIC_PROJECT_ID` is a Reown project ID, free from
-   <https://cloud.reown.com>. Wallet connection will not work without it. RPC
-   endpoints are not required: keyless public defaults per chain live in
-   `src/utils/rpcTransport.ts`.
-
-4. **Run the dev server:**
+3. **Run the dev server:**
 
    ```bash
    npm run dev
    ```
 
    The app runs at `http://localhost:3000`.
+
+   No API keys or project IDs are required. RPC endpoints are not required
+   either: keyless public defaults per chain live in `src/utils/rpcTransport.ts`.
 
 > `npm run build` and `npm run dev` share `distDir: "out"`. After a build,
 > delete `out/` and `.next/` before going back to dev, or dev will fail on the

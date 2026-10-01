@@ -12,11 +12,20 @@ import {
   X,
   ChevronDown,
   AlertTriangle,
+  Copy,
+  LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { isAddress } from "viem";
-import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { useSwitchChain } from "wagmi";
+import { useWalletLink, WalletLinkModal } from "@stability-nexus/walletlink";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
 
 // shared style tokens
 const ACTIVE_ICON = "text-[var(--nav-active)]";
@@ -32,6 +41,14 @@ const BottomNavigation: React.FC = () => {
   const router = useRouter();
   const [isUsePoolOpen, setIsUsePoolOpen] = useState(false);
   const [poolAddress, setPoolAddress] = useState("");
+
+  // Wallet state (headless WalletLink hook + wagmi chain switching).
+  const { address, isConnected, chain, disconnect } = useWalletLink();
+  const { chains, switchChain } = useSwitchChain();
+  const [walletModalOpen, setWalletModalOpen] = useState(false);
+  // `chain` is undefined when connected to a chain the dapp did not configure.
+  const wrongNetwork = isConnected && !chain;
+  const shortAddress = address ? `${address.slice(0, 6)}…${address.slice(-4)}` : "";
 
   const handleUsePoolClick = () => setIsUsePoolOpen(true);
 
@@ -99,74 +116,99 @@ const BottomNavigation: React.FC = () => {
 
           {/* Wallet slot */}
           <div className="flex-[1.8] flex items-stretch">
-            <ConnectButton.Custom>
-              {({ account, chain, openAccountModal, openChainModal, openConnectModal, authenticationStatus, mounted }) => {
-                const ready = mounted && authenticationStatus !== "loading";
-                const connected = ready && account && chain;
+            <div className="flex items-center justify-center w-full">
+              {/* Not connected */}
+              {!isConnected && (
+                <button
+                  onClick={() => setWalletModalOpen(true)}
+                  className="flex flex-col items-center justify-center py-3.5 w-full transition-colors"
+                >
+                  <Wallet size={ICON_SIZE} strokeWidth={ICON_STROKE} className="text-[var(--nav-active)]" />
+                  <span className="text-[11px] mt-1 text-[var(--nav-active)] font-semibold">
+                    Connect
+                  </span>
+                </button>
+              )}
 
-                return (
-                  <div
-                    className="flex items-center justify-center w-full"
-                    {...(!ready && { "aria-hidden": true, style: { opacity: 0, pointerEvents: "none", userSelect: "none" } })}
-                  >
-                    {/* Not connected */}
-                    {!connected && (
-                      <button
-                        onClick={openConnectModal}
-                        className="flex flex-col items-center justify-center py-3.5 w-full transition-colors"
-                      >
-                        <Wallet size={ICON_SIZE} strokeWidth={ICON_STROKE} className="text-[var(--nav-active)]" />
-                        <span className="text-[11px] mt-1 text-[var(--nav-active)] font-semibold">
-                          Connect
+              {/* Wrong network */}
+              {wrongNetwork && (
+                <button
+                  onClick={() => chains[0] && switchChain({ chainId: chains[0].id })}
+                  className="flex flex-col items-center justify-center py-3.5 w-full transition-colors"
+                >
+                  <AlertTriangle size={ICON_SIZE} strokeWidth={ICON_STROKE} className="text-red-500" />
+                  <span className="text-[11px] mt-1 text-red-500 font-semibold">
+                    Wrong Net
+                  </span>
+                </button>
+              )}
+
+              {/* Connected — unified capsule */}
+              {isConnected && chain && (
+                <div className="flex flex-col items-center justify-center py-2.5 px-1 w-full gap-1">
+
+                  {/* Chain selector — top row */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button className="flex items-center gap-1 bg-white/[0.06] hover:bg-white/[0.1] rounded-full px-3 py-1 transition-colors">
+                        <span className="text-[11px] font-medium text-[var(--nav-active)] max-w-[72px] truncate leading-none">
+                          {chain.name}
+                        </span>
+                        <ChevronDown size={10} strokeWidth={2.5} className="text-[var(--nav-active)]/70 shrink-0" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="center">
+                      {chains.map((c) => (
+                        <DropdownMenuItem
+                          key={c.id}
+                          onSelect={() => switchChain({ chainId: c.id })}
+                          className="px-3 py-1.5 text-sm"
+                        >
+                          {c.name}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+
+                  {/* Account — bottom row */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button className="flex items-center gap-1 hover:bg-white/[0.06] rounded-full px-2 py-0.5 transition-colors">
+                        <Wallet size={12} strokeWidth={1.75} className="text-white/35 shrink-0" />
+                        <span className="text-[10px] font-medium text-white/45 truncate max-w-[60px] leading-none">
+                          {shortAddress}
                         </span>
                       </button>
-                    )}
-
-                    {/* Wrong network */}
-                    {connected && chain.unsupported && (
-                      <button
-                        onClick={openChainModal}
-                        className="flex flex-col items-center justify-center py-3.5 w-full transition-colors"
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="center">
+                      <DropdownMenuItem
+                        onSelect={() => {
+                          if (!address) return;
+                          if (!navigator.clipboard) {
+                            toast.error("Could not copy address");
+                            return;
+                          }
+                          navigator.clipboard
+                            .writeText(address)
+                            .then(() => toast.success("Address copied"))
+                            .catch(() => toast.error("Could not copy address"));
+                        }}
+                        className="px-3 py-1.5 text-sm gap-2"
                       >
-                        <AlertTriangle size={ICON_SIZE} strokeWidth={ICON_STROKE} className="text-red-500" />
-                        <span className="text-[11px] mt-1 text-red-500 font-semibold">
-                          Wrong Net
-                        </span>
-                      </button>
-                    )}
+                        <Copy size={14} /> Copy address
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onSelect={() => disconnect()}
+                        className="px-3 py-1.5 text-sm gap-2 text-red-500"
+                      >
+                        <LogOut size={14} /> Disconnect
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
 
-                    {/* Connected — unified capsule */}
-                    {connected && !chain.unsupported && (
-                      <div className="flex flex-col items-center justify-center py-2.5 px-1 w-full gap-1">
-
-                        {/* Chain selector — top row */}
-                        <button
-                          onClick={openChainModal}
-                          className="flex items-center gap-1 bg-white/[0.06] hover:bg-white/[0.1] rounded-full px-3 py-1 transition-colors"
-                        >
-                          <span className="text-[11px] font-medium text-[var(--nav-active)] max-w-[72px] truncate leading-none">
-                            {chain.name}
-                          </span>
-                          <ChevronDown size={10} strokeWidth={2.5} className="text-[var(--nav-active)]/70 shrink-0" />
-                        </button>
-
-                        {/* Account — bottom row */}
-                        <button
-                          onClick={openAccountModal}
-                          className="flex items-center gap-1 hover:bg-white/[0.06] rounded-full px-2 py-0.5 transition-colors"
-                        >
-                          <Wallet size={12} strokeWidth={1.75} className="text-white/35 shrink-0" />
-                          <span className="text-[10px] font-medium text-white/45 truncate max-w-[60px] leading-none">
-                            {account.displayName}
-                          </span>
-                        </button>
-
-                      </div>
-                    )}
-                  </div>
-                );
-              }}
-            </ConnectButton.Custom>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Portfolio · Use */}
@@ -177,6 +219,9 @@ const BottomNavigation: React.FC = () => {
 
         </div>
       </div>
+
+      {/* Wallet picker */}
+      <WalletLinkModal open={walletModalOpen} onOpenChange={setWalletModalOpen} />
 
       {/* Use Pool modal */}
       {isUsePoolOpen && (
