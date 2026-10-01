@@ -13,6 +13,7 @@ import { useRouter } from "next/navigation";
 import { formatUnits, isAddress, createPublicClient } from "viem";
 import type { Address, PublicClient } from "viem";
 import { FatePoolFactories } from "@/utils/addresses";
+import { getOracleVerdict, isPoolDenied } from "@/utils/oracleAllowlist";
 import { getPriceFeedName } from "@/utils/supportedChainFeed";
 import { getChainConfig } from "@/utils/chainConfig";
 import { getTransport, getScanTransport } from "@/utils/rpcTransport";
@@ -281,6 +282,7 @@ function ExploreFatePoolsClient() {
           const batch = poolAddresses.slice(i, i + BATCH_SIZE);
           const batchPromises = batch.map(async (addr: Address): Promise<Pool | null> => {
             if (!isAddress(addr)) { logger.warn(`Invalid pool address: ${addr}`); return null; }
+            if (isPoolDenied(chainId, addr)) { logger.debug(`Pool ${addr} hidden: pool is denied`, { chainId }); return null; }
             const [name, baseToken, oracleAddress, bullAddr, bearAddr, vaultCreator, mintFee, burnFee, creatorFee, treasuryFee] = await Promise.all([
               publicClient.readContract({ address: addr, abi: PredictionPoolABI, functionName: "poolName" }).catch((): string => "Unknown Pool"),
               publicClient.readContract({ address: addr, abi: PredictionPoolABI, functionName: "baseToken" }).catch((): Address => "0x0000000000000000000000000000000000000000"),
@@ -293,6 +295,12 @@ function ExploreFatePoolsClient() {
               publicClient.readContract({ address: addr, abi: PredictionPoolABI, functionName: "creatorFee" }).catch((): bigint => BigInt(0)),
               publicClient.readContract({ address: addr, abi: PredictionPoolABI, functionName: "treasuryFee" }).catch((): bigint => BigInt(0)),
             ]);
+
+            const verdict = await getOracleVerdict(publicClient as PublicClient, chainId, oracleAddress as Address);
+            if (!verdict.trusted) {
+              logger.debug(`Pool ${addr} hidden: oracle ${oracleAddress} is ${verdict.reason}`, { chainId });
+              return null;
+            }
 
             // Get the underlying pricefeed address from the ChainlinkOracle contract
             // The factory creates a wrapper oracle that references the actual Chainlink pricefeed
@@ -359,7 +367,7 @@ function ExploreFatePoolsClient() {
               baseDecimals,
               headBlock
             ).catch(() => undefined);
-            const pool: Pool = { id: addr, name: name as string, volumeRecent, baseToken: baseToken as Address, priceFeedAddress: underlyingPriceFeedAddress, creator: vaultCreator as Address, bullPercentage: bullPercentage, bearPercentage: bearPercentage, bullToken: bull, bearToken: bear, chainId, chainName: chainConfig.name, vaultFee: Number(mintFee) / DENOMINATOR * 100, vaultCreatorFee: Number(creatorFee) / DENOMINATOR * 100, treasuryFee: Number(treasuryFee) / DENOMINATOR * 100, mintFee: Number(mintFee) / DENOMINATOR * 100, burnFee: Number(burnFee) / DENOMINATOR * 100, previous_price: BigInt(0), baseDecimals, baseSymbol, tvl };
+            const pool: Pool = { id: addr, name: name as string, volumeRecent, baseToken: baseToken as Address, priceFeedAddress: underlyingPriceFeedAddress, oracleAddress: oracleAddress as Address, creator: vaultCreator as Address, bullPercentage: bullPercentage, bearPercentage: bearPercentage, bullToken: bull, bearToken: bear, chainId, chainName: chainConfig.name, vaultFee: Number(mintFee) / DENOMINATOR * 100, vaultCreatorFee: Number(creatorFee) / DENOMINATOR * 100, treasuryFee: Number(treasuryFee) / DENOMINATOR * 100, mintFee: Number(mintFee) / DENOMINATOR * 100, burnFee: Number(burnFee) / DENOMINATOR * 100, previous_price: BigInt(0), baseDecimals, baseSymbol, tvl };
             return pool;
           });
           const successfulPools = (await Promise.all(batchPromises)).filter((pool): pool is Pool => pool !== null);
@@ -376,7 +384,8 @@ function ExploreFatePoolsClient() {
             assetAddress: pool.baseToken,
             baseTokenSymbol: pool.baseSymbol,
             baseDecimals: pool.baseDecimals,
-            oracleAddress: pool.priceFeedAddress,
+            oracleAddress: pool.oracleAddress ?? pool.priceFeedAddress,
+            priceFeedAddress: pool.priceFeedAddress,
             currentPrice: 0, // Will be updated with real price data
             bullReserve: "0",
             bearReserve: "0",
@@ -425,11 +434,15 @@ function ExploreFatePoolsClient() {
       // safeReadOperation-backed calls return [] on failure, never throw
       const cachedPools = await getAllPools();
       const filteredPools = cachedPools.filter(p => p.chainId === chainId);
-      updateChainState(chainId, { poolCount: filteredPools.length, loading: false });
+      // Cached pools go through the same listing policy as live ones.
+      const cacheClient = createPublicClient({ chain: chainConfig.chain, transport: getTransport(chainId) });
 
       const convertedPools: Pool[] = [];
       if (filteredPools.length > 0) {
         for (const poolDetails of filteredPools) {
+          if (isPoolDenied(chainId, poolDetails.id as Address)) continue;
+          const verdict = await getOracleVerdict(cacheClient as PublicClient, chainId, poolDetails.oracleAddress as Address);
+          if (!verdict.trusted) continue;
           const tokenDetails = await getTokensForPool(poolDetails.id);
           if (tokenDetails.length === 2) {
             const bullDetails = tokenDetails.find(t => t.tokenType === 'bull');
@@ -469,7 +482,8 @@ function ExploreFatePoolsClient() {
                   id: poolDetails.id as Address,
                   name: poolDetails.name,
                   baseToken: poolDetails.assetAddress as Address,
-                  priceFeedAddress: poolDetails.oracleAddress as Address,
+                  priceFeedAddress: (poolDetails.priceFeedAddress ?? poolDetails.oracleAddress) as Address,
+                  oracleAddress: poolDetails.oracleAddress as Address,
                   creator: poolDetails.vaultCreator as Address,
                   chainId: poolDetails.chainId,
                   chainName: poolDetails.chainName || 'Unknown',
@@ -492,6 +506,7 @@ function ExploreFatePoolsClient() {
             }
           }
         }
+      updateChainState(chainId, { poolCount: convertedPools.length, loading: false });
       if (isOnline && convertedPools.length > 0) {
         try {
           const volumeClient = createPublicClient({

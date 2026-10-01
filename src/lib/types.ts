@@ -55,6 +55,8 @@ export interface PredictionPool {
   name: string;
   baseToken: Address;
   priceFeedAddress: Address;
+  // The oracle contract of the pool. priceFeedAddress is the Chainlink feed behind it.
+  oracleAddress?: Address;
   creator: Address;
   chainId: number;
   chainName: string;
