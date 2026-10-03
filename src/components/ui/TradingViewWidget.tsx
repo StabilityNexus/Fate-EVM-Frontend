@@ -1,8 +1,7 @@
 "use client";
 
-import React, { useEffect, useRef, memo } from "react";
+import React, { memo, useMemo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import { logger } from '@/lib/logger';
 
 interface CoinGeckoWidgetProps {
   assetId: string;
@@ -27,62 +26,52 @@ const COIN_ID_MAPPINGS: Record<string, string> = {
   'usdtusd': 'tether',
 };
 
+const WIDGET_SCRIPT = "https://widgets.coingecko.com/gecko-coin-price-chart-widget.js";
+
+// The widget adds this much for its title and footer, on top of its height setting.
+const WIDGET_EXTRA_HEIGHT = 151;
+
+// A sandboxed frame cannot use sessionStorage, which the widget needs, so it gets an in-memory one.
+const STORAGE_SHIM =
+  "(function(){var m={};var s={getItem:function(k){return k in m?m[k]:null},setItem:function(k,v){m[k]=String(v)}," +
+  "removeItem:function(k){delete m[k]},clear:function(){m={}},key:function(i){return Object.keys(m)[i]||null}};" +
+  "['sessionStorage','localStorage'].forEach(function(n){try{window[n]}catch(e){" +
+  "Object.defineProperty(window,n,{value:s,configurable:true})}})})();";
+
+// Shown in a sandboxed frame, so the third-party script cannot reach the app page, its storage or the wallet.
+function buildWidgetDocument(coinId: string, dark: boolean, height: number): string {
+  // Must match the app's color scheme, or the browser paints the frame white.
+  const scheme = dark ? "dark" : "light";
+  return (
+    `<!doctype html><html style="color-scheme:${scheme}"><head><meta charset="utf-8">` +
+    "<style>html,body{margin:0;background:transparent;overflow:hidden}</style>" +
+    `<script>${STORAGE_SHIM}</script></head><body>` +
+    '<gecko-coin-price-chart-widget locale="en" outlined="false" ' +
+    `height="${height}" width="100%" dark-mode="${dark}" transparent-background="true" ` +
+    `coin-id="${coinId}" initial-currency="usd"></gecko-coin-price-chart-widget>` +
+    `<script src="${WIDGET_SCRIPT}" async></script>` +
+    "</body></html>"
+  );
+}
+
 function TradingViewWidget({
   assetId,
   theme = "light",
   heightPx = 500,
-  showHeader = true,
   className = "",
 }: CoinGeckoWidgetProps) {
-  const shellRef = useRef<HTMLDivElement>(null);
-  const slotRef = useRef<HTMLDivElement>(null);
+  const chartHeight = Math.max(heightPx - WIDGET_EXTRA_HEIGHT, 0);
 
-  const contentHeight = showHeader ? heightPx - 80 : heightPx;
-  
   // Map the assetId to a proper CoinGecko coin ID
-  const coinId = COIN_ID_MAPPINGS[assetId.toLowerCase()] || assetId.toLowerCase();
-  
-  useEffect(() => {
-    if (!slotRef.current || !assetId) return;
+  const key = (assetId ?? "").toLowerCase();
+  const coinId = (COIN_ID_MAPPINGS[key] || key).replace(/[^a-z0-9-]/g, "");
 
-    logger.debug('TradingViewWidget - AssetId:', { assetId });
-    logger.debug('TradingViewWidget - CoinId:', { coinId });
+  const widgetDocument = useMemo(
+    () => buildWidgetDocument(coinId, theme === "dark", chartHeight),
+    [coinId, theme, chartHeight]
+  );
 
-    const currentSlot = slotRef.current;
-    const script = document.createElement("script");
-    script.src =
-      "https://widgets.coingecko.com/gecko-coin-price-chart-widget.js";
-    script.async = true;
-    script.onload = () => {
-      logger.debug('CoinGecko script loaded');
-      if (currentSlot) {
-        currentSlot.innerHTML = `
-          <gecko-coin-price-chart-widget
-            locale="en"
-            outlined="false"
-            height="${contentHeight}"
-            width="100%"
-            dark-mode="${theme === "dark"}"
-            transparent-background="true"
-            coin-id="${coinId}"
-            initial-currency="usd"
-          ></gecko-coin-price-chart-widget>
-        `;
-        logger.debug('Widget HTML inserted with coinId:', { coinId });
-      }
-    };
-    script.onerror = (error) => {
-      logger.error('Failed to load CoinGecko script:', error instanceof Error ? error : undefined);
-    };
-    currentSlot.innerHTML = "";
-    currentSlot.appendChild(script);
-
-    return () => {
-      if (currentSlot) currentSlot.innerHTML = "";
-    };
-  }, [assetId, coinId, contentHeight, theme]);
-
-  if (!assetId) {
+  if (!coinId) {
     return (
       <Card
         className={`${className} border-destructive`}
@@ -102,20 +91,18 @@ function TradingViewWidget({
 
   return (
     <Card
-      ref={shellRef}
       className={`${className} overflow-hidden`}
       style={{ height: `${heightPx}px` }}
     >
-      <CardContent className="p-0" style={{ height: `${contentHeight}px` }}>
-        <div
-          ref={slotRef}
-          className="w-full h-full"
-          style={{ minHeight: `${contentHeight}px` }}
-        >
-          <div className="w-full h-full flex items-center justify-center">
-            <div className="animate-spin rounded-full h-8 w-8 border border-black" />
-          </div>
-        </div>
+      <CardContent className="p-0 h-full">
+        <iframe
+          title={`${coinId} price chart`}
+          srcDoc={widgetDocument}
+          loading="lazy"
+          sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
+          className="w-full border-0"
+          style={{ height: `${heightPx}px` }}
+        />
       </CardContent>
     </Card>
   );
