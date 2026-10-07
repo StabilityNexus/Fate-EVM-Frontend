@@ -14,6 +14,7 @@ const balanced: SellQuoteInput = {
   totalSupply: BigInt(100) * E18,
   previousPrice: E18,
   oraclePrice: E18,
+  leverage: E18,
   burnFee: BigInt(400),      // 0.4%
   treasuryFee: BigInt(300),  // 0.3%
   creatorFee: BigInt(200),   // 0.2%
