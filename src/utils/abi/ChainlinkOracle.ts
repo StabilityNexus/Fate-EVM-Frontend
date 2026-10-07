@@ -130,5 +130,16 @@ export const ChainlinkOracleABI = [
     "type": "error",
     "name": "InvalidPriceFeed",
     "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "SafeCastOverflowedIntToUint",
+    "inputs": [
+      {
+        "name": "value",
+        "type": "int256",
+        "internalType": "int256"
+      }
+    ]
   }
 ];
