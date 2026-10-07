@@ -16,7 +16,6 @@ import { ERC20ABI } from '@/utils/abi/ERC20';
 import { IOracleABI } from '@/utils/abi/IOracle';
 import { ChainlinkOracleABI } from '@/utils/abi/ChainlinkOracle';
 import { toast } from 'sonner';
-import { updateOracle } from '@/lib/vaultUtils';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { getPriceFeedName, CHAIN_PRICE_FEED_OPTIONS } from '@/utils/supportedChainFeed';
@@ -1103,7 +1102,6 @@ export default function InteractionClient() {
   }, [poolId]);
   // const [gasEstimate, setGasEstimate] = useState<bigint>(BigInt(150000));
   // const [gasPrice, setGasPrice] = useState<bigint>(BigInt(0));
-  const [newOracleAddress, setNewOracleAddress] = useState<string>('');
   const [isFetchingRebalanceEvents, setIsFetchingRebalanceEvents] = useState(false);
   const isFetchingRebalanceRef = useRef(false);
   const [rebalanceOutOfRange, setRebalanceOutOfRange] = useState(false);
@@ -1473,32 +1471,6 @@ export default function InteractionClient() {
     }
   };
 
-  const handleUpdateOracle = async () => {
-    if (!walletClient || !isConnected || !address || !poolId || !newOracleAddress) {
-      toast.error('Please provide a valid oracle address');
-      return;
-    }
-
-    try {
-      setIsDistributeLoading(true);
-      await updateOracle(walletClient, poolId, newOracleAddress as Address);
-      toast.success('Oracle updated successfully!');
-      setNewOracleAddress('');
-      await handlePoll();
-    } catch (err: unknown) {
-      logger.error('Update oracle error:', err instanceof Error ? err : undefined);
-      let errorMessage = 'Failed to update oracle';
-      if ((err as Error).message.includes("user rejected transaction")) {
-        errorMessage = "Transaction rejected";
-      } else if ((err as Error).message.includes("insufficient funds")) {
-        errorMessage = "Insufficient funds";
-      }
-      setDistributeError(errorMessage);
-    } finally {
-      setIsDistributeLoading(false);
-    }
-  };
-
   const poolData = useMemo(() => pool
     ? {
       id: { id: pool.id?.id || "" },
@@ -1862,7 +1834,6 @@ export default function InteractionClient() {
                   assetId={asset.coinId}
                   theme={theme === "dark" ? "dark" : "light"}
                   heightPx={453}
-                  showHeader={true}
                 />
 
                 <div className="mt-6 p-4 md:p-6 border rounded-xl border-black dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800">
@@ -2017,27 +1988,6 @@ export default function InteractionClient() {
               Creator Tools
             </h4>
             <div className="space-y-6">
-              <div>
-                <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2">
-                  Update Oracle Address
-                </label>
-                <div className="flex gap-2 max-w-md">
-                  <Input
-                    placeholder="New oracle address"
-                    className="flex-1"
-                    value={newOracleAddress}
-                    onChange={(e) => setNewOracleAddress(e.target.value)}
-                  />
-                  <Button
-                    onClick={handleUpdateOracle}
-                    disabled={!newOracleAddress || isDistributeLoading}
-                    className="bg-black dark:bg-white text-white dark:text-black"
-                  >
-                    Update
-                  </Button>
-                </div>
-              </div>
-
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
                 <div className="bg-white dark:bg-neutral-900 p-4 rounded-lg border border-black dark:border-neutral-600">
                   <div className="font-medium text-neutral-600 dark:text-neutral-400 mb-1">Mint Fee</div>
