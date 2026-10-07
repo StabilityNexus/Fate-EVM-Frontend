@@ -94,7 +94,8 @@ export default function CreateFatePool() {
     burnFee: "3.0",
     creatorFee: "2.0",
     treasuryFee: "0.5",
-    initialDeposit: "0"
+    initialDeposit: "0",
+    leverage: "1"
   });
 
   const stepTitles = useMemo(() => [
@@ -150,6 +151,14 @@ export default function CreateFatePool() {
         newErrors.initialDeposit = "Initial deposit must be a valid number";
       } else if (initialDeposit < 0) {
         newErrors.initialDeposit = "Initial deposit cannot be negative";
+      }
+
+      // The contracts accept any leverage; the form offers the agreed 0.1x to 10x range.
+      const leverage = parseFloat(formData.leverage);
+      if (!/^\d+(\.\d+)?$/.test(formData.leverage.trim()) || isNaN(leverage)) {
+        newErrors.leverage = "Leverage must be a number";
+      } else if (leverage < 0.1 || leverage > 10) {
+        newErrors.leverage = "Leverage must be between 0.1x and 10x";
       }
       
       if (!formData.priceFeedAddress) {
@@ -417,6 +426,7 @@ export default function CreateFatePool() {
           BigInt(creatorFeeUnits),
           BigInt(treasuryFeeUnits),
           initialDepositAmount,
+          parseUnits(formData.leverage.trim(), 18),
         ],
       });
 

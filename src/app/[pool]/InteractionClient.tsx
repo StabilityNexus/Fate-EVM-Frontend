@@ -68,6 +68,7 @@ const usePool = (poolId: Address | undefined, isConnected: boolean) => {
     treasury_fee_rate?: bigint;
     previous_price?: bigint;
     oracle_price?: bigint;
+    leverage?: bigint;
     bull_percentage: number;
     bear_percentage: number;
     base_decimals: number;
@@ -85,6 +86,7 @@ const usePool = (poolId: Address | undefined, isConnected: boolean) => {
       { address: poolId, abi: PredictionPoolABI, functionName: 'previousPrice' },
       { address: poolId, abi: PredictionPoolABI, functionName: 'oracle' },
       { address: poolId, abi: PredictionPoolABI, functionName: 'poolName' },
+      { address: poolId, abi: PredictionPoolABI, functionName: 'leverage' },
     ],
     query: {
       enabled: !!poolId,
@@ -96,6 +98,7 @@ const usePool = (poolId: Address | undefined, isConnected: boolean) => {
   const bearAddr = poolData?.[2]?.result as Address;
   const oracle = poolData?.[4]?.result as Address;
   const poolName = poolData?.[5]?.result as string;
+  const leverage = poolData?.[6]?.result as bigint | undefined;
   // baseToken, bullCoin, bearCoin and oracle are what the rest of the page is built from; if any
   // of them fails, tokenData below never loads. A revert or empty return means the address is not
   // a pool on this network. Anything else (the RPC itself failing, including the whole multicall
@@ -247,6 +250,7 @@ const usePool = (poolId: Address | undefined, isConnected: boolean) => {
         treasury_fee_rate: poolFeeData?.[3]?.result as bigint | undefined,
         previous_price: previousPrice,
         oracle_price: oraclePrice,
+        leverage,
         bull_percentage: bullPercentage,
         bear_percentage: bearPercentage,
         base_decimals: baseDecimals,
@@ -260,7 +264,7 @@ const usePool = (poolId: Address | undefined, isConnected: boolean) => {
       setError((e as Error).message || "Failed to load pool data");
       setLoading(false);
     }
-  }, [poolId, poolReadError, poolNotFound, tokenQueryError, tokenData, userBalancesData, isConnected, poolName, baseToken, bullAddr, bearAddr, vaultCreator, chain, poolFeeData, oracle]);
+  }, [poolId, poolReadError, poolNotFound, tokenQueryError, tokenData, userBalancesData, isConnected, poolName, baseToken, bullAddr, bearAddr, vaultCreator, chain, poolFeeData, oracle, leverage]);
 
   const userBalances = {
     bull_tokens: userBalancesData?.[0]?.result as bigint || BigInt(0),
@@ -333,6 +337,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
     treasury_fee_rate?: bigint;
     previous_price?: bigint;
     oracle_price?: bigint;
+    leverage?: bigint;
     bull_percentage: number;
     bear_percentage: number;
     chainId: number;
@@ -434,11 +439,11 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
   // Post-rebalance price is independent of the amount, so re-quote locally per keystroke, no RPC.
   const buyQuote = useMemo(() => {
     const {
-      mint_fee_rate, treasury_fee_rate, creator_fee_rate, previous_price, oracle_price,
+      mint_fee_rate, treasury_fee_rate, creator_fee_rate, previous_price, oracle_price, leverage,
     } = poolData;
     if (
-      mint_fee_rate === undefined || treasury_fee_rate === undefined ||
-      creator_fee_rate === undefined || previous_price === undefined || oracle_price === undefined
+      mint_fee_rate === undefined || treasury_fee_rate === undefined || creator_fee_rate === undefined ||
+      previous_price === undefined || oracle_price === undefined || leverage === undefined
     ) {
       return null;
     }
@@ -461,6 +466,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
         : poolData.bear_token.fields.total_supply,
       previousPrice: previous_price,
       oraclePrice: oracle_price,
+      leverage,
       mintFee: mint_fee_rate,
       treasuryFee: treasury_fee_rate,
       creatorFee: creator_fee_rate,
@@ -471,11 +477,11 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
   // Same shape as buyQuote, but coins go in and base tokens come out, so fees are taken off the output.
   const sellQuote = useMemo(() => {
     const {
-      burn_fee_rate, treasury_fee_rate, creator_fee_rate, previous_price, oracle_price,
+      burn_fee_rate, treasury_fee_rate, creator_fee_rate, previous_price, oracle_price, leverage,
     } = poolData;
     if (
-      burn_fee_rate === undefined || treasury_fee_rate === undefined ||
-      creator_fee_rate === undefined || previous_price === undefined || oracle_price === undefined
+      burn_fee_rate === undefined || treasury_fee_rate === undefined || creator_fee_rate === undefined ||
+      previous_price === undefined || oracle_price === undefined || leverage === undefined
     ) {
       return null;
     }
@@ -498,6 +504,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
         : poolData.bear_token.fields.total_supply,
       previousPrice: previous_price,
       oraclePrice: oracle_price,
+      leverage,
       burnFee: burn_fee_rate,
       treasuryFee: treasury_fee_rate,
       creatorFee: creator_fee_rate,
@@ -1514,6 +1521,7 @@ export default function InteractionClient() {
       treasury_fee_rate: pool.treasury_fee_rate,
       previous_price: pool.previous_price,
       oracle_price: pool.oracle_price,
+      leverage: pool.leverage,
       bull_percentage: pool.bull_percentage || 50,
       bear_percentage: pool.bear_percentage || 50,
       base_decimals: pool.base_decimals ?? 18,
@@ -1755,6 +1763,12 @@ export default function InteractionClient() {
                             <span className="font-medium">Burn Fee:</span>
                             <span>{poolData.burn_fee}%</span>
                           </div>
+                          {poolData.leverage !== undefined && (
+                            <div className="flex justify-between">
+                              <span className="font-medium">Leverage:</span>
+                              <span>{formatUnits(poolData.leverage, 18)}x</span>
+                            </div>
+                          )}
                         </div>
                       </TooltipContent>
                     </Tooltip>
