@@ -48,6 +48,7 @@ function leveragedRatio(oldPrice: bigint, newPrice: bigint, leverage: bigint): b
   let ratio = (newPrice * WAD) / oldPrice;
   if (ratio === ZERO) ratio = ONE;
   if (ratio > WAD_SQUARED) ratio = WAD_SQUARED;
+  if (leverage === WAD) return ratio;
   const lev = leverage > WAD_SQUARED ? WAD_SQUARED : leverage;
 
   let exponent = (lev * lnWad(ratio)) / WAD;
@@ -72,16 +73,9 @@ export function simulateRebalance(
 
   if (newPrice === oldPrice) return { bull, bear };
 
-  let adjustedBull: bigint;
-  let adjustedBear: bigint;
-  if (leverage === WAD) {
-    adjustedBull = (bull * newPrice) / oldPrice;
-    adjustedBear = (bear * oldPrice) / newPrice;
-  } else {
-    const ratio = leveragedRatio(oldPrice, newPrice, leverage);
-    adjustedBull = (bull * ratio) / WAD;
-    adjustedBear = (bear * WAD) / ratio;
-  }
+  const ratio = leveragedRatio(oldPrice, newPrice, leverage);
+  const adjustedBull = (bull * ratio) / WAD;
+  const adjustedBear = (bear * WAD) / ratio;
   const denominator = adjustedBull + adjustedBear;
 
   let targetBull = denominator === ZERO ? bull : (total * adjustedBull) / denominator;
