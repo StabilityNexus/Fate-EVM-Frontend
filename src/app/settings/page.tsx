@@ -10,7 +10,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { AlertTriangle, Download, Loader2, Upload } from "lucide-react";
+import { AlertTriangle, Download, Loader2, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import {
   exportPortfolioBackup,
@@ -20,6 +20,7 @@ import {
   type BackupSummary,
 } from "@/lib/backup/portfolioBackup";
 import { logger } from "@/lib/logger";
+import { useIndexedDB } from "@/hooks/useIndexedDB";
 
 const SECTION_CARD_CLASS =
   "border-black dark:border-neutral-700/60 dark:bg-gradient-to-br dark:from-neutral-800/50 dark:to-neutral-900/50 backdrop-blur-sm shadow-xl";
@@ -41,6 +42,24 @@ export default function SettingsPage() {
   const [isReading, setIsReading] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
   const [pending, setPending] = useState<BackupSummary | null>(null);
+  const { isInitialized: isCacheReady, clearAllData } = useIndexedDB();
+  const [confirmClear, setConfirmClear] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
+
+  const handleClearCache = async () => {
+    setIsClearing(true);
+    try {
+      await clearAllData();
+      toast.success("Local cache cleared. Pool and portfolio data will be re-read from the chain.");
+      // Nothing on the page should keep showing rows that no longer exist.
+      window.location.reload();
+    } catch (error) {
+      logger.error("Settings: clear cache failed", asError(error));
+      toast.error(asError(error).message);
+      setIsClearing(false);
+      setConfirmClear(false);
+    }
+  };
 
   const handleExport = async () => {
     setIsExporting(true);
@@ -133,11 +152,11 @@ export default function SettingsPage() {
             <div className="grid gap-x-6 gap-y-4 sm:grid-cols-[max-content_1fr] sm:items-center">
               <Button
                 onClick={handleExport}
-                disabled={isExporting}
+                disabled={isExporting || isClearing}
                 className="bg-black hover:bg-gray-800 dark:bg-white dark:hover:bg-gray-200 text-white dark:text-black"
               >
                 {isExporting ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  <Loader2 className="h-4 w-4 mr-2 motion-safe:animate-spin" />
                 ) : (
                   <Download className="h-4 w-4 mr-2" />
                 )}
@@ -159,11 +178,11 @@ export default function SettingsPage() {
               <Button
                 onClick={() => fileInputRef.current?.click()}
                 variant="outline"
-                disabled={isReading}
+                disabled={isReading || isClearing}
                 className="border-neutral-300 dark:border-neutral-600 hover:bg-yellow-50 dark:hover:bg-yellow-950/30"
               >
                 {isReading ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  <Loader2 className="h-4 w-4 mr-2 motion-safe:animate-spin" />
                 ) : (
                   <Upload className="h-4 w-4 mr-2" />
                 )}
@@ -235,10 +254,10 @@ export default function SettingsPage() {
                   <div className="flex gap-3 pt-1">
                     <Button
                       onClick={handleRestore}
-                      disabled={!canRestore || isRestoring}
+                      disabled={!canRestore || isRestoring || isClearing}
                       className="bg-black hover:bg-gray-800 dark:bg-white dark:hover:bg-gray-200 text-white dark:text-black"
                     >
-                      {isRestoring && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                      {isRestoring && <Loader2 className="h-4 w-4 mr-2 motion-safe:animate-spin" />}
                       {isRestoring ? "Restoring..." : "Restore this backup"}
                     </Button>
                     <Button
@@ -251,6 +270,57 @@ export default function SettingsPage() {
                     </Button>
                   </div>
                 </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className={SECTION_CARD_CLASS}>
+          <CardHeader>
+            <CardTitle className="text-xl text-neutral-900 dark:text-neutral-100">
+              Local cache
+            </CardTitle>
+            <CardDescription className="text-neutral-600 dark:text-neutral-400">
+              Fate caches pools, tokens and your portfolio history in this browser. Clearing it
+              rebuilds everything from the chain on your next visit, so export first if you want to
+              keep your trade history.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {!confirmClear ? (
+              <Button
+                onClick={() => setConfirmClear(true)}
+                variant="outline"
+                disabled={!isCacheReady || isRestoring || isReading || isExporting}
+                className="border-neutral-300 dark:border-neutral-600 hover:bg-red-50 dark:hover:bg-red-950/30"
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Clear local cache
+              </Button>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex items-start gap-2 text-sm text-amber-700 dark:text-amber-300">
+                  <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                  <p>Clear everything Fate has cached in this browser?</p>
+                </div>
+                <div className="flex gap-3">
+                  <Button
+                    onClick={handleClearCache}
+                    disabled={isClearing || isExporting || isReading || isRestoring}
+                    className="bg-black hover:bg-gray-800 dark:bg-white dark:hover:bg-gray-200 text-white dark:text-black"
+                  >
+                    {isClearing && <Loader2 className="h-4 w-4 mr-2 motion-safe:animate-spin" />}
+                    {isClearing ? "Clearing..." : "Clear"}
+                  </Button>
+                  <Button
+                    onClick={() => setConfirmClear(false)}
+                    variant="outline"
+                    disabled={isClearing}
+                    className="border-neutral-300 dark:border-neutral-600"
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
             )}
           </CardContent>
         </Card>
