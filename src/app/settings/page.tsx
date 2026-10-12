@@ -21,6 +21,7 @@ import {
 } from "@/lib/backup/portfolioBackup";
 import { logger } from "@/lib/logger";
 import { useIndexedDB } from "@/hooks/useIndexedDB";
+import RpcSettingsCard from "@/components/Settings/RpcSettingsCard";
 
 const SECTION_CARD_CLASS =
   "border-black dark:border-neutral-700/60 dark:bg-gradient-to-br dark:from-neutral-800/50 dark:to-neutral-900/50 backdrop-blur-sm shadow-xl";
@@ -324,6 +325,8 @@ export default function SettingsPage() {
             )}
           </CardContent>
         </Card>
+
+        <RpcSettingsCard className={SECTION_CARD_CLASS} />
       </div>
     </div>
   );
