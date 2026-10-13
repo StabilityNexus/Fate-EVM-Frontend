@@ -4,6 +4,8 @@
 import { logger } from '@/lib/logger';
 import { DATABASE_CONFIG, type DatabaseConfig } from './config';
 
+const OPEN_TIMEOUT_MS = 5000;
+
 export class IndexedDBDatabase {
   private db: IDBDatabase | null = null;
   private config: DatabaseConfig = DATABASE_CONFIG;
@@ -11,14 +13,32 @@ export class IndexedDBDatabase {
   async init(onUpgrade?: (db: IDBDatabase, transaction: IDBTransaction, oldVersion: number, newVersion: number) => Promise<void> | void): Promise<void> {
     return new Promise((resolve, reject) => {
       const request = indexedDB.open(this.config.name, this.config.version);
-
-      request.onerror = () => {
-        const error = new Error(`Failed to open database: ${request.error?.message}`);
+      let settled = false;
+      const fail = (error: Error) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
         logger.error('Database initialization failed:', error);
         reject(error);
       };
+      // A blocked or broken profile can leave the open pending forever, which left Explore spinning.
+      const timer = setTimeout(() => fail(new Error('Database did not open in time')), OPEN_TIMEOUT_MS);
+
+      request.onerror = () => {
+        fail(new Error(`Failed to open database: ${request.error?.message}`));
+      };
+
+      request.onblocked = () => {
+        fail(new Error('Database is blocked by another open tab'));
+      };
 
       request.onsuccess = () => {
+        if (settled) {
+          request.result.close();
+          return;
+        }
+        settled = true;
+        clearTimeout(timer);
         this.db = request.result;
         resolve();
       };
@@ -36,9 +56,8 @@ export class IndexedDBDatabase {
             onUpgrade(db, transaction, oldVersion, newVersion);
           }
         } catch (error) {
-          logger.error('Database upgrade failed:', error as Error);
           transaction.abort();
-          reject(error);
+          fail(error as Error);
         }
       };
     });
