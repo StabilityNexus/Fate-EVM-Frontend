@@ -66,7 +66,6 @@ const Navbar: React.FC<NavbarProps> = ({ className = "" }) => {
             className={cn(
               "hidden min-[900px]:flex absolute left-1/2 transform -translate-x-1/2 space-x-8 text-md text-center px-8 py-2 rounded-full",
               "bg-[#f0f1f4] dark:bg-[#1a1b1f] text-gray-900 dark:text-white backdrop-blur-sm",
-              "font-[var(--font-bebas-nueue)]",
             )}
           >
             {navItems.map((item) => {
