@@ -34,8 +34,8 @@ export const getScanTransport = (chainId: number): Transport => {
   );
 };
 
-// Every provider in a chain's list must accept the chunk, so use the smallest limit.
-// Measured: tenderly 1M (2026-07-29), publicnode 50k (2026-09-28).
+// Every provider in a chain's list must accept the chunk. The defaults take 50k (publicnode) and 1M
+// (tenderly); 10k leaves room for a user RPC from the settings page, where 10k caps are common.
 const SCAN_CHUNK_SIZE: Record<number, bigint> = {
   11155111: BigInt(10_000),
 };
