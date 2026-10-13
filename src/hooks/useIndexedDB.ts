@@ -59,7 +59,7 @@ interface UseIndexedDBReturn {
   // Utility operations
   clearAllData: () => Promise<void>;
   getDatabaseInfo: () => Promise<{ name: string; version: number; objectStoreNames: string[] }>;
-  getStoreCount: (storeName: string) => Promise<number>;
+  getStoreCount: (storeName: string) => Promise<number | null>;
   isHealthy: () => Promise<boolean>;
 }
 
@@ -278,7 +278,8 @@ export const useIndexedDB = (): UseIndexedDBReturn => {
   }, [safeOperation]);
 
   const getStoreCount = useCallback(async (storeName: string) => {
-    return safeReadOperation(() => managerRef.current!.getStoreCount(storeName), 0);
+    // null, not 0, on failure: a failed read must not look like an empty store.
+    return safeReadOperation<number | null>(() => managerRef.current!.getStoreCount(storeName), null);
   }, [safeReadOperation]);
 
   const isHealthy = useCallback(async () => {

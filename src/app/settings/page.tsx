@@ -96,7 +96,7 @@ export default function SettingsPage() {
   const { isInitialized: isCacheReady, clearAllData, getStoreCount } = useIndexedDB();
   const [confirmClear, setConfirmClear] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
-  const [counts, setCounts] = useState<Record<string, number> | null>(null);
+  const [counts, setCounts] = useState<Record<string, number | null> | null>(null);
 
   const refreshCounts = useCallback(async () => {
     const values = await Promise.all(COUNTED_STORES.map(({ store }) => getStoreCount(store)));
@@ -217,7 +217,7 @@ export default function SettingsPage() {
                 <div key={store} className="flex flex-col-reverse">
                   <dt className="text-xs text-neutral-500 dark:text-neutral-400">{label}</dt>
                   <dd className="text-2xl font-semibold tabular-nums text-neutral-900 dark:text-neutral-100">
-                    {counts ? counts[store].toLocaleString() : "-"}
+                    {counts?.[store]?.toLocaleString() ?? "-"}
                   </dd>
                 </div>
               ))}

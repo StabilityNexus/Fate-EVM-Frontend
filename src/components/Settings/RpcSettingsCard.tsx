@@ -126,7 +126,7 @@ function RpcRow({ chainId, chainName }: { chainId: number; chainName: string }) 
           inputMode="url"
           autoComplete="off"
           spellCheck={false}
-          placeholder="https://your-sepolia-rpc..."
+          placeholder="https://your-rpc-url"
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
           onKeyDown={(event) => {
