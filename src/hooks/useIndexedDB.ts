@@ -4,6 +4,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { toast } from 'sonner';
 import { FatePoolsIndexedDBManager } from '@/lib/indexeddb/manager';
+import { clearScanWatermarks } from '@/lib/scanWatermark';
 import { 
   type PoolDetails, 
   type TokenDetails, 
@@ -269,7 +270,9 @@ export const useIndexedDB = (): UseIndexedDBReturn => {
 
   // Utility operations
   const clearAllData = useCallback(async () => {
-    return safeOperation(() => managerRef.current!.clearAllData());
+    await safeOperation(() => managerRef.current!.clearAllData());
+    // The watermarks would resume scans past the trades just deleted, so they go too.
+    clearScanWatermarks();
   }, [safeOperation]);
 
   const getDatabaseInfo = useCallback(async () => {
