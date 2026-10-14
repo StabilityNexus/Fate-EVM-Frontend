@@ -35,6 +35,18 @@ export const readScanWatermark = (
   }
 };
 
+export const clearScanWatermarks = (): void => {
+  if (!isAvailable()) return;
+  try {
+    const keys = Object.keys(window.localStorage).filter((key) => key.startsWith(`${PREFIX}:`));
+    keys.forEach((key) => window.localStorage.removeItem(key));
+  } catch (error) {
+    logger.debug("clearScanWatermarks: could not clear watermarks", {
+      message: (error as Error)?.message,
+    });
+  }
+};
+
 // Never moves backwards, so a partial scan cannot erase a deeper completed one.
 export const writeScanWatermark = (
   kind: string,
