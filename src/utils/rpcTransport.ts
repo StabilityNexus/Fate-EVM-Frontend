@@ -1,4 +1,4 @@
-import { http, fallback, type Transport } from "viem";
+import { http, fallback, createPublicClient, type Transport } from "viem";
 
 // Keyless public RPC lists per chain.
 const DEFAULT_RPC_URLS: Record<number, string[]> = {
@@ -8,9 +8,59 @@ const DEFAULT_RPC_URLS: Record<number, string[]> = {
   ],
 };
 
-// User RPCs (prepended, take priority); filled later by the settings page.
-const USER_RPC_URLS: Record<number, string[]> = {};
+// localStorage, not IndexedDB: keeps the URL (often with an API key) out of export and clear-cache.
+const USER_RPC_PREFIX = "fateRpc";
+const userRpcKey = (chainId: number): string => `${USER_RPC_PREFIX}:${chainId}`;
+
+export const isHttpsUrl = (value: string): boolean => {
+  try {
+    return new URL(value).protocol === "https:";
+  } catch {
+    return false;
+  }
+};
+
+// A trailing slash is the usual difference between two pastes of the same URL.
+export const isSameRpcUrl = (a: string, b: string): boolean =>
+  a.replace(/\/+$/, "") === b.replace(/\/+$/, "");
+
+export const isDefaultRpcUrl = (chainId: number, url: string): boolean =>
+  (DEFAULT_RPC_URLS[chainId] ?? []).some((defaultUrl) => isSameRpcUrl(defaultUrl, url));
+
+export const readSavedUserRpcUrl = (chainId: number): string | null => {
+  if (typeof window === "undefined") return null;
+  try {
+    const url = window.localStorage.getItem(userRpcKey(chainId));
+    return url && isHttpsUrl(url) ? url : null;
+  } catch {
+    return null;
+  }
+};
+
+export const saveUserRpcUrl = (chainId: number, url: string): void => {
+  window.localStorage.setItem(userRpcKey(chainId), url);
+};
+
+export const removeUserRpcUrl = (chainId: number): void => {
+  window.localStorage.removeItem(userRpcKey(chainId));
+};
+
+// Read once, like wagmi's transport, so every client switches RPC together on reload.
+const USER_RPC_URLS: Record<number, string[]> = Object.fromEntries(
+  Object.keys(DEFAULT_RPC_URLS)
+    .map(Number)
+    .flatMap((chainId) => {
+      const url = readSavedUserRpcUrl(chainId);
+      return url ? [[chainId, [url]]] : [];
+    })
+);
 const getUserRpcUrls = (chainId: number): string[] => USER_RPC_URLS[chainId] ?? [];
+
+export const getActiveUserRpcUrl = (chainId: number): string | null =>
+  getUserRpcUrls(chainId)[0] ?? null;
+
+export const fetchRpcChainId = (url: string): Promise<number> =>
+  createPublicClient({ transport: http(url, { retryCount: 0, timeout: 10_000 }) }).getChainId();
 
 // fallback() covers node outages, not getLogs range-cap rejections.
 export const getTransport = (chainId: number): Transport => {

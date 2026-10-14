@@ -59,6 +59,7 @@ interface UseIndexedDBReturn {
   // Utility operations
   clearAllData: () => Promise<void>;
   getDatabaseInfo: () => Promise<{ name: string; version: number; objectStoreNames: string[] }>;
+  getStoreCount: (storeName: string) => Promise<number | null>;
   isHealthy: () => Promise<boolean>;
 }
 
@@ -276,6 +277,11 @@ export const useIndexedDB = (): UseIndexedDBReturn => {
     return safeOperation(() => managerRef.current!.getDatabaseInfo());
   }, [safeOperation]);
 
+  const getStoreCount = useCallback(async (storeName: string) => {
+    // null, not 0, on failure: a failed read must not look like an empty store.
+    return safeReadOperation<number | null>(() => managerRef.current!.getStoreCount(storeName), null);
+  }, [safeReadOperation]);
+
   const isHealthy = useCallback(async () => {
     return safeReadOperation(() => managerRef.current!.isHealthy(), false);
   }, [safeReadOperation]);
@@ -325,6 +331,7 @@ export const useIndexedDB = (): UseIndexedDBReturn => {
     // Utility operations
     clearAllData,
     getDatabaseInfo,
+    getStoreCount,
     isHealthy
   }), [
     isInitialized, isOnline, error,
@@ -334,6 +341,6 @@ export const useIndexedDB = (): UseIndexedDBReturn => {
     saveCache, getCache, deleteCache, cleanupExpiredCache,
     savePortfolioPosition, getPortfolioPositions, savePortfolioTransaction, getPortfolioTransactions,
     savePortfolioCache, getPortfolioCache, deletePortfolioCache, deletePortfolioPositions, deletePortfolioTransactions,
-    clearAllData, getDatabaseInfo, isHealthy
+    clearAllData, getDatabaseInfo, getStoreCount, isHealthy
   ]);
 };
