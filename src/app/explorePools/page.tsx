@@ -126,6 +126,7 @@ function ExploreFatePoolsClient() {
   const { data: walletClient } = useWalletClient();
   const {
     isInitialized,
+    error: dbError,
     isOnline,
     batchSavePools,
     batchSaveTokens,
@@ -647,17 +648,21 @@ function ExploreFatePoolsClient() {
     await fetchAllPools();
   }, [fetchAllPools]);
 
-  useEffect(() => {
-    if (isInitialized) {
-      fetchAllPools(false);
-    }
-  }, [fetchAllPools, isInitialized]);
+  // Without IndexedDB the page still reads from the chain; the cache writes already check isInitialized.
+  const cacheUnavailable = !isInitialized && !!dbError;
+  const dbSettled = isInitialized || cacheUnavailable;
 
   useEffect(() => {
-    if (isInitialized && isConnected && currentChainId && isConnectedChainSupported) {
+    if (dbSettled) {
       fetchAllPools(false);
     }
-  }, [isInitialized, isConnected, currentChainId, isConnectedChainSupported, fetchAllPools]);
+  }, [fetchAllPools, dbSettled]);
+
+  useEffect(() => {
+    if (dbSettled && isConnected && currentChainId && isConnectedChainSupported) {
+      fetchAllPools(false);
+    }
+  }, [dbSettled, isConnected, currentChainId, isConnectedChainSupported, fetchAllPools]);
 
   const handleCreate = useCallback((): void => {
     if (!isConnected || !walletClient) { toast.error("Please connect your wallet first."); return; }
@@ -808,6 +813,11 @@ function ExploreFatePoolsClient() {
           onCreate={handleCreate}
           isWalletConnectedChainSupported={isConnectedChainSupported}
         />
+        {cacheUnavailable && (
+          <p className="mb-4 text-sm text-neutral-500 dark:text-neutral-400">
+            Local cache unavailable in this browser, so pools load straight from the chain each visit.
+          </p>
+        )}
         <StatusMessages
           loading={loading}
           chainStates={chainStates}
