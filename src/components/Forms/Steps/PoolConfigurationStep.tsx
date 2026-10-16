@@ -199,7 +199,7 @@ const PoolConfigurationStep: React.FC<PoolConfigurationStepProps> = ({
               onClick={() => setIsTokenSelectorOpen(true)}
               disabled={isLoadingTokens || availableTokens.length === 0}
               variant="default"
-              className="whitespace-nowrap text-black dark:text-white"
+              className="whitespace-nowrap"
             >
               <Coins className="h-4 w-4" />
               <span className="hidden sm:inline">Select Token</span>
