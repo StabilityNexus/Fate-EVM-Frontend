@@ -159,10 +159,13 @@ export default function CreateFatePool() {
       }
 
       // The contracts accept any leverage; the form offers the agreed 0.1x to 10x range.
-      const leverage = parseFloat(formData.leverage);
-      if (!/^\d+(\.\d{1,18})?$/.test(formData.leverage.trim()) || isNaN(leverage)) {
+      const leverageInput = formData.leverage.trim();
+      if (!/^\d+(\.\d{1,18})?$/.test(leverageInput)) {
         newErrors.leverage = "Leverage must be a number with at most 18 decimals";
-      } else if (leverage < 0.1 || leverage > 10) {
+      } else if (
+        parseUnits(leverageInput, 18) < parseUnits("0.1", 18) ||
+        parseUnits(leverageInput, 18) > parseUnits("10", 18)
+      ) {
         newErrors.leverage = "Leverage must be between 0.1x and 10x";
       }
       
