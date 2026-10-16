@@ -84,6 +84,12 @@ const ReviewStep: React.FC<ReviewStepProps> = ({
                 {formData.initialDeposit || "0"} tokens
               </span>
             </div>
+            <div className="flex justify-between">
+              <span className="text-gray-600 dark:text-gray-400">Leverage:</span>
+              <span className="font-medium text-black dark:text-white">
+                {formData.leverage || "1"}x
+              </span>
+            </div>
           </div>
         </div>
 

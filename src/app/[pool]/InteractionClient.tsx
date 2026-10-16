@@ -16,7 +16,6 @@ import { ERC20ABI } from '@/utils/abi/ERC20';
 import { IOracleABI } from '@/utils/abi/IOracle';
 import { ChainlinkOracleABI } from '@/utils/abi/ChainlinkOracle';
 import { toast } from 'sonner';
-import { updateOracle } from '@/lib/vaultUtils';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { getPriceFeedName, CHAIN_PRICE_FEED_OPTIONS } from '@/utils/supportedChainFeed';
@@ -29,6 +28,7 @@ import { validateTransactionInput } from '@/lib/validation';
 import { withErrorHandling, createTransactionError } from '@/lib/errorHandler';
 import { estimateBuy, DENOMINATOR, type BuyQuoteFailure } from '@/lib/estimateBuy';
 import { estimateSell, type SellQuoteFailure } from '@/lib/estimateSell';
+import { applySlippage, isSlippageError, SLIPPAGE_LABEL, SLIPPAGE_MESSAGE } from '@/lib/slippage';
 
 // Note: ChainlinkAdapterFactories is imported but can be used for future oracle management features
 import TradingViewWidget from '@/components/ui/TradingViewWidget';
@@ -68,6 +68,7 @@ const usePool = (poolId: Address | undefined, isConnected: boolean) => {
     treasury_fee_rate?: bigint;
     previous_price?: bigint;
     oracle_price?: bigint;
+    leverage?: bigint;
     bull_percentage: number;
     bear_percentage: number;
     base_decimals: number;
@@ -85,6 +86,7 @@ const usePool = (poolId: Address | undefined, isConnected: boolean) => {
       { address: poolId, abi: PredictionPoolABI, functionName: 'previousPrice' },
       { address: poolId, abi: PredictionPoolABI, functionName: 'oracle' },
       { address: poolId, abi: PredictionPoolABI, functionName: 'poolName' },
+      { address: poolId, abi: PredictionPoolABI, functionName: 'leverage' },
     ],
     query: {
       enabled: !!poolId,
@@ -96,6 +98,7 @@ const usePool = (poolId: Address | undefined, isConnected: boolean) => {
   const bearAddr = poolData?.[2]?.result as Address;
   const oracle = poolData?.[4]?.result as Address;
   const poolName = poolData?.[5]?.result as string;
+  const leverage = poolData?.[6]?.result as bigint | undefined;
   // baseToken, bullCoin, bearCoin and oracle are what the rest of the page is built from; if any
   // of them fails, tokenData below never loads. A revert or empty return means the address is not
   // a pool on this network. Anything else (the RPC itself failing, including the whole multicall
@@ -126,6 +129,8 @@ const usePool = (poolId: Address | undefined, isConnected: boolean) => {
     ] : [],
     query: {
       enabled: !!(bullAddr && bearAddr && oracle),
+      // Keeps the quote, and so the slippage bound, close to the chain on a page left open.
+      refetchInterval: 15_000,
     }
   });
 
@@ -178,7 +183,8 @@ const usePool = (poolId: Address | undefined, isConnected: boolean) => {
       setLoading(false);
       return;
     }
-    if (tokenQueryError) {
+    // A failed refetch keeps the last data, so one RPC hiccup does not replace the page.
+    if (tokenQueryError && !tokenData) {
       setError("Could not load this pool. Check your connection and try again.");
       setLoading(false);
       return;
@@ -247,6 +253,7 @@ const usePool = (poolId: Address | undefined, isConnected: boolean) => {
         treasury_fee_rate: poolFeeData?.[3]?.result as bigint | undefined,
         previous_price: previousPrice,
         oracle_price: oraclePrice,
+        leverage,
         bull_percentage: bullPercentage,
         bear_percentage: bearPercentage,
         base_decimals: baseDecimals,
@@ -260,7 +267,7 @@ const usePool = (poolId: Address | undefined, isConnected: boolean) => {
       setError((e as Error).message || "Failed to load pool data");
       setLoading(false);
     }
-  }, [poolId, poolReadError, poolNotFound, tokenQueryError, tokenData, userBalancesData, isConnected, poolName, baseToken, bullAddr, bearAddr, vaultCreator, chain, poolFeeData, oracle]);
+  }, [poolId, poolReadError, poolNotFound, tokenQueryError, tokenData, userBalancesData, isConnected, poolName, baseToken, bullAddr, bearAddr, vaultCreator, chain, poolFeeData, oracle, leverage]);
 
   const userBalances = {
     bull_tokens: userBalancesData?.[0]?.result as bigint || BigInt(0),
@@ -333,6 +340,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
     treasury_fee_rate?: bigint;
     previous_price?: bigint;
     oracle_price?: bigint;
+    leverage?: bigint;
     bull_percentage: number;
     bear_percentage: number;
     chainId: number;
@@ -432,21 +440,15 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
   }, [allowanceData]);
 
   // Post-rebalance price is independent of the amount, so re-quote locally per keystroke, no RPC.
-  const buyQuote = useMemo(() => {
+  // Also called at send time: after an approval, the amount sent may differ from the input box.
+  const quoteBuy = useCallback((amountIn: bigint) => {
     const {
-      mint_fee_rate, treasury_fee_rate, creator_fee_rate, previous_price, oracle_price,
+      mint_fee_rate, treasury_fee_rate, creator_fee_rate, previous_price, oracle_price, leverage,
     } = poolData;
     if (
-      mint_fee_rate === undefined || treasury_fee_rate === undefined ||
-      creator_fee_rate === undefined || previous_price === undefined || oracle_price === undefined
+      mint_fee_rate === undefined || treasury_fee_rate === undefined || creator_fee_rate === undefined ||
+      previous_price === undefined || oracle_price === undefined || leverage === undefined
     ) {
-      return null;
-    }
-
-    let amountIn: bigint;
-    try {
-      amountIn = parseUnits(buyAmount, baseDecimals);
-    } catch {
       return null;
     }
     if (amountIn <= BigInt(0)) return null;
@@ -461,29 +463,31 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
         : poolData.bear_token.fields.total_supply,
       previousPrice: previous_price,
       oraclePrice: oracle_price,
+      leverage,
       mintFee: mint_fee_rate,
       treasuryFee: treasury_fee_rate,
       creatorFee: creator_fee_rate,
       baseDecimals,
     });
-  }, [buyAmount, baseDecimals, isBull, poolData]);
+  }, [baseDecimals, isBull, poolData]);
 
-  // Same shape as buyQuote, but coins go in and base tokens come out, so fees are taken off the output.
-  const sellQuote = useMemo(() => {
-    const {
-      burn_fee_rate, treasury_fee_rate, creator_fee_rate, previous_price, oracle_price,
-    } = poolData;
-    if (
-      burn_fee_rate === undefined || treasury_fee_rate === undefined ||
-      creator_fee_rate === undefined || previous_price === undefined || oracle_price === undefined
-    ) {
+  const buyQuote = useMemo(() => {
+    try {
+      return quoteBuy(parseUnits(buyAmount, baseDecimals));
+    } catch {
       return null;
     }
+  }, [buyAmount, baseDecimals, quoteBuy]);
 
-    let amountIn: bigint;
-    try {
-      amountIn = parseUnits(sellAmount, 18);
-    } catch {
+  // Same shape as quoteBuy, but coins go in and base tokens come out, so fees are taken off the output.
+  const quoteSell = useCallback((amountIn: bigint) => {
+    const {
+      burn_fee_rate, treasury_fee_rate, creator_fee_rate, previous_price, oracle_price, leverage,
+    } = poolData;
+    if (
+      burn_fee_rate === undefined || treasury_fee_rate === undefined || creator_fee_rate === undefined ||
+      previous_price === undefined || oracle_price === undefined || leverage === undefined
+    ) {
       return null;
     }
     if (amountIn <= BigInt(0)) return null;
@@ -498,12 +502,21 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
         : poolData.bear_token.fields.total_supply,
       previousPrice: previous_price,
       oraclePrice: oracle_price,
+      leverage,
       burnFee: burn_fee_rate,
       treasuryFee: treasury_fee_rate,
       creatorFee: creator_fee_rate,
       baseDecimals,
     });
-  }, [sellAmount, baseDecimals, isBull, poolData]);
+  }, [baseDecimals, isBull, poolData]);
+
+  const sellQuote = useMemo(() => {
+    try {
+      return quoteSell(parseUnits(sellAmount, 18));
+    } catch {
+      return null;
+    }
+  }, [sellAmount, quoteSell]);
 
   // The chain would burn the coins and pay nothing, so do not offer the transaction at all.
   const sellPaysNothing = sellQuote !== null && !sellQuote.ok && sellQuote.reason === 'rounds-to-zero';
@@ -514,6 +527,11 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
   const handleBuyTransaction = useCallback(async (amount: string) => {
     try {
       const amountWei = parseUnits(amount, baseDecimals);
+      const quote = quoteBuy(amountWei);
+      if (!quote?.ok) {
+        toast.error('Could not price this trade. Refresh the pool and try again.');
+        return;
+      }
 
       setPendingTransactionType('buy');
 
@@ -525,7 +543,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
         address: tokenAddress! as `0x${string}`,
         abi: CoinABI,
         functionName: 'buy',
-        args: [address!, amountWei],
+        args: [address!, amountWei, applySlippage(quote.quote.coinsOut)],
       });
 
       // Tx submitted — update the same toast to show on-chain wait
@@ -550,15 +568,16 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
           toast.info('Transaction cancelled in wallet.');
         }
       } else {
+        const message = isSlippageError(err) ? SLIPPAGE_MESSAGE : (err as Error).message || "Failed to buy tokens";
         if (currentToastId !== null) {
-          toast.error((err as Error).message || "Failed to buy tokens", { id: currentToastId });
+          toast.error(message, { id: currentToastId });
         } else {
-          toast.error((err as Error).message || "Failed to buy tokens");
+          toast.error(message);
         }
       }
       pendingTransactionToastIdRef.current = null;
     }
-  }, [tokenAddress, address, writeContractAsync, baseDecimals]);
+  }, [tokenAddress, address, writeContractAsync, baseDecimals, quoteBuy]);
 
   const handleBuy = withErrorHandling(async () => {
     if (!address || !connected) {
@@ -654,6 +673,12 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
         return;
       }
 
+      const quote = quoteSell(amountWei);
+      if (!quote?.ok) {
+        toast.error(quote ? SELL_QUOTE_MESSAGES[quote.reason] : 'Could not price this trade. Refresh the pool and try again.');
+        return;
+      }
+
       setPendingTransactionType('sell');
 
       // Show pre-wallet toast so the user gets immediate feedback
@@ -664,7 +689,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
         address: tokenAddress as `0x${string}`,
         abi: CoinABI,
         functionName: 'sell',
-        args: [amountWei],
+        args: [amountWei, applySlippage(quote.quote.amountOut)],
       });
 
       // Tx submitted — update the same toast to show on-chain wait
@@ -689,10 +714,11 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
           toast.info('Transaction cancelled in wallet.');
         }
       } else {
+        const message = isSlippageError(err) ? SLIPPAGE_MESSAGE : (err as Error).message || 'Failed to sell tokens';
         if (currentToastId !== null) {
-          toast.error((err as Error).message || 'Failed to sell tokens', { id: currentToastId });
+          toast.error(message, { id: currentToastId });
         } else {
-          toast.error((err as Error).message || 'Failed to sell tokens');
+          toast.error(message);
         }
       }
       pendingTransactionToastIdRef.current = null;
@@ -759,7 +785,9 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
         setPendingApproval(null);
       } else if (pendingTransactionType) {
         // Buy/sell reverted on-chain
-        const errorMsg = receiptError?.message || 'Transaction failed on-chain.';
+        const errorMsg = isSlippageError(receiptError)
+          ? SLIPPAGE_MESSAGE
+          : receiptError?.message || 'Transaction failed on-chain.';
         if (currentToastId !== null) {
           toast.error(errorMsg, { id: currentToastId });
         } else {
@@ -907,6 +935,12 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
                         </span>
                       </div>
                       <div className="flex justify-between">
+                        <span className="text-gray-600 dark:text-gray-400">Minimum received ({SLIPPAGE_LABEL} slippage)</span>
+                        <span className="font-medium text-black dark:text-white">
+                          {formatCoin(applySlippage(buyQuote.quote.coinsOut))} {symbol}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
                         <span className="text-gray-600 dark:text-gray-400">Effective price</span>
                         <span className="font-medium text-black dark:text-white">
                           {formatPrice(buyQuote.quote.effectivePrice)} {baseSymbol}
@@ -915,7 +949,8 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
 
                       <p className="pt-1 text-gray-500 dark:text-gray-500">
                         Estimate. The oracle can move before your transaction confirms, which changes
-                        how many coins you get. Their value is unaffected.
+                        how many coins you get. Their value is unaffected. Below the minimum, the trade
+                        is cancelled instead.
                       </p>
                     </div>
                   )}
@@ -1008,6 +1043,12 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
                         </span>
                       </div>
                       <div className="flex justify-between">
+                        <span className="text-gray-600 dark:text-gray-400">Minimum received ({SLIPPAGE_LABEL} slippage)</span>
+                        <span className="font-medium text-black dark:text-white">
+                          {formatBase(applySlippage(sellQuote.quote.amountOut), baseDecimals)} {baseSymbol}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
                         <span className="text-gray-600 dark:text-gray-400">Effective price</span>
                         <span className="font-medium text-black dark:text-white">
                           {formatPrice(sellQuote.quote.effectivePrice)} {baseSymbol}
@@ -1016,7 +1057,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
 
                       <p className="pt-1 text-gray-500 dark:text-gray-500">
                         Estimate. The oracle can move before your transaction confirms, which changes
-                        what you receive.
+                        what you receive. Below the minimum, the trade is cancelled instead.
                       </p>
                     </div>
                   )}
@@ -1096,7 +1137,6 @@ export default function InteractionClient() {
   }, [poolId]);
   // const [gasEstimate, setGasEstimate] = useState<bigint>(BigInt(150000));
   // const [gasPrice, setGasPrice] = useState<bigint>(BigInt(0));
-  const [newOracleAddress, setNewOracleAddress] = useState<string>('');
   const [isFetchingRebalanceEvents, setIsFetchingRebalanceEvents] = useState(false);
   const isFetchingRebalanceRef = useRef(false);
   const [rebalanceOutOfRange, setRebalanceOutOfRange] = useState(false);
@@ -1466,32 +1506,6 @@ export default function InteractionClient() {
     }
   };
 
-  const handleUpdateOracle = async () => {
-    if (!walletClient || !isConnected || !address || !poolId || !newOracleAddress) {
-      toast.error('Please provide a valid oracle address');
-      return;
-    }
-
-    try {
-      setIsDistributeLoading(true);
-      await updateOracle(walletClient, poolId, newOracleAddress as Address);
-      toast.success('Oracle updated successfully!');
-      setNewOracleAddress('');
-      await handlePoll();
-    } catch (err: unknown) {
-      logger.error('Update oracle error:', err instanceof Error ? err : undefined);
-      let errorMessage = 'Failed to update oracle';
-      if ((err as Error).message.includes("user rejected transaction")) {
-        errorMessage = "Transaction rejected";
-      } else if ((err as Error).message.includes("insufficient funds")) {
-        errorMessage = "Insufficient funds";
-      }
-      setDistributeError(errorMessage);
-    } finally {
-      setIsDistributeLoading(false);
-    }
-  };
-
   const poolData = useMemo(() => pool
     ? {
       id: { id: pool.id?.id || "" },
@@ -1514,6 +1528,7 @@ export default function InteractionClient() {
       treasury_fee_rate: pool.treasury_fee_rate,
       previous_price: pool.previous_price,
       oracle_price: pool.oracle_price,
+      leverage: pool.leverage,
       bull_percentage: pool.bull_percentage || 50,
       bear_percentage: pool.bear_percentage || 50,
       base_decimals: pool.base_decimals ?? 18,
@@ -1755,6 +1770,12 @@ export default function InteractionClient() {
                             <span className="font-medium">Burn Fee:</span>
                             <span>{poolData.burn_fee}%</span>
                           </div>
+                          {poolData.leverage !== undefined && (
+                            <div className="flex justify-between">
+                              <span className="font-medium">Leverage:</span>
+                              <span>{formatUnits(poolData.leverage, 18)}x</span>
+                            </div>
+                          )}
                         </div>
                       </TooltipContent>
                     </Tooltip>
@@ -1848,7 +1869,6 @@ export default function InteractionClient() {
                   assetId={asset.coinId}
                   theme={theme === "dark" ? "dark" : "light"}
                   heightPx={453}
-                  showHeader={true}
                 />
 
                 <div className="mt-6 p-4 md:p-6 border rounded-xl border-black dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800">
@@ -2003,27 +2023,6 @@ export default function InteractionClient() {
               Creator Tools
             </h4>
             <div className="space-y-6">
-              <div>
-                <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2">
-                  Update Oracle Address
-                </label>
-                <div className="flex gap-2 max-w-md">
-                  <Input
-                    placeholder="New oracle address"
-                    className="flex-1"
-                    value={newOracleAddress}
-                    onChange={(e) => setNewOracleAddress(e.target.value)}
-                  />
-                  <Button
-                    onClick={handleUpdateOracle}
-                    disabled={!newOracleAddress || isDistributeLoading}
-                    className="bg-black dark:bg-white text-white dark:text-black"
-                  >
-                    Update
-                  </Button>
-                </div>
-              </div>
-
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
                 <div className="bg-white dark:bg-neutral-900 p-4 rounded-lg border border-black dark:border-neutral-600">
                   <div className="font-medium text-neutral-600 dark:text-neutral-400 mb-1">Mint Fee</div>

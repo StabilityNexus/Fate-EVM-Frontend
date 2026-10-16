@@ -13,6 +13,7 @@ export interface FormData {
   creatorFee: string;
   treasuryFee: string;
   initialDeposit: string;
+  leverage: string;
   quoteTokenAddress?: string; 
   oracleDescription?: string; 
 };

@@ -1,29 +1,5 @@
 export const ChainlinkAdapterFactoryABI = [
   {
-    "type": "constructor",
-    "inputs": [
-      {
-        "name": "_poolFactory",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "poolFactory",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "address",
-        "internalType": "contract PredictionPoolFactory"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
     "type": "function",
     "name": "priceFeedToAdapter",
     "inputs": [
@@ -50,6 +26,25 @@ export const ChainlinkAdapterFactoryABI = [
         "name": "priceFeed",
         "type": "address",
         "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "adapter",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "createAdapter",
+    "inputs": [
+      {
+        "name": "params",
+        "type": "bytes",
+        "internalType": "bytes"
       }
     ],
     "outputs": [
