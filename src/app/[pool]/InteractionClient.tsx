@@ -46,6 +46,12 @@ import { buildPermitTypedData, splitPermitSignature, permitDeadline } from "@/li
 import { getScanTransport, getScanChunkSize } from "@/utils/rpcTransport";
 import { scanLogsChunked, getAbiEvent } from "@/lib/scanLogs";
 
+// Coin reverts pass through the helper unchanged, so viem needs the coin's errors to name them.
+const NATIVE_HELPER_CALL_ABI = [
+  ...NativeCurrencyHelperABI,
+  ...CoinABI.filter((item) => item.type === 'error'),
+];
+
 
 
 // EVM-based pool hook
@@ -565,7 +571,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
       if (useNative) {
         await writeContractAsync({
           address: nativeHelper,
-          abi: NativeCurrencyHelperABI,
+          abi: NATIVE_HELPER_CALL_ABI,
           functionName: 'buyNative',
           args: [tokenAddress! as `0x${string}`, address!, minCoinOut],
           value: amountWei,
@@ -736,7 +742,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
         toast.loading('Confirm transaction in your wallet...', { id: walletToastId });
         await writeContractAsync({
           address: nativeHelper,
-          abi: NativeCurrencyHelperABI,
+          abi: NATIVE_HELPER_CALL_ABI,
           functionName: 'sellNativeWithPermit',
           args: [coin, amountWei, address, minOut, deadline, v, r, s],
         });
