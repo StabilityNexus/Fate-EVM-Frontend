@@ -28,6 +28,7 @@ import { validateTransactionInput } from '@/lib/validation';
 import { withErrorHandling, createTransactionError } from '@/lib/errorHandler';
 import { estimateBuy, DENOMINATOR, type BuyQuoteFailure } from '@/lib/estimateBuy';
 import { estimateSell, type SellQuoteFailure } from '@/lib/estimateSell';
+import { applySlippage, isSlippageError, SLIPPAGE_LABEL, SLIPPAGE_MESSAGE } from '@/lib/slippage';
 
 // Note: ChainlinkAdapterFactories is imported but can be used for future oracle management features
 import TradingViewWidget from '@/components/ui/TradingViewWidget';
@@ -128,6 +129,8 @@ const usePool = (poolId: Address | undefined, isConnected: boolean) => {
     ] : [],
     query: {
       enabled: !!(bullAddr && bearAddr && oracle),
+      // Keeps the quote, and so the slippage bound, close to the chain on a page left open.
+      refetchInterval: 15_000,
     }
   });
 
@@ -180,7 +183,8 @@ const usePool = (poolId: Address | undefined, isConnected: boolean) => {
       setLoading(false);
       return;
     }
-    if (tokenQueryError) {
+    // A failed refetch keeps the last data, so one RPC hiccup does not replace the page.
+    if (tokenQueryError && !tokenData) {
       setError("Could not load this pool. Check your connection and try again.");
       setLoading(false);
       return;
@@ -436,7 +440,8 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
   }, [allowanceData]);
 
   // Post-rebalance price is independent of the amount, so re-quote locally per keystroke, no RPC.
-  const buyQuote = useMemo(() => {
+  // Also called at send time: after an approval, the amount sent may differ from the input box.
+  const quoteBuy = useCallback((amountIn: bigint) => {
     const {
       mint_fee_rate, treasury_fee_rate, creator_fee_rate, previous_price, oracle_price, leverage,
     } = poolData;
@@ -444,13 +449,6 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
       mint_fee_rate === undefined || treasury_fee_rate === undefined || creator_fee_rate === undefined ||
       previous_price === undefined || oracle_price === undefined || leverage === undefined
     ) {
-      return null;
-    }
-
-    let amountIn: bigint;
-    try {
-      amountIn = parseUnits(buyAmount, baseDecimals);
-    } catch {
       return null;
     }
     if (amountIn <= BigInt(0)) return null;
@@ -471,10 +469,18 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
       creatorFee: creator_fee_rate,
       baseDecimals,
     });
-  }, [buyAmount, baseDecimals, isBull, poolData]);
+  }, [baseDecimals, isBull, poolData]);
 
-  // Same shape as buyQuote, but coins go in and base tokens come out, so fees are taken off the output.
-  const sellQuote = useMemo(() => {
+  const buyQuote = useMemo(() => {
+    try {
+      return quoteBuy(parseUnits(buyAmount, baseDecimals));
+    } catch {
+      return null;
+    }
+  }, [buyAmount, baseDecimals, quoteBuy]);
+
+  // Same shape as quoteBuy, but coins go in and base tokens come out, so fees are taken off the output.
+  const quoteSell = useCallback((amountIn: bigint) => {
     const {
       burn_fee_rate, treasury_fee_rate, creator_fee_rate, previous_price, oracle_price, leverage,
     } = poolData;
@@ -482,13 +488,6 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
       burn_fee_rate === undefined || treasury_fee_rate === undefined || creator_fee_rate === undefined ||
       previous_price === undefined || oracle_price === undefined || leverage === undefined
     ) {
-      return null;
-    }
-
-    let amountIn: bigint;
-    try {
-      amountIn = parseUnits(sellAmount, 18);
-    } catch {
       return null;
     }
     if (amountIn <= BigInt(0)) return null;
@@ -509,7 +508,15 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
       creatorFee: creator_fee_rate,
       baseDecimals,
     });
-  }, [sellAmount, baseDecimals, isBull, poolData]);
+  }, [baseDecimals, isBull, poolData]);
+
+  const sellQuote = useMemo(() => {
+    try {
+      return quoteSell(parseUnits(sellAmount, 18));
+    } catch {
+      return null;
+    }
+  }, [sellAmount, quoteSell]);
 
   // The chain would burn the coins and pay nothing, so do not offer the transaction at all.
   const sellPaysNothing = sellQuote !== null && !sellQuote.ok && sellQuote.reason === 'rounds-to-zero';
@@ -520,6 +527,11 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
   const handleBuyTransaction = useCallback(async (amount: string) => {
     try {
       const amountWei = parseUnits(amount, baseDecimals);
+      const quote = quoteBuy(amountWei);
+      if (!quote?.ok) {
+        toast.error('Could not price this trade. Refresh the pool and try again.');
+        return;
+      }
 
       setPendingTransactionType('buy');
 
@@ -531,7 +543,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
         address: tokenAddress! as `0x${string}`,
         abi: CoinABI,
         functionName: 'buy',
-        args: [address!, amountWei],
+        args: [address!, amountWei, applySlippage(quote.quote.coinsOut)],
       });
 
       // Tx submitted — update the same toast to show on-chain wait
@@ -556,15 +568,16 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
           toast.info('Transaction cancelled in wallet.');
         }
       } else {
+        const message = isSlippageError(err) ? SLIPPAGE_MESSAGE : (err as Error).message || "Failed to buy tokens";
         if (currentToastId !== null) {
-          toast.error((err as Error).message || "Failed to buy tokens", { id: currentToastId });
+          toast.error(message, { id: currentToastId });
         } else {
-          toast.error((err as Error).message || "Failed to buy tokens");
+          toast.error(message);
         }
       }
       pendingTransactionToastIdRef.current = null;
     }
-  }, [tokenAddress, address, writeContractAsync, baseDecimals]);
+  }, [tokenAddress, address, writeContractAsync, baseDecimals, quoteBuy]);
 
   const handleBuy = withErrorHandling(async () => {
     if (!address || !connected) {
@@ -660,6 +673,12 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
         return;
       }
 
+      const quote = quoteSell(amountWei);
+      if (!quote?.ok) {
+        toast.error(quote ? SELL_QUOTE_MESSAGES[quote.reason] : 'Could not price this trade. Refresh the pool and try again.');
+        return;
+      }
+
       setPendingTransactionType('sell');
 
       // Show pre-wallet toast so the user gets immediate feedback
@@ -670,7 +689,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
         address: tokenAddress as `0x${string}`,
         abi: CoinABI,
         functionName: 'sell',
-        args: [amountWei],
+        args: [amountWei, applySlippage(quote.quote.amountOut)],
       });
 
       // Tx submitted — update the same toast to show on-chain wait
@@ -695,10 +714,11 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
           toast.info('Transaction cancelled in wallet.');
         }
       } else {
+        const message = isSlippageError(err) ? SLIPPAGE_MESSAGE : (err as Error).message || 'Failed to sell tokens';
         if (currentToastId !== null) {
-          toast.error((err as Error).message || 'Failed to sell tokens', { id: currentToastId });
+          toast.error(message, { id: currentToastId });
         } else {
-          toast.error((err as Error).message || 'Failed to sell tokens');
+          toast.error(message);
         }
       }
       pendingTransactionToastIdRef.current = null;
@@ -765,7 +785,9 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
         setPendingApproval(null);
       } else if (pendingTransactionType) {
         // Buy/sell reverted on-chain
-        const errorMsg = receiptError?.message || 'Transaction failed on-chain.';
+        const errorMsg = isSlippageError(receiptError)
+          ? SLIPPAGE_MESSAGE
+          : receiptError?.message || 'Transaction failed on-chain.';
         if (currentToastId !== null) {
           toast.error(errorMsg, { id: currentToastId });
         } else {
@@ -913,6 +935,12 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
                         </span>
                       </div>
                       <div className="flex justify-between">
+                        <span className="text-gray-600 dark:text-gray-400">Minimum received ({SLIPPAGE_LABEL} slippage)</span>
+                        <span className="font-medium text-black dark:text-white">
+                          {formatCoin(applySlippage(buyQuote.quote.coinsOut))} {symbol}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
                         <span className="text-gray-600 dark:text-gray-400">Effective price</span>
                         <span className="font-medium text-black dark:text-white">
                           {formatPrice(buyQuote.quote.effectivePrice)} {baseSymbol}
@@ -921,7 +949,8 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
 
                       <p className="pt-1 text-gray-500 dark:text-gray-500">
                         Estimate. The oracle can move before your transaction confirms, which changes
-                        how many coins you get. Their value is unaffected.
+                        how many coins you get. Their value is unaffected. Below the minimum, the trade
+                        is cancelled instead.
                       </p>
                     </div>
                   )}
@@ -1014,6 +1043,12 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
                         </span>
                       </div>
                       <div className="flex justify-between">
+                        <span className="text-gray-600 dark:text-gray-400">Minimum received ({SLIPPAGE_LABEL} slippage)</span>
+                        <span className="font-medium text-black dark:text-white">
+                          {formatBase(applySlippage(sellQuote.quote.amountOut), baseDecimals)} {baseSymbol}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
                         <span className="text-gray-600 dark:text-gray-400">Effective price</span>
                         <span className="font-medium text-black dark:text-white">
                           {formatPrice(sellQuote.quote.effectivePrice)} {baseSymbol}
@@ -1022,7 +1057,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
 
                       <p className="pt-1 text-gray-500 dark:text-gray-500">
                         Estimate. The oracle can move before your transaction confirms, which changes
-                        what you receive.
+                        what you receive. Below the minimum, the trade is cancelled instead.
                       </p>
                     </div>
                   )}

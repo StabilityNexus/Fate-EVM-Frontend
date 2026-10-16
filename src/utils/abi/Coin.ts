@@ -200,6 +200,11 @@ export const CoinABI = [
         "name": "amountAsset",
         "type": "uint256",
         "internalType": "uint256"
+      },
+      {
+        "name": "minCoinOut",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "outputs": [
@@ -404,6 +409,11 @@ export const CoinABI = [
     "inputs": [
       {
         "name": "amountCoin",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "minAssetOut",
         "type": "uint256",
         "internalType": "uint256"
       }
@@ -1076,6 +1086,11 @@ export const CoinABI = [
         "name": "receiver",
         "type": "address",
         "internalType": "address"
+      },
+      {
+        "name": "minAssetOut",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "outputs": [
@@ -1178,5 +1193,10 @@ export const CoinABI = [
         "internalType": "string"
       }
     ]
+  },
+  {
+    "type": "error",
+    "name": "SlippageExceeded",
+    "inputs": []
   }
 ]
