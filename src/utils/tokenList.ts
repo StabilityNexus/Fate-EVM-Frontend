@@ -8,6 +8,7 @@ import baseTokens from "@/data/tokens/base-tokens.json";
 import bscTokens from "@/data/tokens/binance-smart-chain-tokens.json";
 import polygonTokens from "@/data/tokens/polygon-pos-tokens.json";
 import milkomedaTokens from "@/data/tokens/cardano's-milkomeda-tokens.json";
+import sepoliaTokens from "@/data/tokens/sepolia-tokens.json";
 
 export interface Token {
   id: string;
@@ -32,6 +33,7 @@ const CHAIN_TOKENS: Readonly<Record<number, ReadonlyArray<Readonly<Token>>>> = O
   137: normalizeTokens(polygonTokens as Token[]), // Polygon
   8453: normalizeTokens(baseTokens as Token[]), // Base
   2001: normalizeTokens(milkomedaTokens as Token[]), // Milkomeda Cardano sidechain
+  11155111: normalizeTokens(sepoliaTokens as Token[]), // Sepolia Testnet
 });
 
 /**
