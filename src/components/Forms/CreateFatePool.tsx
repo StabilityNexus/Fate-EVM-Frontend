@@ -20,6 +20,11 @@ import { FatePoolFactories, ChainlinkAdapterFactories } from "@/utils/addresses"
 import { SUPPORTED_CHAINS, getPriceFeedOptions } from "@/utils/supportedChainFeed";
 import { parseUnits } from "viem";
 
+// An address is also valid bytes, so viem rejects the call while both createAdapter overloads are in the ABI.
+const CREATE_ADAPTER_BY_FEED_ABI = ChainlinkAdapterFactoryABI.filter(
+  (item) => !(item.type === "function" && item.name === "createAdapter" && item.inputs?.[0]?.type === "bytes")
+);
+
 const DENOMINATOR = 100_000;
 
 // Minimal ERC20 ABI for approve, allowance, and decimals functions
@@ -308,7 +313,7 @@ export default function CreateFatePool() {
             
             const adapterTxHash = await deployPool({
               address: adapterFactoryAddress as `0x${string}`,
-              abi: ChainlinkAdapterFactoryABI,
+              abi: CREATE_ADAPTER_BY_FEED_ABI,
               functionName: "createAdapter",
               args: [priceFeedAddress],
             }) as `0x${string}`;
