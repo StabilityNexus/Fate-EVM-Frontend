@@ -5,6 +5,7 @@ const DEFAULT_RPC_URLS: Record<number, string[]> = {
   11155111: [
     "https://ethereum-sepolia-rpc.publicnode.com",
     "https://sepolia.gateway.tenderly.co",
+    "https://rpc.sepolia.ethpandaops.io",
   ],
 };
 
@@ -71,10 +72,18 @@ export const getTransport = (chainId: number): Transport => {
   return fallback(urls.map((url) => http(url)));
 };
 
+// Defaults that serve current state but not old logs. publicnode keeps about 1.5 days of logs on
+// Sepolia (measured 2026-10-13), so every older chunk failed there before falling back.
+const NO_HISTORY_RPC_URLS: Record<number, string[]> = {
+  11155111: ["https://ethereum-sepolia-rpc.publicnode.com"],
+};
+
 // A scan sends hundreds of calls, so viem's default retries multiplied it by ~10. Retries are
 // off here only; normal reads still want them.
 export const getScanTransport = (chainId: number): Transport => {
-  const urls = [...getUserRpcUrls(chainId), ...(DEFAULT_RPC_URLS[chainId] ?? [])];
+  const skip = NO_HISTORY_RPC_URLS[chainId] ?? [];
+  const defaults = (DEFAULT_RPC_URLS[chainId] ?? []).filter((url) => !skip.includes(url));
+  const urls = [...getUserRpcUrls(chainId), ...defaults];
   if (urls.length === 0) {
     return http(undefined, { retryCount: 0 });
   }
@@ -84,8 +93,8 @@ export const getScanTransport = (chainId: number): Transport => {
   );
 };
 
-// Every provider in a chain's list must accept the chunk. The defaults take 50k (publicnode) and 1M
-// (tenderly); 10k leaves room for a user RPC from the settings page, where 10k caps are common.
+// Every provider in a scan's list must accept the chunk. tenderly takes 1M and ethpandaops 10k; 10k
+// also suits a user RPC from the settings page, where 10k caps are common.
 const SCAN_CHUNK_SIZE: Record<number, bigint> = {
   11155111: BigInt(10_000),
 };
