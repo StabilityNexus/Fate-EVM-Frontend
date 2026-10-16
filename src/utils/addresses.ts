@@ -15,12 +15,15 @@ export const WrappedNatives: Record<number, Address> = {
   11155111: "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14", // Sepolia Testnet WETH9
 };
 
-// Filled after the deploy. No entry, no toggle.
-export const NativeHelpers: Record<number, Address> = {};
+// No entry, no toggle.
+export const NativeHelpers: Record<number, Address> = {
+  11155111: "0x9198c4332845aba314f164be73a00619abb46606", // Sepolia Testnet - Deployed 2026-10-14 (tag sepolia-2026-10-14)
+};
 
-// Gas the Max button keeps back for one buy and one later sell through the helper.
-export const NATIVE_BUY_GAS = BigInt(300_000);
-export const NATIVE_SELL_GAS = BigInt(300_000);
+// Gas the Max button keeps back for one buy and one later sell through the helper. Each measured
+// 0.5M to 0.7M on Sepolia after Glamsterdam (2026-10-16).
+export const NATIVE_BUY_GAS = BigInt(1_000_000);
+export const NATIVE_SELL_GAS = BigInt(1_000_000);
 
 // No pool can exist before its factory, so scans start here instead of guessing. Chains
 // without an entry fall back to a block window.

@@ -182,11 +182,6 @@ export const NativeCurrencyHelperABI = [
   },
   {
     "type": "error",
-    "name": "SlippageExceeded",
-    "inputs": []
-  },
-  {
-    "type": "error",
     "name": "ZeroAddress",
     "inputs": []
   }
