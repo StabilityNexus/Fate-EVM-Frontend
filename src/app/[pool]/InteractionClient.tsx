@@ -391,6 +391,8 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
   const [allowance, setAllowance] = useState<bigint>(BigInt(0));
   const [pendingApproval, setPendingApproval] = useState<{ amount: string; type: 'buy' | 'sell' } | null>(null);
   const [pendingTransactionType, setPendingTransactionType] = useState<'buy' | 'sell' | null>(null);
+  // Set before the permit signature too, which isTransacting does not cover.
+  const isTrading = isTransacting || pendingTransactionType !== null;
   const pendingTransactionToastIdRef = useRef<string | number | null>(null);
   const txTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -552,7 +554,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
 
 
 
-  const handleBuyTransaction = useCallback(async (amount: string) => {
+  const handleBuyTransaction = useCallback(async (amount: string, native: boolean = useNative) => {
     try {
       const amountWei = parseUnits(amount, baseDecimals);
       const quote = quoteBuy(amountWei);
@@ -568,7 +570,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
       pendingTransactionToastIdRef.current = walletToastId;
 
       const minCoinOut = applySlippage(quote.quote.coinsOut);
-      if (useNative) {
+      if (native) {
         await writeContractAsync({
           address: nativeHelper,
           abi: NATIVE_HELPER_CALL_ABI,
@@ -802,7 +804,9 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
         const reserve = (NATIVE_BUY_GAS + NATIVE_SELL_GAS) * fees.maxFeePerGas;
         spendable = spendable > reserve ? spendable - reserve : BigInt(0);
       } catch (err: unknown) {
-        logger.error('Fee estimate failed, using the full balance:', err instanceof Error ? err : undefined);
+        logger.error('Fee estimate failed:', err instanceof Error ? err : undefined);
+        toast.error('Could not estimate the gas to keep back. Enter an amount instead.');
+        return;
       }
     }
     setBuyAmount(formatNumberDown(Number(formatUnits(spendable, baseDecimals)), 4));
@@ -823,7 +827,8 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
         } else {
           toast.success('Approval confirmed. Submitting buy transaction...');
         }
-        handleBuyTransaction(pendingApproval.amount);
+        // Only a WETH buy needs approval, so the follow-up stays on WETH even if the toggle moved.
+        handleBuyTransaction(pendingApproval.amount, false);
       } else {
         const currentToastId = pendingTransactionToastIdRef.current;
         if (pendingTransactionType === 'buy') {
@@ -979,7 +984,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
                       <div className="flex justify-between">
                         <span className="text-gray-600 dark:text-gray-400">You pay</span>
                         <span className="font-medium text-black dark:text-white">
-                          {formatBase(buyQuote.quote.amountIn, baseDecimals)} {baseSymbol}
+                          {formatBase(buyQuote.quote.amountIn, baseDecimals)} {spendSymbol}
                         </span>
                       </div>
 
@@ -1044,9 +1049,9 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
               <Button
                 onClick={() => handleBuy()}
                 className={`w-full ${buttonColor} text-white`}
-                disabled={!buyAmount || !connected || isTransacting}
+                disabled={!buyAmount || !connected || isTrading}
               >
-                {isTransacting ? 'Processing...' : `Buy ${symbol} Tokens`}
+                {isTrading ? 'Processing...' : `Buy ${symbol} Tokens`}
               </Button>
             </div>
           </div>
@@ -1123,13 +1128,13 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
                       <div className="flex justify-between border-t border-neutral-200 pt-1.5 dark:border-neutral-700">
                         <span className="text-gray-600 dark:text-gray-400">You receive</span>
                         <span className="font-medium text-black dark:text-white">
-                          {formatBase(sellQuote.quote.amountOut, baseDecimals)} {baseSymbol}
+                          {formatBase(sellQuote.quote.amountOut, baseDecimals)} {spendSymbol}
                         </span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-gray-600 dark:text-gray-400">Minimum received ({SLIPPAGE_LABEL} slippage)</span>
                         <span className="font-medium text-black dark:text-white">
-                          {formatBase(applySlippage(sellQuote.quote.amountOut), baseDecimals)} {baseSymbol}
+                          {formatBase(applySlippage(sellQuote.quote.amountOut), baseDecimals)} {spendSymbol}
                         </span>
                       </div>
                       <div className="flex justify-between">
@@ -1151,9 +1156,9 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
               <Button
                 onClick={() => handleSell()}
                 className="w-full bg-gray-100 hover:bg-gray-200 text-black border border-gray-300"
-                disabled={!sellAmount || !connected || isTransacting || sellPaysNothing}
+                disabled={!sellAmount || !connected || isTrading || sellPaysNothing}
               >
-                {isTransacting ? 'Processing...' : `Sell ${symbol} Tokens`}
+                {isTrading ? 'Processing...' : `Sell ${symbol} Tokens`}
               </Button>
             </div>
           </div>
@@ -1881,6 +1886,7 @@ export default function InteractionClient() {
                         key={label}
                         type="button"
                         onClick={() => setPayNative(native)}
+                        aria-pressed={payNative === native}
                         className={`px-3 py-1 text-xs font-medium ${payNative === native
                           ? 'bg-black text-white dark:bg-white dark:text-black'
                           : 'bg-transparent text-neutral-600 dark:text-neutral-400'}`}
