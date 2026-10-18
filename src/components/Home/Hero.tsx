@@ -89,25 +89,27 @@ const Hero = () => {
         />
       </div>
 
-      {/*  Mask CSS */}
+      {/* Mask CSS. Mouse only: a tap on a touch screen would leave the circle stuck where it landed. */}
       <style jsx>{`
-        .hero-cursor {
-          mask-image: radial-gradient(
-            circle at var(--mouse-x) var(--mouse-y),
-            transparent var(--mask-size),
-            black var(--mask-size)
-          );
+        @media (pointer: fine) {
+          .hero-cursor {
+            mask-image: radial-gradient(
+              circle at var(--mouse-x) var(--mouse-y),
+              transparent var(--mask-size),
+              black var(--mask-size)
+            );
 
-          -webkit-mask-image: radial-gradient(
-            circle at var(--mouse-x) var(--mouse-y),
-            transparent var(--mask-size),
-            black var(--mask-size)
-          );
-        }
+            -webkit-mask-image: radial-gradient(
+              circle at var(--mouse-x) var(--mouse-y),
+              transparent var(--mask-size),
+              black var(--mask-size)
+            );
+          }
 
-        .hero-hide-cursor,
-        .hero-hide-cursor * {
-          cursor: none !important;
+          .hero-hide-cursor,
+          .hero-hide-cursor * {
+            cursor: none !important;
+          }
         }
       `}</style>
       <PoolAddressModal
@@ -288,7 +290,7 @@ type ButtonGroupProps = {
 };
 
 const ButtonGroup = ({ setIsModalOpen, decorative = false }: ButtonGroupProps) => {
-  const buttonClass = `px-6 py-3 border rounded-full text-white mix-blend-difference cursor-none ${
+  const buttonClass = `px-6 py-3 border rounded-full text-white mix-blend-difference ${
     decorative ? "pointer-events-none" : "pointer-events-auto"
   }`;
   
