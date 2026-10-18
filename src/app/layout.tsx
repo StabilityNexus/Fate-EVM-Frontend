@@ -18,7 +18,7 @@ export const metadata: Metadata = {
     template: "%s | Fate Protocol",
   },
   description:
-    "Trade prediction markets on Fate Protocol - the decentralized platform for perpetual prediction pools. Buy bullCoins and bearCoins to predict price movements across multiple blockchain networks. Advanced DeFi trading with real-time price feeds and automated market making.",
+    "Trade prediction markets on Fate Protocol - the decentralized platform for perpetual prediction pools. Buy bullCoins and bearCoins to predict price movements, with real-time oracle feeds and per-pool leverage.",
   keywords: [
     "DeFi",
     "prediction markets", 
@@ -30,12 +30,9 @@ export const metadata: Metadata = {
     "decentralized finance",
     "cryptocurrency trading",
     "perpetual pools",
-    "automated market making",
-    "Chainlink oracles",
-    "Ethereum",
-    "Polygon",
-    "BSC",
-    "Base"
+    "leverage",
+    "oracles",
+    "Ethereum"
   ],
   authors: [{ name: "Fate Protocol Team" }],
   creator: "Fate Protocol",
@@ -67,7 +64,6 @@ export const metadata: Metadata = {
     title: "Fate Protocol | Decentralized Prediction Markets",
     description: "Trade prediction markets on Fate Protocol - the decentralized platform for perpetual prediction pools.",
     images: ["https://evm.fate.stability.nexus/og-image.png"],
-    creator: "@FateProtocol",
   },
   robots: {
     index: true,
@@ -116,7 +112,7 @@ export default function RootLayout({
               "@context": "https://schema.org",
               "@type": "WebApplication",
               "name": "Fate Protocol",
-              "description": "Decentralized perpetual prediction pools for trading price movements across multiple blockchain networks",
+              "description": "Decentralized perpetual prediction pools for trading price movements",
               "url": "https://evm.fate.stability.nexus",
               "applicationCategory": "FinanceApplication",
               "operatingSystem": "Web Browser",
@@ -127,21 +123,18 @@ export default function RootLayout({
               },
               "creator": {
                 "@type": "Organization",
-                "name": "Fate Protocol Team",
-                "url": "https://evm.fate.stability.nexus"
+                "name": "Stability Nexus",
+                "url": "https://stability.nexus"
               },
               "featureList": [
                 "Decentralized prediction markets",
                 "Perpetual prediction pools",
                 "Bull and Bear coin trading",
-                "Multi-chain support",
                 "Real-time price feeds",
-                "Automated market making",
-                "Chainlink oracle integration"
+                "Per-pool leverage",
+                "Works with any oracle"
               ],
               "screenshot": "https://evm.fate.stability.nexus/og-image.png",
-              "softwareVersion": "1.0.0",
-              "datePublished": "2025-06-06",
               "dateModified": new Date().toISOString().split('T')[0]
             })
           }}

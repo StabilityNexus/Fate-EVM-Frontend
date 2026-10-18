@@ -3,16 +3,16 @@ import AboutSection from "@/components/Home/About";
 import Hero from "@/components/Home/Hero";
 
 export const metadata: Metadata = {
-  title: "Decentralized Prediction Markets & DeFi Trading",
+  title: { absolute: "Fate Protocol: Decentralized Prediction Markets" },
   description:
-    "Decentralized perpetual prediction pools for trading price movements across multiple blockchain networks with real-time oracle pricing, automated market making, and transparent on-chain execution.",
+    "Create and trade bull and bear coins on any oracle feed. Perpetual prediction pools with no expiry, per-pool leverage and transparent on-chain execution.",
   alternates: {
     canonical: "/",
   },
   openGraph: {
-    title: "Decentralized Prediction Markets & DeFi Trading",
+    title: "Fate Protocol: Decentralized Prediction Markets",
     description:
-      "Decentralized perpetual prediction pools for trading price movements across multiple blockchain networks with real-time oracle pricing, automated market making, and transparent on-chain execution.",
+      "Create and trade bull and bear coins on any oracle feed. Perpetual prediction pools with no expiry, per-pool leverage and transparent on-chain execution.",
     url: "/",
     type: "website",
     images: [
@@ -25,9 +25,9 @@ export const metadata: Metadata = {
     ],
   },
   twitter: {
-    title: "Decentralized Prediction Markets & DeFi Trading",
+    title: "Fate Protocol: Decentralized Prediction Markets",
     description:
-      "Decentralized perpetual prediction pools for trading price movements across multiple blockchain networks with real-time oracle pricing, automated market making, and transparent on-chain execution.",
+      "Create and trade bull and bear coins on any oracle feed. Perpetual prediction pools with no expiry, per-pool leverage and transparent on-chain execution.",
     images: ["https://evm.fate.stability.nexus/og-image.png"],
   },
 };
