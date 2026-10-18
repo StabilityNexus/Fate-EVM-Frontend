@@ -1,21 +1,16 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { useTheme } from "next-themes";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { isAddress } from "viem";
 
-import { Loading } from "@/components/ui/loading";
-
 const Hero = () => {
-  const { resolvedTheme } = useTheme();
   const router = useRouter();
 
   const [isHovered, setIsHovered] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [poolAddress, setPoolAddress] = useState("");
-  const [mounted, setMounted] = useState(false);
 
   const isPoolAddressValid = isAddress(poolAddress.trim());
 
@@ -32,10 +27,6 @@ const Hero = () => {
 
   //  Hero container ref
   const heroRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   // Perfect cursor sync (NO lag, NO offset)
   useEffect(() => {
@@ -66,14 +57,6 @@ const Hero = () => {
     };
   }, []);
 
-  if (!mounted) {
-    return (
-      <div className="flex items-center justify-center h-screen supports-[height:100dvh]:h-dvh bg-white dark:bg-black">
-        <Loading size="xl" />
-      </div>
-    );
-  }
-
   return (
     <div
       ref={heroRef}
@@ -96,13 +79,8 @@ const Hero = () => {
 
       {/* Foreground Layer (MASK APPLIED HERE) */}
       <div
-        className="absolute inset-0 flex flex-col items-center justify-center hero-cursor pointer-events-none"
-        style={
-          {
-            backgroundColor: resolvedTheme === "dark" ? "black" : "white",
-            "--mask-size": `${isHovered ? 140 : 20}px`,
-          } as React.CSSProperties
-        }
+        className="absolute inset-0 flex flex-col items-center justify-center bg-white dark:bg-black hero-cursor pointer-events-none"
+        style={{ "--mask-size": `${isHovered ? 140 : 20}px` } as React.CSSProperties}
       >
         <HeroContent
           textClassName="text-black dark:text-white"
