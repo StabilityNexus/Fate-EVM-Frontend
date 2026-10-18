@@ -7,7 +7,6 @@ interface CoinGeckoWidgetProps {
   assetId: string;
   theme?: "light" | "dark";
   heightPx?: number;
-  showHeader?: boolean;
   className?: string;
 }
 

@@ -1,6 +1,8 @@
 // Quote for Coin.buy(), in bigint so rounding matches the chain. BigInt(0) rather than 0n
 // because the build target is ES2017.
 
+import { expWad, lnWad } from './wadMath';
+
 const ZERO = BigInt(0);
 const ONE = BigInt(1);
 const TEN = BigInt(10);
@@ -37,13 +39,33 @@ export type RebalanceTargets = {
   bear: bigint;
 };
 
-// Reserves after rebalance(). Returns null where the real rebalance() would revert.
+const WAD = BigInt(10) ** BigInt(18);
+const WAD_SQUARED = WAD * WAD;
+const MAX_EXPONENT = BigInt(20) * WAD;
+
+// (newPrice / oldPrice) ^ leverage in WAD, with the contract's clamps so it never throws.
+function leveragedRatio(oldPrice: bigint, newPrice: bigint, leverage: bigint): bigint {
+  let ratio = (newPrice * WAD) / oldPrice;
+  if (ratio === ZERO) ratio = ONE;
+  if (ratio > WAD_SQUARED) ratio = WAD_SQUARED;
+  if (leverage === WAD) return ratio;
+  const lev = leverage > WAD_SQUARED ? WAD_SQUARED : leverage;
+
+  let exponent = (lev * lnWad(ratio)) / WAD;
+  if (exponent > MAX_EXPONENT) exponent = MAX_EXPONENT;
+  if (exponent < -MAX_EXPONENT) exponent = -MAX_EXPONENT;
+  return expWad(exponent);
+}
+
+// Reserves after rebalance(). Mirrors PredictionPool._rebalance line for line; it never
+// reverts on chain, so this never returns null.
 export function simulateRebalance(
   bull: bigint,
   bear: bigint,
   oldPrice: bigint,
   newPrice: bigint,
-): RebalanceTargets | null {
+  leverage: bigint,
+): RebalanceTargets {
   if (newPrice === ZERO || oldPrice === ZERO) return { bull, bear };
 
   const total = bull + bear;
@@ -51,12 +73,15 @@ export function simulateRebalance(
 
   if (newPrice === oldPrice) return { bull, bear };
 
-  const adjustedBull = (bull * newPrice) / oldPrice;
-  const adjustedBear = (bear * oldPrice) / newPrice;
+  const ratio = leveragedRatio(oldPrice, newPrice, leverage);
+  const adjustedBull = (bull * ratio) / WAD;
+  const adjustedBear = (bear * WAD) / ratio;
   const denominator = adjustedBull + adjustedBear;
-  if (denominator === ZERO) return null;
 
-  const targetBull = (total * adjustedBull) / denominator;
+  let targetBull = denominator === ZERO ? bull : (total * adjustedBull) / denominator;
+  // A side that holds reserve keeps at least one unit.
+  if (targetBull === ZERO && bull !== ZERO) targetBull = ONE;
+  else if (targetBull === total && bear !== ZERO) targetBull = total - ONE;
   return { bull: targetBull, bear: total - targetBull };
 }
 
@@ -68,6 +93,7 @@ export type BuyQuoteInput = {
   totalSupply: bigint;
   previousPrice: bigint;     // oracle price at the last rebalance
   oraclePrice: bigint;       // oracle price now
+  leverage: bigint;          // WAD, 1e18 is 1x
   mintFee: bigint;
   treasuryFee: bigint;
   creatorFee: bigint;
@@ -99,14 +125,13 @@ export type BuyQuoteResult =
 export function estimateBuy(input: BuyQuoteInput): BuyQuoteResult {
   const {
     amountIn, isBull, bullReserve, bearReserve, totalSupply,
-    previousPrice, oraclePrice, mintFee, treasuryFee, creatorFee, baseDecimals,
+    previousPrice, oraclePrice, leverage, mintFee, treasuryFee, creatorFee, baseDecimals,
   } = input;
 
   if (baseDecimals < 0 || baseDecimals > 18) return { ok: false, reason: 'cannot-quote' };
   const decimals = BigInt(baseDecimals);
 
-  const targets = simulateRebalance(bullReserve, bearReserve, previousPrice, oraclePrice);
-  if (targets === null) return { ok: false, reason: 'cannot-quote' };
+  const targets = simulateRebalance(bullReserve, bearReserve, previousPrice, oraclePrice, leverage);
   const reserve = isBull ? targets.bull : targets.bear;
 
   // Each fee rounds up on its own, so a tiny amount can owe more than it is worth.

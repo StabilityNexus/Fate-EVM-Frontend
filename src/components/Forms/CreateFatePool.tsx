@@ -20,6 +20,11 @@ import { FatePoolFactories, ChainlinkAdapterFactories } from "@/utils/addresses"
 import { SUPPORTED_CHAINS, getPriceFeedOptions } from "@/utils/supportedChainFeed";
 import { parseUnits } from "viem";
 
+// An address is also valid bytes, so viem rejects the call while both createAdapter overloads are in the ABI.
+const CREATE_ADAPTER_BY_FEED_ABI = ChainlinkAdapterFactoryABI.filter(
+  (item) => !(item.type === "function" && item.name === "createAdapter" && item.inputs?.[0]?.type === "bytes")
+);
+
 const DENOMINATOR = 100_000;
 
 // Minimal ERC20 ABI for approve, allowance, and decimals functions
@@ -94,7 +99,8 @@ export default function CreateFatePool() {
     burnFee: "3.0",
     creatorFee: "2.0",
     treasuryFee: "0.5",
-    initialDeposit: "0"
+    initialDeposit: "0",
+    leverage: "1"
   });
 
   const stepTitles = useMemo(() => [
@@ -150,6 +156,17 @@ export default function CreateFatePool() {
         newErrors.initialDeposit = "Initial deposit must be a valid number";
       } else if (initialDeposit < 0) {
         newErrors.initialDeposit = "Initial deposit cannot be negative";
+      }
+
+      // The contracts accept any leverage; the form offers the agreed 0.1x to 10x range.
+      const leverageInput = formData.leverage.trim();
+      if (!/^\d+(\.\d{1,18})?$/.test(leverageInput)) {
+        newErrors.leverage = "Leverage must be a number with at most 18 decimals";
+      } else if (
+        parseUnits(leverageInput, 18) < parseUnits("0.1", 18) ||
+        parseUnits(leverageInput, 18) > parseUnits("10", 18)
+      ) {
+        newErrors.leverage = "Leverage must be between 0.1x and 10x";
       }
       
       if (!formData.priceFeedAddress) {
@@ -299,7 +316,7 @@ export default function CreateFatePool() {
             
             const adapterTxHash = await deployPool({
               address: adapterFactoryAddress as `0x${string}`,
-              abi: ChainlinkAdapterFactoryABI,
+              abi: CREATE_ADAPTER_BY_FEED_ABI,
               functionName: "createAdapter",
               args: [priceFeedAddress],
             }) as `0x${string}`;
@@ -417,6 +434,7 @@ export default function CreateFatePool() {
           BigInt(creatorFeeUnits),
           BigInt(treasuryFeeUnits),
           initialDepositAmount,
+          parseUnits(formData.leverage.trim(), 18),
         ],
       });
 

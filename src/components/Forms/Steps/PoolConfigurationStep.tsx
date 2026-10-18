@@ -10,7 +10,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Info, Coins, Wallet, ChevronDown } from "lucide-react";
+import { Info, Coins, Wallet, ChevronDown, TrendingUp } from "lucide-react";
 import { logger } from "@/lib/logger";
 import type { FormData } from "../FormData";
 import { useAccount, useChainId } from "wagmi";
@@ -302,6 +302,46 @@ const PoolConfigurationStep: React.FC<PoolConfigurationStepProps> = ({
           )}
           <p className="text-xs text-gray-500 dark:text-gray-400">
             Amount in base token units. Set to 0 if you don&apos;t want to deposit now.
+          </p>
+        </div>
+
+        {/* Leverage */}
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <TrendingUp className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+            <Label className="text-sm font-medium text-gray-600 dark:text-gray-400">
+              Leverage
+            </Label>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Info className="h-4 w-4 text-gray-600/70 dark:text-gray-400/70 cursor-help" />
+                </TooltipTrigger>
+                <TooltipContent className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400">
+                  <p className="w-64 text-sm">
+                    How strongly the pool reacts to the oracle. At 2x a price move shifts reserves as if the price had moved twice as far; at 0.5x half as far. 1x is the plain pool. Fixed at creation.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+          <Input
+            type="number"
+            placeholder="1"
+            min="0.1"
+            max="10"
+            step="0.1"
+            value={formData.leverage}
+            onChange={(e) => updateFormData({ leverage: e.target.value })}
+            className={`transition-all focus:ring-2 focus:ring-black dark:focus:ring-white border-gray-200 dark:border-gray-700 text-black dark:text-white ${
+              errors.leverage ? "border-red-500" : ""
+            }`}
+          />
+          {errors.leverage && (
+            <p className="text-red-500 text-sm">{errors.leverage}</p>
+          )}
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            Between 0.1x and 10x. Cannot be changed after the pool is created.
           </p>
         </div>
 

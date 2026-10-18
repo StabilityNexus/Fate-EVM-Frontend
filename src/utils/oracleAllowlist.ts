@@ -16,8 +16,7 @@ export const DENIED_ORACLES: Record<number, readonly Address[]> = {
 
 // Pools to hide even when their oracle is fine.
 export const DENIED_POOLS: Record<number, readonly Address[]> = {
-  // Uses the ETH/USD price feed as its base token, so it can never be traded.
-  11155111: ["0xED1fc758e807DcD9FDAAF52Ef756E709074ff242"],
+  11155111: [],
 };
 
 export type OracleVerdict =

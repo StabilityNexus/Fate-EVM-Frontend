@@ -105,6 +105,11 @@ export const PredictionPoolFactoryABI = [
         "name": "initialDeposit",
         "type": "uint256",
         "internalType": "uint256"
+      },
+      {
+        "name": "leverage",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "outputs": [
@@ -182,6 +187,11 @@ export const PredictionPoolFactoryABI = [
       },
       {
         "name": "initialDeposit",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "leverage",
         "type": "uint256",
         "internalType": "uint256"
       }

@@ -15,6 +15,7 @@ export type SellQuoteInput = {
   totalSupply: bigint;
   previousPrice: bigint;     // oracle price at the last rebalance
   oraclePrice: bigint;       // oracle price now
+  leverage: bigint;          // WAD, 1e18 is 1x
   burnFee: bigint;
   treasuryFee: bigint;
   creatorFee: bigint;
@@ -51,15 +52,14 @@ export type SellQuoteResult =
 export function estimateSell(input: SellQuoteInput): SellQuoteResult {
   const {
     amountIn, isBull, bullReserve, bearReserve, totalSupply,
-    previousPrice, oraclePrice, burnFee, treasuryFee, creatorFee, baseDecimals,
+    previousPrice, oraclePrice, leverage, burnFee, treasuryFee, creatorFee, baseDecimals,
   } = input;
 
   if (baseDecimals < 0 || baseDecimals > 18) return { ok: false, reason: 'cannot-quote' };
   const decimals = BigInt(baseDecimals);
 
   // sell() rebalances first, so the price comes from the reserve after that rebalance.
-  const targets = simulateRebalance(bullReserve, bearReserve, previousPrice, oraclePrice);
-  if (targets === null) return { ok: false, reason: 'cannot-quote' };
+  const targets = simulateRebalance(bullReserve, bearReserve, previousPrice, oraclePrice, leverage);
   const reserve = isBull ? targets.bull : targets.bear;
 
   if (totalSupply <= amountIn) return { ok: false, reason: 'supply-would-be-zero' };
