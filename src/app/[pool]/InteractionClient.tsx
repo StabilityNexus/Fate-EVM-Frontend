@@ -7,7 +7,10 @@ import {
   useWalletClient,
   useReadContracts,
   useWriteContract,
-  useWaitForTransactionReceipt
+  useWaitForTransactionReceipt,
+  useBalance,
+  usePublicClient,
+  useSignTypedData
 } from 'wagmi';
 import { formatUnits, parseUnits, type Address, createPublicClient, isAddress, BaseError, ContractFunctionRevertedError, ContractFunctionZeroDataError } from 'viem';
 import { PredictionPoolABI } from '@/utils/abi/PredictionPool';
@@ -15,6 +18,7 @@ import { CoinABI } from '@/utils/abi/Coin';
 import { ERC20ABI } from '@/utils/abi/ERC20';
 import { IOracleABI } from '@/utils/abi/IOracle';
 import { ChainlinkOracleABI } from '@/utils/abi/ChainlinkOracle';
+import { NativeCurrencyHelperABI } from '@/utils/abi/NativeCurrencyHelper';
 import { toast } from 'sonner';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -37,8 +41,16 @@ import { useTheme } from "next-themes";
 import { Info } from 'lucide-react';
 import { logger } from "@/lib/logger";
 import { getChainConfig } from "@/utils/chainConfig";
+import { WrappedNatives, NativeHelpers, NATIVE_BUY_GAS, NATIVE_SELL_GAS } from "@/utils/addresses";
+import { buildPermitTypedData, splitPermitSignature, permitDeadline } from "@/lib/permit";
 import { getScanTransport, getScanChunkSize } from "@/utils/rpcTransport";
 import { scanLogsChunked, getAbiEvent } from "@/lib/scanLogs";
+
+// Coin reverts pass through the helper unchanged, so viem needs the coin's errors to name them.
+const NATIVE_HELPER_CALL_ABI = [
+  ...NativeCurrencyHelperABI,
+  ...CoinABI.filter((item) => item.type === 'error'),
+];
 
 
 
@@ -317,7 +329,7 @@ const formatBase = (v: bigint, decimals: number) => formatAmount(v, decimals);
 const formatCoin = (v: bigint) => formatAmount(v, 18);
 const formatPrice = (v: bigint) => formatAmount(v, PRICE_DECIMALS);
 
-function VaultSection({ isBull, poolData, userTokens, price, value, symbol, connected, handlePoll, reserve, supply, tokenAddress, baseDecimals, baseSymbol }: {
+function VaultSection({ isBull, poolData, userTokens, price, value, symbol, connected, handlePoll, reserve, supply, tokenAddress, baseDecimals, baseSymbol, payNative }: {
   isBull: boolean;
   poolData: {
     id: { id: string };
@@ -356,11 +368,22 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
   tokenAddress: string;
   baseDecimals: number;
   baseSymbol: string;
+  payNative: boolean;
 }) {
   const { address } = useAccount();
   const { writeContractAsync, data: hash, isPending: isTransactionPending } = useWriteContract();
   const { isLoading: isConfirming, isSuccess: isConfirmed, isError: isReceiptError, error: receiptError } = useWaitForTransactionReceipt({ hash });
   const isTransacting = isTransactionPending || isConfirming;
+  const publicClient = usePublicClient();
+  const { signTypedDataAsync } = useSignTypedData();
+
+  const wrappedNative = WrappedNatives[poolData.chainId];
+  const nativeHelper = NativeHelpers[poolData.chainId];
+  const nativeAvailable = !!wrappedNative && !!nativeHelper
+    && poolData.asset_address.toLowerCase() === wrappedNative.toLowerCase();
+  const useNative = nativeAvailable && payNative;
+  const nativeSymbol = getChainConfig(poolData.chainId)?.chain.nativeCurrency.symbol ?? 'ETH';
+  const spendSymbol = useNative ? nativeSymbol : baseSymbol;
 
   const [buyAmount, setBuyAmount] = useState('');
   const [sellAmount, setSellAmount] = useState('');
@@ -368,6 +391,8 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
   const [allowance, setAllowance] = useState<bigint>(BigInt(0));
   const [pendingApproval, setPendingApproval] = useState<{ amount: string; type: 'buy' | 'sell' } | null>(null);
   const [pendingTransactionType, setPendingTransactionType] = useState<'buy' | 'sell' | null>(null);
+  // Set before the permit signature too, which isTransacting does not cover.
+  const isTrading = isTransacting || pendingTransactionType !== null;
   const pendingTransactionToastIdRef = useRef<string | number | null>(null);
   const txTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -415,6 +440,11 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
     query: {
       enabled: !!(address && poolData?.asset_address),
     }
+  });
+
+  const { data: nativeBalance, refetch: refetchNativeBalance } = useBalance({
+    address,
+    query: { enabled: !!address && nativeAvailable },
   });
 
   // Get allowance for the token
@@ -524,7 +554,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
 
 
 
-  const handleBuyTransaction = useCallback(async (amount: string) => {
+  const handleBuyTransaction = useCallback(async (amount: string, native: boolean = useNative) => {
     try {
       const amountWei = parseUnits(amount, baseDecimals);
       const quote = quoteBuy(amountWei);
@@ -539,12 +569,23 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
       const walletToastId = toast.loading('Confirm transaction in your wallet...');
       pendingTransactionToastIdRef.current = walletToastId;
 
-      await writeContractAsync({
-        address: tokenAddress! as `0x${string}`,
-        abi: CoinABI,
-        functionName: 'buy',
-        args: [address!, amountWei, applySlippage(quote.quote.coinsOut)],
-      });
+      const minCoinOut = applySlippage(quote.quote.coinsOut);
+      if (native) {
+        await writeContractAsync({
+          address: nativeHelper,
+          abi: NATIVE_HELPER_CALL_ABI,
+          functionName: 'buyNative',
+          args: [tokenAddress! as `0x${string}`, address!, minCoinOut],
+          value: amountWei,
+        });
+      } else {
+        await writeContractAsync({
+          address: tokenAddress! as `0x${string}`,
+          abi: CoinABI,
+          functionName: 'buy',
+          args: [address!, amountWei, minCoinOut],
+        });
+      }
 
       // Tx submitted — update the same toast to show on-chain wait
       toast.loading('Waiting for on-chain confirmation...', { id: walletToastId });
@@ -577,7 +618,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
       }
       pendingTransactionToastIdRef.current = null;
     }
-  }, [tokenAddress, address, writeContractAsync, baseDecimals, quoteBuy]);
+  }, [tokenAddress, address, writeContractAsync, baseDecimals, quoteBuy, useNative, nativeHelper]);
 
   const handleBuy = withErrorHandling(async () => {
     if (!address || !connected) {
@@ -609,17 +650,16 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
 
     const amountWei = parseUnits(validatedInput.amount.toString(), baseDecimals);
 
-    // Check user's base token balance
-    const userBaseTokenBalance = baseTokenBalance || BigInt(0);
-    if (userBaseTokenBalance < amountWei) {
-      const errorMessage = `Insufficient balance. You have ${formatUnits(userBaseTokenBalance, baseDecimals)} ${baseSymbol} available.`;
+    const spendable = useNative ? (nativeBalance?.value ?? BigInt(0)) : (baseTokenBalance || BigInt(0));
+    if (spendable < amountWei) {
+      const errorMessage = `Insufficient balance. You have ${formatUnits(spendable, baseDecimals)} ${spendSymbol} available.`;
       toast.error(errorMessage);
       throw createTransactionError(errorMessage);
     }
 
-    // Check allowance
+    // The helper wraps and approves inside the buy, so only the wrapped path needs an allowance.
     const currentAllowance = allowance || BigInt(0);
-    if (currentAllowance < amountWei) {
+    if (!useNative && currentAllowance < amountWei) {
       const approvalToast = toast.loading("Approving tokens...");
       pendingTransactionToastIdRef.current = approvalToast;
       setPendingApproval({ amount: buyAmount, type: 'buy' });
@@ -679,18 +719,46 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
         return;
       }
 
+      const minOut = applySlippage(quote.quote.amountOut);
       setPendingTransactionType('sell');
 
-      // Show pre-wallet toast so the user gets immediate feedback
-      const walletToastId = toast.loading('Confirm transaction in your wallet...');
-      pendingTransactionToastIdRef.current = walletToastId;
+      let walletToastId: string | number;
+      if (useNative) {
+        if (!publicClient) throw new Error('No RPC connection');
+        walletToastId = toast.loading('Sign the permit in your wallet...');
+        pendingTransactionToastIdRef.current = walletToastId;
 
-      await writeContractAsync({
-        address: tokenAddress as `0x${string}`,
-        abi: CoinABI,
-        functionName: 'sell',
-        args: [amountWei, applySlippage(quote.quote.amountOut)],
-      });
+        // Nonce and domain are read right before signing, so a permit never names a stale nonce.
+        const coin = tokenAddress as `0x${string}`;
+        const [nonce, domainData] = await Promise.all([
+          publicClient.readContract({ address: coin, abi: CoinABI, functionName: 'nonces', args: [address] }) as Promise<bigint>,
+          publicClient.readContract({ address: coin, abi: CoinABI, functionName: 'eip712Domain' }) as Promise<readonly [string, string, string, bigint, `0x${string}`, `0x${string}`, readonly bigint[]]>,
+        ]);
+        const deadline = permitDeadline();
+        const signature = await signTypedDataAsync(buildPermitTypedData(
+          { name: domainData[1], version: domainData[2], chainId: Number(domainData[3]), verifyingContract: coin },
+          { owner: address, spender: nativeHelper, value: amountWei, nonce, deadline },
+        ));
+        const { v, r, s } = splitPermitSignature(signature);
+
+        toast.loading('Confirm transaction in your wallet...', { id: walletToastId });
+        await writeContractAsync({
+          address: nativeHelper,
+          abi: NATIVE_HELPER_CALL_ABI,
+          functionName: 'sellNativeWithPermit',
+          args: [coin, amountWei, address, minOut, deadline, v, r, s],
+        });
+      } else {
+        walletToastId = toast.loading('Confirm transaction in your wallet...');
+        pendingTransactionToastIdRef.current = walletToastId;
+
+        await writeContractAsync({
+          address: tokenAddress as `0x${string}`,
+          abi: CoinABI,
+          functionName: 'sell',
+          args: [amountWei, minOut],
+        });
+      }
 
       // Tx submitted — update the same toast to show on-chain wait
       toast.loading('Waiting for on-chain confirmation...', { id: walletToastId });
@@ -725,6 +793,25 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
     }
   };
 
+  const spendableBalance = useNative ? (nativeBalance?.value ?? BigInt(0)) : baseTokenBalance;
+
+  // In native mode Max keeps back the gas for this buy and one later sell, at the current fee.
+  const handleBuyMax = async () => {
+    let spendable = spendableBalance;
+    if (useNative && publicClient) {
+      try {
+        const fees = await publicClient.estimateFeesPerGas();
+        const reserve = (NATIVE_BUY_GAS + NATIVE_SELL_GAS) * fees.maxFeePerGas;
+        spendable = spendable > reserve ? spendable - reserve : BigInt(0);
+      } catch (err: unknown) {
+        logger.error('Fee estimate failed:', err instanceof Error ? err : undefined);
+        toast.error('Could not estimate the gas to keep back. Enter an amount instead.');
+        return;
+      }
+    }
+    setBuyAmount(formatNumberDown(Number(formatUnits(spendable, baseDecimals)), 4));
+  };
+
   // Handle successful transaction confirmation
   useEffect(() => {
     if (isConfirmed && !isTransactionPending) {
@@ -740,7 +827,8 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
         } else {
           toast.success('Approval confirmed. Submitting buy transaction...');
         }
-        handleBuyTransaction(pendingApproval.amount);
+        // Only a WETH buy needs approval, so the follow-up stays on WETH even if the toggle moved.
+        handleBuyTransaction(pendingApproval.amount, false);
       } else {
         const currentToastId = pendingTransactionToastIdRef.current;
         if (pendingTransactionType === 'buy') {
@@ -763,9 +851,10 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
         setBuyAmount('');
         setSellAmount('');
         handlePoll();
+        if (nativeAvailable) refetchNativeBalance();
       }
     }
-  }, [isConfirmed, isTransactionPending, pendingApproval, pendingTransactionType, handlePoll, handleBuyTransaction, poolData.id.id, symbol]);
+  }, [isConfirmed, isTransactionPending, pendingApproval, pendingTransactionType, handlePoll, handleBuyTransaction, poolData.id.id, symbol, nativeAvailable, refetchNativeBalance]);
 
   // Handle on-chain transaction failure (reverted tx)
   useEffect(() => {
@@ -871,7 +960,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
               <div>
                 <Input
                   type="number"
-                  placeholder={`Enter ${baseSymbol} amount`}
+                  placeholder={`Enter ${spendSymbol} amount`}
                   value={buyAmount}
                   onChange={(e) => setBuyAmount(e.target.value)}
                   className="w-full"
@@ -880,9 +969,9 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
                 <button
                   type="button"
                   className="mt-1 text-xs text-gray-500 dark:text-gray-400 cursor-pointer bg-transparent border-none p-0 text-left"
-                  onClick={() => setBuyAmount(formatNumberDown(Number(formatUnits(baseTokenBalance, baseDecimals)), 4))}
+                  onClick={() => handleBuyMax()}
                 >
-                  Max: {formatNumberDown(Number(formatUnits(baseTokenBalance, baseDecimals)), 4)} {baseSymbol}
+                  Max: {formatNumberDown(Number(formatUnits(spendableBalance, baseDecimals)), 4)} {spendSymbol}
                 </button>
               </div>
 
@@ -895,7 +984,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
                       <div className="flex justify-between">
                         <span className="text-gray-600 dark:text-gray-400">You pay</span>
                         <span className="font-medium text-black dark:text-white">
-                          {formatBase(buyQuote.quote.amountIn, baseDecimals)} {baseSymbol}
+                          {formatBase(buyQuote.quote.amountIn, baseDecimals)} {spendSymbol}
                         </span>
                       </div>
 
@@ -960,9 +1049,9 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
               <Button
                 onClick={() => handleBuy()}
                 className={`w-full ${buttonColor} text-white`}
-                disabled={!buyAmount || !connected || isTransacting}
+                disabled={!buyAmount || !connected || isTrading}
               >
-                {isTransacting ? 'Processing...' : `Buy ${symbol} Tokens`}
+                {isTrading ? 'Processing...' : `Buy ${symbol} Tokens`}
               </Button>
             </div>
           </div>
@@ -1039,13 +1128,13 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
                       <div className="flex justify-between border-t border-neutral-200 pt-1.5 dark:border-neutral-700">
                         <span className="text-gray-600 dark:text-gray-400">You receive</span>
                         <span className="font-medium text-black dark:text-white">
-                          {formatBase(sellQuote.quote.amountOut, baseDecimals)} {baseSymbol}
+                          {formatBase(sellQuote.quote.amountOut, baseDecimals)} {spendSymbol}
                         </span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-gray-600 dark:text-gray-400">Minimum received ({SLIPPAGE_LABEL} slippage)</span>
                         <span className="font-medium text-black dark:text-white">
-                          {formatBase(applySlippage(sellQuote.quote.amountOut), baseDecimals)} {baseSymbol}
+                          {formatBase(applySlippage(sellQuote.quote.amountOut), baseDecimals)} {spendSymbol}
                         </span>
                       </div>
                       <div className="flex justify-between">
@@ -1067,9 +1156,9 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
               <Button
                 onClick={() => handleSell()}
                 className="w-full bg-gray-100 hover:bg-gray-200 text-black border border-gray-300"
-                disabled={!sellAmount || !connected || isTransacting || sellPaysNothing}
+                disabled={!sellAmount || !connected || isTrading || sellPaysNothing}
               >
-                {isTransacting ? 'Processing...' : `Sell ${symbol} Tokens`}
+                {isTrading ? 'Processing...' : `Sell ${symbol} Tokens`}
               </Button>
             </div>
           </div>
@@ -1143,6 +1232,7 @@ export default function InteractionClient() {
 
   // const POLLING_INTERVAL = 5000;
   const [pollingEnabledState, setPollingEnabledState] = useState(true);
+  const [payNative, setPayNative] = useState(true);
 
   // Fetch the last rebalance event from blockchain
   const fetchLastRebalanceEvent = useCallback(async () => {
@@ -1610,6 +1700,11 @@ export default function InteractionClient() {
   const underlyingPriceFeedAddress = underlyingPriceFeedData?.[0]?.result as Address;
   const oracleAddress = underlyingPriceFeedAddress || poolData.oracle_address || '';
   const priceFeedName = getPriceFeedName(oracleAddress, chainId);
+  // The native toggle exists only on a wrapped-native pool with a helper deployed on its chain.
+  const wrappedNative = WrappedNatives[chainId];
+  const nativeAvailable = !!wrappedNative && !!NativeHelpers[chainId]
+    && poolData.asset_address.toLowerCase() === wrappedNative.toLowerCase();
+  const nativeSymbol = getChainConfig(chainId)?.chain.nativeCurrency.symbol ?? 'ETH';
 
   // Create asset configuration based on the price feed
   const asset = {
@@ -1782,6 +1877,26 @@ export default function InteractionClient() {
                   </TooltipProvider>
                 </span>
               </div>
+              {nativeAvailable && (
+                <div className="flex items-center space-x-2 mt-2 text-sm">
+                  <span className="font-medium text-neutral-600 dark:text-neutral-400">Trade with</span>
+                  <div className="inline-flex rounded-md border border-neutral-300 dark:border-neutral-700 overflow-hidden">
+                    {[{ native: true, label: nativeSymbol }, { native: false, label: poolData.base_symbol }].map(({ native, label }) => (
+                      <button
+                        key={label}
+                        type="button"
+                        onClick={() => setPayNative(native)}
+                        aria-pressed={payNative === native}
+                        className={`px-3 py-1 text-xs font-medium ${payNative === native
+                          ? 'bg-black text-white dark:bg-white dark:text-black'
+                          : 'bg-transparent text-neutral-600 dark:text-neutral-400'}`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="flex items-center space-x-2 mt-2 text-xs text-neutral-600 dark:text-neutral-400">
                 <span>
                   Last rebalanced: {(isFetchingRebalanceEvents && !lastRebalanceTime) ? 'Loading...' : (lastRebalanceTime ? lastRebalanceTime.toLocaleString() : (rebalanceOutOfRange ? 'Older than ~2 weeks' : 'Never'))}
@@ -1860,6 +1975,7 @@ export default function InteractionClient() {
             tokenAddress={poolData.bull_token.id}
             baseDecimals={poolData.base_decimals}
             baseSymbol={poolData.base_symbol}
+            payNative={payNative}
           />
 
           <div className="lg:col-span-2">
@@ -2012,6 +2128,7 @@ export default function InteractionClient() {
             tokenAddress={poolData.bear_token.id}
             baseDecimals={poolData.base_decimals}
             baseSymbol={poolData.base_symbol}
+            payNative={payNative}
           />
         </div>
 
