@@ -12,26 +12,18 @@ export default function sitemap(): MetadataRoute.Sitemap {
     {
       url: `${baseUrl}/`,
       lastModified: currentDate,
-      changeFrequency: 'weekly',
-      priority: 1.0,
     },
     {
       url: `${baseUrl}/explorePools`,
       lastModified: currentDate,
-      changeFrequency: 'daily',
-      priority: 0.8,
     },
     {
       url: `${baseUrl}/createPool`,
       lastModified: currentDate,
-      changeFrequency: 'monthly',
-      priority: 0.7,
     },
     {
       url: `${baseUrl}/portfolio`,
       lastModified: currentDate,
-      changeFrequency: 'daily',
-      priority: 0.6,
     },
   ]
 }
