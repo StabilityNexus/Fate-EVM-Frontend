@@ -64,7 +64,7 @@ export default function CreateFatePool() {
   const currentChainId = useChainId();
 
   // Set by the protocol in the factory; the pool keeps the value it is created with.
-  const { data: devFeeUnits } = useReadContract({
+  const { data: devFeeUnits, refetch: refetchDevFee } = useReadContract({
     address: FatePoolFactories[currentChainId],
     abi: PredictionPoolFactoryABI,
     functionName: "devFee",
@@ -261,6 +261,20 @@ export default function CreateFatePool() {
       if (!publicClient) {
         throw new Error("Public client not available");
       }
+
+      // The pool keeps the factory's fee at creation, so stop before any transaction if it changed.
+      const currentDevFee = await publicClient.readContract({
+        address: FACTORY_ADDRESS,
+        abi: PredictionPoolFactoryABI,
+        functionName: "devFee",
+      }) as bigint;
+      if (currentDevFee !== devFeeUnits) {
+        await refetchDevFee();
+        toast.error("The dev fee has changed. Check the new value and submit again.");
+        setIsSubmitting(false);
+        return;
+      }
+
       let baseDecimals: number;
       try {
         baseDecimals = await publicClient.readContract({
