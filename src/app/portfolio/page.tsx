@@ -1476,7 +1476,7 @@ const EnhancedPoolDataLoader = ({
       { address: poolAddress as Address, abi: PredictionPoolABI, functionName: 'mintFee' },
       { address: poolAddress as Address, abi: PredictionPoolABI, functionName: 'burnFee' },
       { address: poolAddress as Address, abi: PredictionPoolABI, functionName: 'creatorFee' },
-      { address: poolAddress as Address, abi: PredictionPoolABI, functionName: 'treasuryFee' },
+      { address: poolAddress as Address, abi: PredictionPoolABI, functionName: 'devFee' },
     ] : [],
     query: {
       enabled: !!poolAddress,

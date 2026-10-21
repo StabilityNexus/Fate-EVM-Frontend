@@ -202,7 +202,7 @@ export function PredictionCard({
                       <div className="flex justify-between text-xs"><span className="text-gray-500">Mint</span> <span>{fees.mint}%</span></div>
                       <div className="flex justify-between text-xs"><span className="text-gray-500">Burn</span> <span>{fees.burn}%</span></div>
                       <div className="flex justify-between text-xs"><span className="text-gray-500">Creator</span> <span>{fees.creator}%</span></div>
-                      <div className="flex justify-between text-xs"><span className="text-gray-500">Treasury</span> <span>{fees.treasury}%</span></div>
+                      <div className="flex justify-between text-xs"><span className="text-gray-500">Dev fee</span> <span>{fees.treasury}%</span></div>
                     </>
                   ) : (
                     <span className="text-xs text-gray-500">No fee data available</span>

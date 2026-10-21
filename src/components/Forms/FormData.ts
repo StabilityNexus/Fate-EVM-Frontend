@@ -11,7 +11,6 @@ export interface FormData {
   mintFee: string;
   burnFee: string;
   creatorFee: string;
-  treasuryFee: string;
   initialDeposit: string;
   leverage: string;
   quoteTokenAddress?: string; 

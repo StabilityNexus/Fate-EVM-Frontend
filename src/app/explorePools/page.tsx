@@ -187,7 +187,7 @@ function ExploreFatePoolsClient() {
         publicClient.readContract({ address: coinAddress, abi: CoinABI, functionName: "mintFee" }).catch((): bigint => BigInt(0)),
         publicClient.readContract({ address: coinAddress, abi: CoinABI, functionName: "burnFee" }).catch((): bigint => BigInt(0)),
         publicClient.readContract({ address: coinAddress, abi: CoinABI, functionName: "creatorFee" }).catch((): bigint => BigInt(0)),
-        publicClient.readContract({ address: coinAddress, abi: CoinABI, functionName: "treasuryFee" }).catch((): bigint => BigInt(0)),
+        publicClient.readContract({ address: coinAddress, abi: CoinABI, functionName: "devFee" }).catch((): bigint => BigInt(0)),
         publicClient.readContract({ address: coinAddress, abi: CoinABI, functionName: "totalSupply" }).catch((): bigint => BigInt(0)),
         publicClient.readContract({ address: coinAddress, abi: CoinABI, functionName: "priceBuy" }).catch((): bigint => BigInt(0)),
         publicClient.readContract({ address: coinAddress, abi: CoinABI, functionName: "priceSell" }).catch((): bigint => BigInt(0)),
@@ -294,7 +294,7 @@ function ExploreFatePoolsClient() {
               publicClient.readContract({ address: addr, abi: PredictionPoolABI, functionName: "mintFee" }).catch((): bigint => BigInt(0)),
               publicClient.readContract({ address: addr, abi: PredictionPoolABI, functionName: "burnFee" }).catch((): bigint => BigInt(0)),
               publicClient.readContract({ address: addr, abi: PredictionPoolABI, functionName: "creatorFee" }).catch((): bigint => BigInt(0)),
-              publicClient.readContract({ address: addr, abi: PredictionPoolABI, functionName: "treasuryFee" }).catch((): bigint => BigInt(0)),
+              publicClient.readContract({ address: addr, abi: PredictionPoolABI, functionName: "devFee" }).catch((): bigint => BigInt(0)),
             ]);
 
             const verdict = await getOracleVerdict(publicClient as PublicClient, chainId, oracleAddress as Address);

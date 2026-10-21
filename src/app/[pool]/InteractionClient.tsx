@@ -171,7 +171,7 @@ const usePool = (poolId: Address | undefined, isConnected: boolean) => {
       { address: poolId, abi: PredictionPoolABI, functionName: 'mintFee' },
       { address: poolId, abi: PredictionPoolABI, functionName: 'burnFee' },
       { address: poolId, abi: PredictionPoolABI, functionName: 'creatorFee' },
-      { address: poolId, abi: PredictionPoolABI, functionName: 'treasuryFee' },
+      { address: poolId, abi: PredictionPoolABI, functionName: 'devFee' },
     ] : [],
     query: {
       enabled: !!poolId,
@@ -1000,7 +1000,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
                           <span>{formatBase(buyQuote.quote.vaultAmount, baseDecimals)}</span>
                         </div>
                         <div className="flex justify-between">
-                          <span>Treasury</span>
+                          <span>Dev fee</span>
                           <span>{formatBase(buyQuote.quote.treasuryAmount, baseDecimals)}</span>
                         </div>
                         <div className="flex justify-between">
@@ -1108,7 +1108,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
                           <span>{formatBase(sellQuote.quote.vaultAmount, baseDecimals)}</span>
                         </div>
                         <div className="flex justify-between">
-                          <span>Treasury</span>
+                          <span>Dev fee</span>
                           <span>{formatBase(sellQuote.quote.treasuryAmount, baseDecimals)}</span>
                         </div>
                         <div className="flex justify-between">
@@ -1854,7 +1854,7 @@ export default function InteractionClient() {
                             <span>{poolData.creator_fee}%</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="font-medium">Treasury Fee:</span>
+                            <span className="font-medium">Dev Fee:</span>
                             <span>{poolData.treasury_fee}%</span>
                           </div>
                           <div className="flex justify-between">
@@ -2157,9 +2157,9 @@ export default function InteractionClient() {
                   <div className="text-xs text-neutral-500 dark:text-neutral-400">Paid to pool creator</div>
                 </div>
                 <div className="bg-white dark:bg-neutral-900 p-4 rounded-lg border border-black dark:border-neutral-600">
-                  <div className="font-medium text-neutral-600 dark:text-neutral-400 mb-1">Treasury Fee</div>
+                  <div className="font-medium text-neutral-600 dark:text-neutral-400 mb-1">Dev Fee</div>
                   <div className="font-bold text-sm md:text-lg text-neutral-900 dark:text-white">{poolData.treasury_fee}%</div>
-                  <div className="text-xs text-neutral-500 dark:text-neutral-400">Paid to treasury</div>
+                  <div className="text-xs text-neutral-500 dark:text-neutral-400">Paid to the protocol</div>
                 </div>
               </div>
               <div className="text-sm text-neutral-500 dark:text-neutral-400 bg-neutral-100 dark:bg-neutral-800 p-4 rounded-lg">
