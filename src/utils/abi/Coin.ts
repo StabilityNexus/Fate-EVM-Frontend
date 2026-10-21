@@ -28,7 +28,7 @@ export const CoinABI = [
         "internalType": "address"
       },
       {
-        "name": "_accumulatorVault",
+        "name": "_factory",
         "type": "address",
         "internalType": "address"
       },
@@ -48,7 +48,7 @@ export const CoinABI = [
         "internalType": "uint256"
       },
       {
-        "name": "_treasuryFee",
+        "name": "_devFee",
         "type": "uint256",
         "internalType": "uint256"
       }
@@ -64,19 +64,6 @@ export const CoinABI = [
         "name": "",
         "type": "uint256",
         "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "accumulatorVault",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "address",
-        "internalType": "address"
       }
     ],
     "stateMutability": "view"
@@ -231,7 +218,7 @@ export const CoinABI = [
         "internalType": "uint256"
       },
       {
-        "name": "_treasuryFee",
+        "name": "_devFee",
         "type": "uint256",
         "internalType": "uint256"
       },
@@ -248,7 +235,7 @@ export const CoinABI = [
         "internalType": "uint256"
       },
       {
-        "name": "treasuryAmount",
+        "name": "devFeeAmount",
         "type": "uint256",
         "internalType": "uint256"
       },
@@ -547,19 +534,6 @@ export const CoinABI = [
   },
   {
     "type": "function",
-    "name": "treasuryFee",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "vaultCreator",
     "inputs": [],
     "outputs": [
@@ -711,7 +685,7 @@ export const CoinABI = [
         "internalType": "uint256"
       },
       {
-        "name": "treasuryFeeAmount",
+        "name": "devFeeAmount",
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
@@ -723,7 +697,7 @@ export const CoinABI = [
         "internalType": "uint256"
       },
       {
-        "name": "accumulatorVault",
+        "name": "devFeeReceiver",
         "type": "address",
         "indexed": false,
         "internalType": "address"
@@ -1198,5 +1172,31 @@ export const CoinABI = [
     "type": "error",
     "name": "SlippageExceeded",
     "inputs": []
+  },
+  {
+    "type": "function",
+    "name": "devFee",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "factory",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
   }
 ]

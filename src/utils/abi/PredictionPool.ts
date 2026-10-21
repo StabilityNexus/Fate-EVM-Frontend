@@ -23,7 +23,7 @@ export const PredictionPoolABI = [
         "internalType": "address"
       },
       {
-        "name": "_accumulatorVault",
+        "name": "_factory",
         "type": "address",
         "internalType": "address"
       },
@@ -63,7 +63,7 @@ export const PredictionPoolABI = [
         "internalType": "uint256"
       },
       {
-        "name": "_treasuryFee",
+        "name": "_devFee",
         "type": "uint256",
         "internalType": "uint256"
       },
@@ -89,19 +89,6 @@ export const PredictionPoolABI = [
         "name": "",
         "type": "uint256",
         "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "accumulatorVault",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "address",
-        "internalType": "address"
       }
     ],
     "stateMutability": "view"
@@ -327,19 +314,6 @@ export const PredictionPoolABI = [
   },
   {
     "type": "function",
-    "name": "treasuryFee",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "vaultCreator",
     "inputs": [],
     "outputs": [
@@ -548,5 +522,31 @@ export const PredictionPoolABI = [
     "type": "error",
     "name": "PoolLocked",
     "inputs": []
+  },
+  {
+    "type": "function",
+    "name": "devFee",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "factory",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
   }
 ]

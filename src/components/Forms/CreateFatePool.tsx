@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { useAccount, useChainId, useWriteContract, useWaitForTransactionReceipt, usePublicClient } from "wagmi";
+import { useAccount, useChainId, useWriteContract, useWaitForTransactionReceipt, usePublicClient, useReadContract } from "wagmi";
 import { WalletLinkButton } from "@stability-nexus/walletlink";
 import { useRouter } from "next/navigation";
 import { AlertCircle } from "lucide-react";
@@ -62,6 +62,15 @@ export default function CreateFatePool() {
   const router = useRouter();
   const { isConnected, address } = useAccount();
   const currentChainId = useChainId();
+
+  // Set by the protocol in the factory; the pool keeps the value it is created with.
+  const { data: devFeeUnits } = useReadContract({
+    address: FatePoolFactories[currentChainId],
+    abi: PredictionPoolFactoryABI,
+    functionName: "devFee",
+    query: { enabled: !!FatePoolFactories[currentChainId] },
+  });
+  const devFeePercent = devFeeUnits === undefined ? undefined : (Number(devFeeUnits) / DENOMINATOR) * 100;
   const publicClient = usePublicClient();
 
   const [currentStep, setCurrentStep] = useState(1);
@@ -98,7 +107,6 @@ export default function CreateFatePool() {
     mintFee: "3.0",
     burnFee: "3.0",
     creatorFee: "2.0",
-    treasuryFee: "0.5",
     initialDeposit: "0",
     leverage: "1"
   });
@@ -183,14 +191,13 @@ export default function CreateFatePool() {
        const mintFee = parseFloat(formData.mintFee);
        const burnFee = parseFloat(formData.burnFee);
        const creatorFee = parseFloat(formData.creatorFee);
-       const treasuryFee = parseFloat(formData.treasuryFee);
 
        if (isNaN(mintFee) || mintFee < 0) newErrors.mintFee = "Invalid fee value";
        if (isNaN(burnFee) || burnFee < 0) newErrors.burnFee = "Invalid fee value";
        if (isNaN(creatorFee) || creatorFee < 0) newErrors.creatorFee = "Invalid fee value";
-       if (isNaN(treasuryFee) || treasuryFee < 0) newErrors.treasuryFee = "Invalid fee value";
+       if (devFeePercent === undefined) newErrors.devFee = "Could not read the dev fee. Check your network and try again.";
 
-       const totalFee = mintFee + burnFee + creatorFee + treasuryFee;
+       const totalFee = mintFee + burnFee + creatorFee + (devFeePercent ?? 0);
        if (totalFee >= 100) {
          newErrors.mintFee = "Total fees must be less than 100%";
        }
@@ -198,7 +205,7 @@ export default function CreateFatePool() {
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  }, [currentStep, formData]);
+  }, [currentStep, formData, devFeePercent]);
 
   const nextStep = useCallback(() => {
     logger.debug('nextStep called, currentStep:', { currentStep });
@@ -244,7 +251,6 @@ export default function CreateFatePool() {
        const mintFeeUnits = Math.floor((parseFloat(formData.mintFee) / 100) * DENOMINATOR);
        const burnFeeUnits = Math.floor((parseFloat(formData.burnFee) / 100) * DENOMINATOR);
        const creatorFeeUnits = Math.floor((parseFloat(formData.creatorFee) / 100) * DENOMINATOR);
-       const treasuryFeeUnits = Math.floor((parseFloat(formData.treasuryFee) / 100) * DENOMINATOR);
 
       const baseTokenAddress = formData.baseTokenAddress.trim();
       let oracleAddress: `0x${string}`;
@@ -432,7 +438,6 @@ export default function CreateFatePool() {
           BigInt(mintFeeUnits),
           BigInt(burnFeeUnits),
           BigInt(creatorFeeUnits),
-          BigInt(treasuryFeeUnits),
           initialDepositAmount,
           parseUnits(formData.leverage.trim(), 18),
         ],
@@ -582,11 +587,13 @@ export default function CreateFatePool() {
                     formData={formData}
                     updateFormData={updateFormData}
                     errors={errors}
+                    devFeePercent={devFeePercent}
                   />
                 )}
                 {currentStep === 4 && (
                   <ReviewStep
                     formData={formData}
+                    devFeePercent={devFeePercent}
                     onSubmit={handleSubmit}
                     onBack={prevStep}
                     isSubmitting={isProcessing}

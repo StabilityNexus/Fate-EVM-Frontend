@@ -3,25 +3,22 @@ export const PredictionPoolFactoryABI = [
     "type": "constructor",
     "inputs": [
       {
-        "name": "_accumulatorVault",
+        "name": "_dev",
         "type": "address",
         "internalType": "address"
+      },
+      {
+        "name": "_devFeeReceiver",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "_devFee",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "accumulatorVault",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -93,11 +90,6 @@ export const PredictionPoolFactoryABI = [
       },
       {
         "name": "creatorFee",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "treasuryFee",
         "type": "uint256",
         "internalType": "uint256"
       },
@@ -177,11 +169,6 @@ export const PredictionPoolFactoryABI = [
       },
       {
         "name": "creatorFee",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "treasuryFee",
         "type": "uint256",
         "internalType": "uint256"
       },
@@ -317,5 +304,202 @@ export const PredictionPoolFactoryABI = [
         "internalType": "address"
       }
     ]
+  },
+  {
+    "type": "function",
+    "name": "MAX_DEV_FEE",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "acceptDev",
+    "inputs": [],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "dev",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "devFee",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "devFeeReceiver",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "pendingDev",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "proposeDev",
+    "inputs": [
+      {
+        "name": "newDev",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setDevFee",
+    "inputs": [
+      {
+        "name": "newFee",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setDevFeeReceiver",
+    "inputs": [
+      {
+        "name": "newReceiver",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "event",
+    "name": "DevFeeReceiverUpdated",
+    "inputs": [
+      {
+        "name": "oldReceiver",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "newReceiver",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "DevFeeUpdated",
+    "inputs": [
+      {
+        "name": "oldFee",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "newFee",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "DevProposed",
+    "inputs": [
+      {
+        "name": "currentDev",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "proposedDev",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "DevTransferred",
+    "inputs": [
+      {
+        "name": "oldDev",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "newDev",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "error",
+    "name": "OnlyDev",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "OnlyPendingDev",
+    "inputs": []
   }
 ]
