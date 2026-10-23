@@ -1158,7 +1158,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
 
               <Button
                 onClick={() => handleSell()}
-                className="w-full bg-gray-100 hover:bg-gray-200 text-black border border-gray-300"
+                className="w-full bg-gray-100 hover:bg-gray-200 text-black border border-gray-300 dark:bg-neutral-800 dark:hover:bg-neutral-700 dark:text-white dark:border-neutral-600"
                 disabled={!sellAmount || !connected || isTrading || sellPaysNothing}
               >
                 {isTrading ? 'Processing...' : `Sell ${symbol} Tokens`}
@@ -1181,7 +1181,8 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
 
 export default function InteractionClient() {
   // const stickyRef = useRef<HTMLElement | null>(null);
-  const { theme } = useTheme();
+  // resolvedTheme, so a dark system theme counts as dark too.
+  const { resolvedTheme: theme } = useTheme();
   const params = useSearchParams();
   const { address, isConnected, chain } = useAccount(); // eslint-disable-line @typescript-eslint/no-unused-vars
   // Validate poolId from query params - don't default to zero address
@@ -1937,20 +1938,20 @@ export default function InteractionClient() {
                       className="h-2 transition-all duration-500 ease-in-out"
                       style={{
                         width: `${calculations.bullPercentage}%`,
-                        backgroundColor: theme === "dark" ? "#111" : "#333",
+                        backgroundColor: theme === "dark" ? "#f5f5f5" : "#333",
                       }}
                     ></div>
                     <div
                       className="h-2 transition-all duration-500 ease-in-out"
                       style={{
                         width: `${calculations.bearPercentage}%`,
-                        backgroundColor: theme === "dark" ? "gray-500" : "#fff",
+                        backgroundColor: theme === "dark" ? "#737373" : "#fff",
                         borderLeft: theme === "dark" ? "1px solid #888" : "1px solid #ddd",
                       }}
                     ></div>
                   </div>
                   <div className="flex justify-between w-full text-xs font-medium">
-                    <span className={`text-black transition-colors duration-300 ${changes.bull_reserve ? "font-bold" : ""}`}>
+                    <span className={`text-black dark:text-white transition-colors duration-300 ${changes.bull_reserve ? "font-bold" : ""}`}>
                       {calculations.bullPercentage.toFixed(1)}% Bull
                     </span>
                     <span className={`text-gray-500 dark:text-white transition-colors duration-300 ${changes.bear_reserve ? "font-bold" : ""}`}>
