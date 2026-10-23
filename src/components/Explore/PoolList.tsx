@@ -14,9 +14,9 @@ interface PoolListProps {
   filteredPools: Pool[];
   groupedPools: Record<number, Pool[]>;
   sortedChainIds: number[];
-  searchQuery: string;
+  hasActiveCriteria: boolean;
   onUsePool: (poolId: string) => void;
-  onClearSearch: () => void;
+  onClearFilters: () => void;
   currentChainId?: number;
   isConnected?: boolean;
   isConnectedChainSupported?: boolean;
@@ -30,9 +30,9 @@ const PoolList: React.FC<PoolListProps> = ({
   filteredPools,
   groupedPools,
   sortedChainIds,
-  searchQuery,
+  hasActiveCriteria,
   onUsePool,
-  onClearSearch,
+  onClearFilters,
   currentChainId,
   isConnected,
   isConnectedChainSupported,
@@ -94,11 +94,11 @@ const PoolList: React.FC<PoolListProps> = ({
           </svg>
         </div>
         <h3 className="text-lg font-medium text-gray-700 dark:text-gray-300 mb-2">
-          {searchQuery ? "No pools match your search" : "No pools found"}
+          {hasActiveCriteria ? "No pools match your criteria" : "No pools found"}
         </h3>
         <p className="text-gray-500 dark:text-gray-400 mb-4">
-          {searchQuery
-            ? "Try adjusting your search terms or clear the search to see all pools."
+          {hasActiveCriteria
+            ? "Try changing your search or filters, or clear them to see all pools."
             : !isConnected
               ? "Please connect your wallet to view pools on your connected chain."
               : !isConnectedChainSupported
@@ -107,13 +107,13 @@ const PoolList: React.FC<PoolListProps> = ({
                   ? `No prediction pools have been created yet on ${getChainConfig(currentChainId)?.name || `Chain ${currentChainId}`}.`
                   : "No prediction pools have been created yet on the connected chain."}
         </p>
-        {searchQuery && (
+        {hasActiveCriteria && (
           <button
-            onClick={onClearSearch}
-            className="text-blue-600 hover:text-blue-500 font-medium"
+            onClick={onClearFilters}
+            className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-amber-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-[#121622]"
             type="button"
           >
-            Clear search
+            Clear search and filters
           </button>
         )}
       </div>
