@@ -653,7 +653,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
 
     const spendable = useNative ? (nativeBalance?.value ?? BigInt(0)) : (baseTokenBalance || BigInt(0));
     if (spendable < amountWei) {
-      const errorMessage = `Insufficient balance. You have ${formatUnits(spendable, baseDecimals)} ${spendSymbol} available.`;
+      const errorMessage = `Insufficient balance. You have ${formatBase(spendable, baseDecimals)} ${spendSymbol} available.`;
       toast.error(errorMessage);
       throw createTransactionError(errorMessage);
     }
@@ -710,7 +710,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
 
       // Check user's token balance
       if (userTokens < amountWei) {
-        toast.error(`Insufficient ${symbol} balance. You have ${formatUnits(userTokens, 18)} ${symbol} available.`);
+        toast.error(`Insufficient ${symbol} balance. You have ${formatCoin(userTokens)} ${symbol} available.`);
         return;
       }
 

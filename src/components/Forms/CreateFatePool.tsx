@@ -70,7 +70,7 @@ export default function CreateFatePool() {
     functionName: "devFee",
     query: { enabled: !!FatePoolFactories[currentChainId] },
   });
-  const devFeePercent = devFeeUnits === undefined ? undefined : (Number(devFeeUnits) / DENOMINATOR) * 100;
+  const devFeePercent = devFeeUnits === undefined ? undefined : Number(devFeeUnits) / (DENOMINATOR / 100);
   const publicClient = usePublicClient();
 
   const [currentStep, setCurrentStep] = useState(1);

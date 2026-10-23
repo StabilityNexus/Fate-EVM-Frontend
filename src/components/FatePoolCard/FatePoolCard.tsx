@@ -7,7 +7,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { formatTVL, formatNumber } from "@/utils/format";
+import { formatTVL, formatVolume } from "@/utils/format";
 
 interface PredictionCardProps {
   name: string;
@@ -175,7 +175,7 @@ export function PredictionCard({
             </div>
             <div className="truncate text-sm font-bold tabular-nums text-gray-900 dark:text-white mt-0.5">
               {volumeRecent !== undefined && baseSymbol !== undefined
-                ? `${formatNumber(volumeRecent)} ${baseSymbol}`
+                ? formatVolume(volumeRecent, baseSymbol)
                 : <span className="text-gray-400">&mdash;</span>}
             </div>
           </div>
