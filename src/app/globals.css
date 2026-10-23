@@ -124,34 +124,6 @@ html:not(.dark) {
   color: currentColor;
 }
 
-.hero-button {
-  padding: 0.75rem 1.5rem;
-  border-width: 2px;
-  border-radius: 9999px;
-  font-size: 1.125rem;
-  transition: all 0.3s;
-}
-
-.hero-button-light {
-  border-color: white;
-  color: white;
-}
-
-.hero-button-light:hover {
-  background-color: white;
-  color: black;
-}
-
-.hero-button-dark {
-  border-color: black;
-  color: black;
-}
-
-.hero-button-dark:hover {
-  background-color: black;
-  color: white;
-}
-
 /* CSS Loader Animation */
 .loader {
   width: 100px;
