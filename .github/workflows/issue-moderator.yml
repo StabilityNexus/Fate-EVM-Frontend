@@ -13,7 +13,7 @@ jobs:
     steps:
       - name: Run AI Moderator
         id: moderator
-        uses: github/ai-moderator@v1
+        uses: github/ai-moderator@81159c370785e295c97461ade67d7c33576e9319 # v1.1.4
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           ai-label: "ai-slop"
@@ -21,7 +21,7 @@ jobs:
 
       # Fetch updated issue details to check if the moderator just applied a label
       - name: Check Labels and Auto-Close
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
         with:
           script: |
             const { data: issue } = await github.rest.issues.get({
@@ -33,7 +33,8 @@ jobs:
             const labels = issue.labels.map(l => l.name);
             const isSpam = labels.includes('ai-slop') || labels.includes('spam');
 
-            if (isSpam) {
+            // An edit to an already closed issue must not post the notice again.
+            if (isSpam && issue.state === 'open') {
               console.log(`Flagged content found on issue #${context.issue.number}. Closing and locking.`);
               
               // 1. Comment on the issue explaining why it's closed
