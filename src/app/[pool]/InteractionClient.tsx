@@ -20,6 +20,7 @@ import { IOracleABI } from '@/utils/abi/IOracle';
 import { ChainlinkOracleABI } from '@/utils/abi/ChainlinkOracle';
 import { NativeCurrencyHelperABI } from '@/utils/abi/NativeCurrencyHelper';
 import { toast } from 'sonner';
+import { useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { getPriceFeedName, CHAIN_PRICE_FEED_OPTIONS } from '@/utils/supportedChainFeed';
@@ -329,7 +330,7 @@ const formatBase = (v: bigint, decimals: number) => formatAmount(v, decimals);
 const formatCoin = (v: bigint) => formatAmount(v, 18);
 const formatPrice = (v: bigint) => formatAmount(v, PRICE_DECIMALS);
 
-function VaultSection({ isBull, poolData, userTokens, price, value, symbol, connected, handlePoll, reserve, supply, tokenAddress, baseDecimals, baseSymbol, payNative }: {
+function VaultSection({ isBull, poolData, userTokens, price, value, symbol, connected, reserve, supply, tokenAddress, baseDecimals, baseSymbol, payNative }: {
   isBull: boolean;
   poolData: {
     id: { id: string };
@@ -362,7 +363,6 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
   value: number;
   symbol: string;
   connected: boolean;
-  handlePoll: () => void;
   reserve: number;
   supply: number;
   tokenAddress: string;
@@ -442,7 +442,8 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
     }
   });
 
-  const { data: nativeBalance, refetch: refetchNativeBalance } = useBalance({
+  const queryClient = useQueryClient();
+  const { data: nativeBalance } = useBalance({
     address,
     query: { enabled: !!address && nativeAvailable },
   });
@@ -850,11 +851,13 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
         // Clear input fields on confirmed success
         setBuyAmount('');
         setSellAmount('');
-        handlePoll();
-        if (nativeAvailable) refetchNativeBalance();
+        // Re-read every balance, supply and reserve on the page, not only the pool details.
+        queryClient.invalidateQueries({
+          predicate: (query) => ['readContract', 'readContracts', 'balance'].includes(query.queryKey[0] as string),
+        });
       }
     }
-  }, [isConfirmed, isTransactionPending, pendingApproval, pendingTransactionType, handlePoll, handleBuyTransaction, poolData.id.id, symbol, nativeAvailable, refetchNativeBalance]);
+  }, [isConfirmed, isTransactionPending, pendingApproval, pendingTransactionType, handleBuyTransaction, poolData.id.id, symbol, queryClient]);
 
   // Handle on-chain transaction failure (reverted tx)
   useEffect(() => {
@@ -1969,7 +1972,6 @@ export default function InteractionClient() {
             value={calculations.userBullValue}
             symbol={poolData.bull_token.fields.symbol}
             connected={isConnected}
-            handlePoll={handlePoll}
             reserve={calculations.bullReserveNum}
             supply={calculations.bullSupplyNum}
             tokenAddress={poolData.bull_token.id}
@@ -2122,7 +2124,6 @@ export default function InteractionClient() {
             value={calculations.userBearValue}
             symbol={poolData.bear_token.fields.symbol}
             connected={isConnected}
-            handlePoll={handlePoll}
             reserve={calculations.bearReserveNum}
             supply={calculations.bearSupplyNum}
             tokenAddress={poolData.bear_token.id}
