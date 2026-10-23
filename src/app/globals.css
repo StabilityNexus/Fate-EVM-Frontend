@@ -116,23 +116,6 @@ html:not(.dark) {
 }
 
 /* Add these to your global CSS */
-.mode-toggle-button {
-  border-radius: 50px;
-  width: 3rem;
-}
-
-.mode-toggle-button-dark {
-  background-color: #000000;
-  border: 2px solid white;
-  color: white;
-}
-
-.mode-toggle-button-light {
-  background-color: white;
-  border: 2px solid black;
-  color: black;
-}
-
 .mode-toggle-icon {
   height: 1.2rem;
   width: 1.5rem;

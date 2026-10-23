@@ -11,10 +11,9 @@ export function ModeToggle() {
     return (
         <Button
             size="icon"
-            className={`mode-toggle-button ${resolvedTheme === "dark"
-                    ? "mode-toggle-button-dark"
-                    : "mode-toggle-button-light"
-                }`}
+            aria-label="Toggle theme"
+            // Same look as the settings button beside it; replaces the Button default hover, which matches the icon colour.
+            className="h-9 w-12 rounded-full border-2 border-black bg-white text-black shadow-none hover:bg-neutral-100 dark:border-white dark:bg-black dark:text-white dark:hover:bg-neutral-900"
             onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
         >
             {resolvedTheme === "dark" ? (
