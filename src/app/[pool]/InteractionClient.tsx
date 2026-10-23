@@ -2002,30 +2002,30 @@ export default function InteractionClient() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 mb-4 md:mb-6">
                     {/* Bull Token */}
                     <div className="space-y-2">
-                      <h5 className="font-bold text-sm md:text-base text-green-600 dark:text-green-400">Bull Token (BULL)</h5>
+                      <h5 className="font-bold text-sm md:text-base text-green-600 dark:text-green-400">Bull Token ({poolData.bull_token.fields.symbol})</h5>
                       <div className="text-xs md:text-sm">
                         <div className="flex justify-between">
                           <span className="text-neutral-600 dark:text-neutral-400">Current price:</span>
                           <span className="font-medium text-right">{calculations.bullPrice.toFixed(4)} {poolData.base_symbol}</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-neutral-600 dark:text-neutral-400">Underlying asset:</span>
-                          <span className="font-medium">BULL</span>
+                          <span className="text-neutral-600 dark:text-neutral-400">Base token:</span>
+                          <span className="font-medium">{poolData.base_symbol}</span>
                         </div>
                       </div>
                     </div>
 
                     {/* Bear Token */}
                     <div className="space-y-2">
-                      <h5 className="font-bold text-sm md:text-base text-red-600 dark:text-red-400">Bear Token (BEAR)</h5>
+                      <h5 className="font-bold text-sm md:text-base text-red-600 dark:text-red-400">Bear Token ({poolData.bear_token.fields.symbol})</h5>
                       <div className="text-xs md:text-sm">
                         <div className="flex justify-between">
                           <span className="text-neutral-600 dark:text-neutral-400">Current price:</span>
                           <span className="font-medium text-right">{calculations.bearPrice.toFixed(4)} {poolData.base_symbol}</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-neutral-600 dark:text-neutral-400">Underlying asset:</span>
-                          <span className="font-medium">BEAR</span>
+                          <span className="text-neutral-600 dark:text-neutral-400">Base token:</span>
+                          <span className="font-medium">{poolData.base_symbol}</span>
                         </div>
                       </div>
                     </div>

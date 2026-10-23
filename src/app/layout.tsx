@@ -31,8 +31,7 @@ export const metadata: Metadata = {
     "cryptocurrency trading",
     "perpetual pools",
     "leverage",
-    "oracles",
-    "Ethereum"
+    "oracles"
   ],
   authors: [{ name: "Fate Protocol Team" }],
   creator: "Fate Protocol",

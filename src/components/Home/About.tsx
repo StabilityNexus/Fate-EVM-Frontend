@@ -79,9 +79,9 @@ export default function AboutSection() {
 
         {/* Meaningful Outro Statement */}
         <div className="mt-20 text-center text-black dark:text-white text-md md:text-lg">
-          <p>
-            *In a world of uncertainty, we provide clarity — empowering you to
-            predict, protect, and prosper.*
+          <p className="italic">
+            In a world of uncertainty, we provide clarity — empowering you to
+            predict, protect, and prosper.
           </p>
         </div>
 
