@@ -1710,6 +1710,10 @@ export default function InteractionClient() {
   const underlyingPriceFeedAddress = underlyingPriceFeedData?.[0]?.result as Address;
   const oracleAddress = underlyingPriceFeedAddress || poolData.oracle_address || '';
   const priceFeedName = getPriceFeedName(oracleAddress, chainId);
+  // An oracle outside the feed list (e.g. the sentiment adapter) has no market to chart.
+  // Until the feed read returns, every pool looks like that, so wait for it first.
+  const hasPriceFeed = priceFeedName !== "Unknown";
+  const isCustomOracle = !hasPriceFeed && underlyingPriceFeedData !== undefined;
   // The native toggle exists only on a wrapped-native pool with a helper deployed on its chain.
   const wrappedNative = WrappedNatives[chainId];
   const nativeAvailable = !!wrappedNative && !!NativeHelpers[chainId]
@@ -1853,7 +1857,7 @@ export default function InteractionClient() {
 
               <div className="flex items-center space-x-2">
                 <span className="text-sm font-medium text-neutral-600 dark:text-neutral-400">
-                  Price: {priceFeedName || "N/A"}
+                  Price: {hasPriceFeed ? priceFeedName : isCustomOracle ? "Custom oracle" : "Loading..."}
                 </span>
                 <span className="text-sm font-medium text-neutral-600 dark:text-neutral-400">
                   |
@@ -1998,11 +2002,17 @@ export default function InteractionClient() {
           <div className="lg:col-span-2">
             <div className="border rounded-xl border-black dark:border-neutral-600 bg-white dark:bg-neutral-900 shadow-sm">
               <div className="p-6">
-                <TradingViewWidget
-                  assetId={asset.coinId}
-                  theme={theme === "dark" ? "dark" : "light"}
-                  heightPx={453}
-                />
+                {hasPriceFeed ? (
+                  <TradingViewWidget
+                    assetId={asset.coinId}
+                    theme={theme === "dark" ? "dark" : "light"}
+                    heightPx={453}
+                  />
+                ) : (
+                  <div className="flex h-[453px] items-center justify-center rounded-lg border border-dashed border-neutral-300 p-6 text-center text-sm text-neutral-600 dark:border-neutral-700 dark:text-neutral-400">
+                    {isCustomOracle ? "This pool uses a custom oracle, so there is no market chart for it." : "Loading chart..."}
+                  </div>
+                )}
 
                 <div className="mt-6 p-4 md:p-6 border rounded-xl border-black dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800">
                   <h4 className="font-bold mb-3 text-sm md:text-lg text-neutral-900 dark:text-white">
