@@ -1569,7 +1569,7 @@ export default function InteractionClient() {
   }, [pool?.id?.id, loading, queryClient]);
 
   const { writeContractAsync, isPending, data: rebalanceHash } = useWriteContract();
-  const { isLoading: isConfirming, isSuccess: isRebalanceConfirmed, data: rebalanceReceipt } = useWaitForTransactionReceipt({ hash: rebalanceHash });
+  const { isLoading: isConfirming, isSuccess: isRebalanceConfirmed, isError: isRebalanceFailed, data: rebalanceReceipt } = useWaitForTransactionReceipt({ hash: rebalanceHash });
   const isTransactionPending = isPending || isConfirming;
 
   const handleDistribute = async () => {
@@ -1776,6 +1776,14 @@ export default function InteractionClient() {
 
     }
   }, [isRebalanceConfirmed, isTransactionPending, queryClient, rebalanceHash, rebalanceReceipt, poolId]);
+
+  // A rebalance that reverts on-chain must release the button and say so.
+  useEffect(() => {
+    if (isRebalanceFailed) {
+      toast.error('Rebalance failed on-chain.');
+      setIsDistributeLoading(false);
+    }
+  }, [isRebalanceFailed]);
 
   useEffect(() => {
     const handleVisibilityChange = () => {
