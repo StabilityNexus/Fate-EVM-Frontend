@@ -30,7 +30,7 @@ import { Input } from '@/components/ui/input';
 import { Loading } from '@/components/ui/loading';
 import { formatNumber, formatNumberDown } from '@/utils/format';
 import { validateTransactionInput } from '@/lib/validation';
-import { withErrorHandling, createTransactionError } from '@/lib/errorHandler';
+import { withErrorHandling, createTransactionError, getShortErrorMessage } from '@/lib/errorHandler';
 import { estimateBuy, DENOMINATOR, type BuyQuoteFailure } from '@/lib/estimateBuy';
 import { estimateSell, type SellQuoteFailure } from '@/lib/estimateSell';
 import { applySlippage, isSlippageError, SLIPPAGE_LABEL, SLIPPAGE_MESSAGE } from '@/lib/slippage';
@@ -615,7 +615,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
           toast.info('Transaction cancelled in wallet.');
         }
       } else {
-        const message = isSlippageError(err) ? SLIPPAGE_MESSAGE : (err as Error).message || "Failed to buy tokens";
+        const message = isSlippageError(err) ? SLIPPAGE_MESSAGE : getShortErrorMessage(err, "Failed to buy tokens");
         if (currentToastId !== null) {
           toast.error(message, { id: currentToastId });
         } else {
@@ -681,7 +681,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
         if (isUserRejectedError(err)) {
           toast.info('Approval cancelled in wallet.', { id: approvalToast });
         } else {
-          toast.error((err as Error).message || 'Approval failed', { id: approvalToast });
+          toast.error(getShortErrorMessage(err, 'Approval failed'), { id: approvalToast });
         }
         pendingTransactionToastIdRef.current = null;
         return;
@@ -788,7 +788,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
           toast.info('Transaction cancelled in wallet.');
         }
       } else {
-        const message = isSlippageError(err) ? SLIPPAGE_MESSAGE : (err as Error).message || 'Failed to sell tokens';
+        const message = isSlippageError(err) ? SLIPPAGE_MESSAGE : getShortErrorMessage(err, 'Failed to sell tokens');
         if (currentToastId !== null) {
           toast.error(message, { id: currentToastId });
         } else {
@@ -873,7 +873,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
 
       if (pendingApproval) {
         // Approval reverted on-chain
-        const errorMsg = receiptError?.message || 'Token approval failed on-chain.';
+        const errorMsg = getShortErrorMessage(receiptError, 'Token approval failed on-chain.');
         if (currentToastId !== null) {
           toast.error(errorMsg, { id: currentToastId });
         } else {
@@ -884,7 +884,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
         // Buy/sell reverted on-chain
         const errorMsg = isSlippageError(receiptError)
           ? SLIPPAGE_MESSAGE
-          : receiptError?.message || 'Transaction failed on-chain.';
+          : getShortErrorMessage(receiptError, 'Transaction failed on-chain.');
         if (currentToastId !== null) {
           toast.error(errorMsg, { id: currentToastId });
         } else {
