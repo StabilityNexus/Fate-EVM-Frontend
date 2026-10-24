@@ -31,8 +31,7 @@ export const metadata: Metadata = {
     "cryptocurrency trading",
     "perpetual pools",
     "leverage",
-    "oracles",
-    "Ethereum"
+    "oracles"
   ],
   authors: [{ name: "Fate Protocol Team" }],
   creator: "Fate Protocol",
@@ -87,25 +86,6 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <head>
         <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              (function() {
-                try {
-                  var theme = localStorage.getItem('theme') || 'system';
-                  var systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-                  var finalTheme = theme === 'system' ? systemTheme : theme;
-                  
-                  if (finalTheme === 'dark') {
-                    document.documentElement.classList.add('dark');
-                  } else {
-                    document.documentElement.classList.remove('dark');
-                  }
-                } catch (e) {}
-              })();
-            `,
-          }}
-        />
-        <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
             __html: JSON.stringify({
@@ -157,7 +137,7 @@ export default function RootLayout({
             </ErrorBoundary>
           </main>
           
-          <FooterWrapper className="pb-20 lg:pb-4" />
+          <FooterWrapper className="pb-4 max-[900px]:pb-20" />
           </ClientProviders>
         </ErrorBoundary>
       </body>

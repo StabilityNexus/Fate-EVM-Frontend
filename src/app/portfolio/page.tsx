@@ -78,6 +78,12 @@ const BEAR_COLORS = [
   "#6b7280", // gray-500
 ];
 
+// 4 decimals everywhere on this page, and never "-0.0000" for a loss too small to show.
+const fixed4 = (n: number): string => {
+  const s = n.toFixed(4);
+  return s === "-0.0000" ? "0.0000" : s;
+};
+
 const BULL_COLORS = [
   "#4b5563", // gray-600
   "#374151", // gray-700
@@ -877,7 +883,7 @@ const HistoricalInvestmentsTable: React.FC<{
                       Amount Invested
                     </div>
                     <div className="text-lg font-semibold text-neutral-900 dark:text-neutral-100">
-                      {pool.totalCostBasis.toFixed(4)} {pool.baseTokenSymbol}
+                      {fixed4(pool.totalCostBasis)} {pool.baseTokenSymbol}
                     </div>
                     {/* Omit stale USD conversion; show only base asset */}
                   </div>
@@ -891,7 +897,7 @@ const HistoricalInvestmentsTable: React.FC<{
                       ? 'text-green-600 dark:text-green-400'
                       : 'text-red-600 dark:text-red-400'
                       }`}>
-                      {pool.totalPnL >= 0 ? '+' : ''}{pool.totalPnL.toFixed(4)} {pool.baseTokenSymbol}
+                      {pool.totalPnL >= 0 ? '+' : ''}{fixed4(pool.totalPnL)} {pool.baseTokenSymbol}
                     </div>
                     <div className="flex items-center justify-end space-x-2">
                       <div className={`text-sm ${pool.totalPnL >= 0
@@ -948,7 +954,7 @@ const HistoricalInvestmentsTable: React.FC<{
             <div>
               <div className="text-xs text-neutral-500 dark:text-neutral-400">Total Invested</div>
               <div className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
-                {historicalPools.reduce((sum, pool) => sum + pool.totalCostBasis, 0).toFixed(4)} {historicalPools[0]?.baseTokenSymbol || 'UNKNOWN'}
+                {fixed4(historicalPools.reduce((sum, pool) => sum + pool.totalCostBasis, 0))} {historicalPools[0]?.baseTokenSymbol || 'UNKNOWN'}
               </div>
             </div>
             <div>
@@ -958,7 +964,7 @@ const HistoricalInvestmentsTable: React.FC<{
                 : 'text-red-600 dark:text-red-400'
                 }`}>
                 {historicalPools.reduce((sum, pool) => sum + pool.totalPnL, 0) >= 0 ? '+' : ''}
-                {historicalPools.reduce((sum, pool) => sum + pool.totalPnL, 0).toFixed(4)} {historicalPools[0]?.baseTokenSymbol || 'UNKNOWN'}
+                {fixed4(historicalPools.reduce((sum, pool) => sum + pool.totalPnL, 0))} {historicalPools[0]?.baseTokenSymbol || 'UNKNOWN'}
               </div>
             </div>
           </div>
@@ -1163,7 +1169,7 @@ const PositionCard = ({ pool }: { pool: PoolData }) => {
           </div>
           {pool.bullCurrentValue === 0 && pool.bullPnL !== 0 && (
             <div className="text-xs text-orange-600 dark:text-orange-400">
-              Sold - P&L: {pool.bullPnL >= 0 ? '+' : ''}{pool.bullPnL.toFixed(4)} {pool.baseTokenSymbol}
+              Sold - P&L: {pool.bullPnL >= 0 ? '+' : ''}{fixed4(pool.bullPnL)} {pool.baseTokenSymbol}
             </div>
           )}
           {pool.bullCurrentValue > 0 && (
@@ -1190,7 +1196,7 @@ const PositionCard = ({ pool }: { pool: PoolData }) => {
           </div>
           {pool.bearCurrentValue === 0 && pool.bearPnL !== 0 && (
             <div className="text-xs text-orange-600 dark:text-orange-400">
-              Sold - P&L: {pool.bearPnL >= 0 ? '+' : ''}{pool.bearPnL.toFixed(4)} {pool.baseTokenSymbol}
+              Sold - P&L: {pool.bearPnL >= 0 ? '+' : ''}{fixed4(pool.bearPnL)} {pool.baseTokenSymbol}
             </div>
           )}
           {pool.bearCurrentValue > 0 && (
@@ -1297,7 +1303,7 @@ const PositionChart = ({
               <div className="text-lg mb-2">Minimal Value</div>
               <div className="text-sm">Your {type} positions have very small values</div>
               <div className="text-xs mt-2 opacity-75">
-                Total: {totalValue.toFixed(6)} {data[0]?.baseTokenSymbol || 'UNKNOWN'}
+                Total: {fixed4(totalValue)} {data[0]?.baseTokenSymbol || 'UNKNOWN'}
               </div>
             </div>
           </div>

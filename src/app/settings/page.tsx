@@ -47,6 +47,8 @@ const COUNTED_STORES = [
   { store: "poolDetails", label: "pools" },
 ] as const;
 
+const CACHE_CLEARED_KEY = "fate-cache-cleared";
+
 const asError = (error: unknown): Error =>
   error instanceof Error ? error : new Error(String(error));
 
@@ -107,12 +109,21 @@ export default function SettingsPage() {
     if (isCacheReady) refreshCounts();
   }, [isCacheReady, refreshCounts]);
 
+  useEffect(() => {
+    try {
+      if (!sessionStorage.getItem(CACHE_CLEARED_KEY)) return;
+      sessionStorage.removeItem(CACHE_CLEARED_KEY);
+      toast.success("Local cache cleared. Pool and portfolio data will be re-read from the chain.");
+    } catch {}
+  }, []);
+
   const handleClearCache = async () => {
     setIsClearing(true);
     try {
       await clearAllData();
-      toast.success("Local cache cleared. Pool and portfolio data will be re-read from the chain.");
-      // Nothing on the page should keep showing rows that no longer exist.
+      // Nothing on the page should keep showing rows that no longer exist. A reload swallows a toast, so the
+      // confirmation is shown on the next load.
+      try { sessionStorage.setItem(CACHE_CLEARED_KEY, "1"); } catch {}
       window.location.reload();
     } catch (error) {
       logger.error("Settings: clear cache failed", asError(error));

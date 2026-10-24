@@ -146,7 +146,7 @@ const PoolConfigurationStep: React.FC<PoolConfigurationStepProps> = ({
                 </TooltipTrigger>
                 <TooltipContent className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400">
                   <p className="w-64 text-sm">
-                    The contract address of the token used for vault reserves (e.g., USDT, USDC). 
+                    The contract address of the token that backs both coins (e.g., USDT, USDC). 
                     You can select from popular tokens or enter a custom address.
                   </p>
                 </TooltipContent>
@@ -374,9 +374,6 @@ const PoolConfigurationStep: React.FC<PoolConfigurationStepProps> = ({
                 Chainlink
               </span>
             </div>
-            <p className="text-sm text-gray-600 dark:text-gray-400 hidden md:block">
-              🟢 Chainlink provides reliable price feeds across most networks
-            </p>
           </div>
         </div>
 

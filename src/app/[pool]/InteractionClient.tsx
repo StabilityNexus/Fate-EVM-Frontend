@@ -20,6 +20,7 @@ import { IOracleABI } from '@/utils/abi/IOracle';
 import { ChainlinkOracleABI } from '@/utils/abi/ChainlinkOracle';
 import { NativeCurrencyHelperABI } from '@/utils/abi/NativeCurrencyHelper';
 import { toast } from 'sonner';
+import { useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { getPriceFeedName, CHAIN_PRICE_FEED_OPTIONS } from '@/utils/supportedChainFeed';
@@ -329,7 +330,7 @@ const formatBase = (v: bigint, decimals: number) => formatAmount(v, decimals);
 const formatCoin = (v: bigint) => formatAmount(v, 18);
 const formatPrice = (v: bigint) => formatAmount(v, PRICE_DECIMALS);
 
-function VaultSection({ isBull, poolData, userTokens, price, value, symbol, connected, handlePoll, reserve, supply, tokenAddress, baseDecimals, baseSymbol, payNative }: {
+function VaultSection({ isBull, poolData, userTokens, price, value, symbol, connected, reserve, supply, tokenAddress, baseDecimals, baseSymbol, payNative }: {
   isBull: boolean;
   poolData: {
     id: { id: string };
@@ -362,7 +363,6 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
   value: number;
   symbol: string;
   connected: boolean;
-  handlePoll: () => void;
   reserve: number;
   supply: number;
   tokenAddress: string;
@@ -442,7 +442,8 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
     }
   });
 
-  const { data: nativeBalance, refetch: refetchNativeBalance } = useBalance({
+  const queryClient = useQueryClient();
+  const { data: nativeBalance } = useBalance({
     address,
     query: { enabled: !!address && nativeAvailable },
   });
@@ -652,7 +653,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
 
     const spendable = useNative ? (nativeBalance?.value ?? BigInt(0)) : (baseTokenBalance || BigInt(0));
     if (spendable < amountWei) {
-      const errorMessage = `Insufficient balance. You have ${formatUnits(spendable, baseDecimals)} ${spendSymbol} available.`;
+      const errorMessage = `Insufficient balance. You have ${formatBase(spendable, baseDecimals)} ${spendSymbol} available.`;
       toast.error(errorMessage);
       throw createTransactionError(errorMessage);
     }
@@ -709,7 +710,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
 
       // Check user's token balance
       if (userTokens < amountWei) {
-        toast.error(`Insufficient ${symbol} balance. You have ${formatUnits(userTokens, 18)} ${symbol} available.`);
+        toast.error(`Insufficient ${symbol} balance. You have ${formatCoin(userTokens)} ${symbol} available.`);
         return;
       }
 
@@ -850,11 +851,13 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
         // Clear input fields on confirmed success
         setBuyAmount('');
         setSellAmount('');
-        handlePoll();
-        if (nativeAvailable) refetchNativeBalance();
+        // Re-read every balance, supply and reserve on the page, not only the pool details.
+        queryClient.invalidateQueries({
+          predicate: (query) => ['readContract', 'readContracts', 'balance'].includes(query.queryKey[0] as string),
+        });
       }
     }
-  }, [isConfirmed, isTransactionPending, pendingApproval, pendingTransactionType, handlePoll, handleBuyTransaction, poolData.id.id, symbol, nativeAvailable, refetchNativeBalance]);
+  }, [isConfirmed, isTransactionPending, pendingApproval, pendingTransactionType, handleBuyTransaction, poolData.id.id, symbol, queryClient]);
 
   // Handle on-chain transaction failure (reverted tx)
   useEffect(() => {
@@ -1155,7 +1158,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
 
               <Button
                 onClick={() => handleSell()}
-                className="w-full bg-gray-100 hover:bg-gray-200 text-black border border-gray-300"
+                className="w-full bg-gray-100 hover:bg-gray-200 text-black border border-gray-300 dark:bg-neutral-800 dark:hover:bg-neutral-700 dark:text-white dark:border-neutral-600"
                 disabled={!sellAmount || !connected || isTrading || sellPaysNothing}
               >
                 {isTrading ? 'Processing...' : `Sell ${symbol} Tokens`}
@@ -1178,7 +1181,8 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
 
 export default function InteractionClient() {
   // const stickyRef = useRef<HTMLElement | null>(null);
-  const { theme } = useTheme();
+  // resolvedTheme, so a dark system theme counts as dark too.
+  const { resolvedTheme: theme } = useTheme();
   const params = useSearchParams();
   const { address, isConnected, chain } = useAccount(); // eslint-disable-line @typescript-eslint/no-unused-vars
   // Validate poolId from query params - don't default to zero address
@@ -1934,20 +1938,20 @@ export default function InteractionClient() {
                       className="h-2 transition-all duration-500 ease-in-out"
                       style={{
                         width: `${calculations.bullPercentage}%`,
-                        backgroundColor: theme === "dark" ? "#111" : "#333",
+                        backgroundColor: theme === "dark" ? "#f5f5f5" : "#333",
                       }}
                     ></div>
                     <div
                       className="h-2 transition-all duration-500 ease-in-out"
                       style={{
                         width: `${calculations.bearPercentage}%`,
-                        backgroundColor: theme === "dark" ? "gray-500" : "#fff",
+                        backgroundColor: theme === "dark" ? "#737373" : "#fff",
                         borderLeft: theme === "dark" ? "1px solid #888" : "1px solid #ddd",
                       }}
                     ></div>
                   </div>
                   <div className="flex justify-between w-full text-xs font-medium">
-                    <span className={`text-black transition-colors duration-300 ${changes.bull_reserve ? "font-bold" : ""}`}>
+                    <span className={`text-black dark:text-white transition-colors duration-300 ${changes.bull_reserve ? "font-bold" : ""}`}>
                       {calculations.bullPercentage.toFixed(1)}% Bull
                     </span>
                     <span className={`text-gray-500 dark:text-white transition-colors duration-300 ${changes.bear_reserve ? "font-bold" : ""}`}>
@@ -1969,7 +1973,6 @@ export default function InteractionClient() {
             value={calculations.userBullValue}
             symbol={poolData.bull_token.fields.symbol}
             connected={isConnected}
-            handlePoll={handlePoll}
             reserve={calculations.bullReserveNum}
             supply={calculations.bullSupplyNum}
             tokenAddress={poolData.bull_token.id}
@@ -1999,30 +2002,30 @@ export default function InteractionClient() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 mb-4 md:mb-6">
                     {/* Bull Token */}
                     <div className="space-y-2">
-                      <h5 className="font-bold text-sm md:text-base text-green-600 dark:text-green-400">Bull Token (BULL)</h5>
+                      <h5 className="font-bold text-sm md:text-base text-green-600 dark:text-green-400">Bull Token ({poolData.bull_token.fields.symbol})</h5>
                       <div className="text-xs md:text-sm">
                         <div className="flex justify-between">
                           <span className="text-neutral-600 dark:text-neutral-400">Current price:</span>
                           <span className="font-medium text-right">{calculations.bullPrice.toFixed(4)} {poolData.base_symbol}</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-neutral-600 dark:text-neutral-400">Underlying asset:</span>
-                          <span className="font-medium">BULL</span>
+                          <span className="text-neutral-600 dark:text-neutral-400">Base token:</span>
+                          <span className="font-medium">{poolData.base_symbol}</span>
                         </div>
                       </div>
                     </div>
 
                     {/* Bear Token */}
                     <div className="space-y-2">
-                      <h5 className="font-bold text-sm md:text-base text-red-600 dark:text-red-400">Bear Token (BEAR)</h5>
+                      <h5 className="font-bold text-sm md:text-base text-red-600 dark:text-red-400">Bear Token ({poolData.bear_token.fields.symbol})</h5>
                       <div className="text-xs md:text-sm">
                         <div className="flex justify-between">
                           <span className="text-neutral-600 dark:text-neutral-400">Current price:</span>
                           <span className="font-medium text-right">{calculations.bearPrice.toFixed(4)} {poolData.base_symbol}</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-neutral-600 dark:text-neutral-400">Underlying asset:</span>
-                          <span className="font-medium">BEAR</span>
+                          <span className="text-neutral-600 dark:text-neutral-400">Base token:</span>
+                          <span className="font-medium">{poolData.base_symbol}</span>
                         </div>
                       </div>
                     </div>
@@ -2122,7 +2125,6 @@ export default function InteractionClient() {
             value={calculations.userBearValue}
             symbol={poolData.bear_token.fields.symbol}
             connected={isConnected}
-            handlePoll={handlePoll}
             reserve={calculations.bearReserveNum}
             supply={calculations.bearSupplyNum}
             tokenAddress={poolData.bear_token.id}
