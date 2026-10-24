@@ -449,7 +449,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
   });
 
   // Get allowance for the token
-  const { data: allowanceData } = useReadContracts({
+  const { data: allowanceData, refetch: refetchAllowance } = useReadContracts({
     contracts: address && poolData?.asset_address && tokenAddress ? [
       { address: poolData.asset_address as `0x${string}`, abi: ERC20ABI, functionName: 'allowance', args: [address as `0x${string}`, tokenAddress as `0x${string}`] },
     ] : [],
@@ -459,13 +459,14 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
   });
 
   useEffect(() => {
-    if (baseTokenBalanceData?.[0]?.result) {
+    // A zero result is real (all spent or sold), so only a missing one keeps the old value.
+    if (baseTokenBalanceData?.[0]?.result !== undefined) {
       setBaseTokenBalance(baseTokenBalanceData[0].result as bigint);
     }
   }, [baseTokenBalanceData]);
 
   useEffect(() => {
-    if (allowanceData?.[0]?.result) {
+    if (allowanceData?.[0]?.result !== undefined) {
       setAllowance(allowanceData[0].result as bigint);
     }
   }, [allowanceData]);
@@ -828,6 +829,8 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
         } else {
           toast.success('Approval confirmed. Submitting buy transaction...');
         }
+        // If the follow-up buy is cancelled, the next one must still see the new allowance.
+        refetchAllowance();
         // Only a WETH buy needs approval, so the follow-up stays on WETH even if the toggle moved.
         handleBuyTransaction(pendingApproval.amount, false);
       } else {
@@ -857,7 +860,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
         });
       }
     }
-  }, [isConfirmed, isTransactionPending, pendingApproval, pendingTransactionType, handleBuyTransaction, poolData.id.id, symbol, queryClient]);
+  }, [isConfirmed, isTransactionPending, pendingApproval, pendingTransactionType, handleBuyTransaction, poolData.id.id, symbol, queryClient, refetchAllowance]);
 
   // Handle on-chain transaction failure (reverted tx)
   useEffect(() => {
