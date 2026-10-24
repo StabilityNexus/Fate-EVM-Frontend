@@ -70,7 +70,7 @@ export default function CreateFatePool() {
     functionName: "devFee",
     query: { enabled: !!FatePoolFactories[currentChainId] },
   });
-  const devFeePercent = devFeeUnits === undefined ? undefined : (Number(devFeeUnits) / DENOMINATOR) * 100;
+  const devFeePercent = devFeeUnits === undefined ? undefined : Number(devFeeUnits) / (DENOMINATOR / 100);
   const publicClient = usePublicClient();
 
   const [currentStep, setCurrentStep] = useState(1);
@@ -81,7 +81,6 @@ export default function CreateFatePool() {
     writeContractAsync: deployPool,
     data: deployData,
     isPending: isSigning,
-    error: writeError,
     reset: resetWrite
   } = useWriteContract();
 
@@ -485,13 +484,6 @@ export default function CreateFatePool() {
       return () => clearTimeout(timer);
     }
       }, [isTransactionSuccess, deployData, receiptData, router]);
-
-  useEffect(() => {
-    if (writeError) {
-      toast.error(`Transaction failed: ${writeError.message}`);
-      setIsSubmitting(false);
-    }
-  }, [writeError]);
 
   useEffect(() => {
     if (receiptError) {

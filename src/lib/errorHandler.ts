@@ -215,6 +215,12 @@ export const getErrorDisplayMessage = (error: AppError): string => {
   return error.userMessage || error.message;
 };
 
+// viem's full message adds the call data, docs link and version, too long for a toast.
+export const getShortErrorMessage = (error: unknown, fallback: string): string => {
+  const e = error as { shortMessage?: string; message?: string } | undefined;
+  return e?.shortMessage || e?.message?.split('\n')[0] || fallback;
+};
+
 // Error reporting (for production monitoring)
 export const reportError = (error: AppError, additionalContext?: Record<string, unknown>) => {
   const errorReport = {

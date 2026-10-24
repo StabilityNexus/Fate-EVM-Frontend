@@ -18,6 +18,19 @@ export const formatTVL = (tvl: bigint, decimals: number, symbol: string): string
   return `${display} ${symbol}`;
 };
 
+const trimZeros = (s: string): string => s.replace(/\.?0+$/, "");
+
+// Traded volume in base-token units: up to 3 decimals, with the same K/M steps as formatTVL.
+export const formatVolume = (value: number, symbol: string): string => {
+  if (!isFinite(value) || value <= 0) return `0 ${symbol}`;
+  let display: string;
+  if (value >= 999_999.5) display = `${trimZeros((value / 1_000_000).toFixed(3))}M`;
+  else if (value >= 999.9995) display = `${trimZeros((value / 1_000).toFixed(3))}K`;
+  else if (value >= 0.001) display = trimZeros(value.toFixed(3));
+  else return `< 0.001 ${symbol}`;
+  return `${display} ${symbol}`;
+};
+
 // Number formatting utilities
 export const formatNumber = (n: number, decimals = 9): string => {
   if (!isFinite(n) || isNaN(n)) return "0";

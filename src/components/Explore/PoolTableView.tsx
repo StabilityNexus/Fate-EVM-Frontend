@@ -2,7 +2,7 @@ import React from "react";
 import { ExternalLink, TrendingUp, TrendingDown, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
 import type { Pool, PoolSortState, PoolSortField } from "@/lib/types";
 import { getPriceFeedName as getPriceFeedNameUtil } from "@/utils/supportedChainFeed";
-import { formatTVL, formatNumber } from "@/utils/format";
+import { formatTVL, formatVolume } from "@/utils/format";
 
 // Helper function to get oracle name/description
 const getOracleName = (oracleAddress: string, chainId: number): string =>
@@ -117,7 +117,7 @@ const PoolTableView: React.FC<PoolTableViewProps> = ({ pools, onUsePool, isConne
                   <div className="text-sm font-medium tabular-nums text-gray-900 dark:text-white">
                     {pool.volumeRecent === undefined
                       ? <span className="text-gray-400 dark:text-gray-500">—</span>
-                      : `${formatNumber(pool.volumeRecent)} ${pool.baseSymbol}`}
+                      : formatVolume(pool.volumeRecent, pool.baseSymbol)}
                   </div>
                 </td>
                 <td className="px-4 py-4 sm:px-6">

@@ -368,7 +368,7 @@ function ExploreFatePoolsClient() {
               baseDecimals,
               headBlock
             ).catch(() => undefined);
-            const pool: Pool = { id: addr, name: name as string, volumeRecent, baseToken: baseToken as Address, priceFeedAddress: underlyingPriceFeedAddress, oracleAddress: oracleAddress as Address, creator: vaultCreator as Address, bullPercentage: bullPercentage, bearPercentage: bearPercentage, bullToken: bull, bearToken: bear, chainId, chainName: chainConfig.name, vaultFee: Number(mintFee) / DENOMINATOR * 100, vaultCreatorFee: Number(creatorFee) / DENOMINATOR * 100, treasuryFee: Number(treasuryFee) / DENOMINATOR * 100, mintFee: Number(mintFee) / DENOMINATOR * 100, burnFee: Number(burnFee) / DENOMINATOR * 100, previous_price: BigInt(0), baseDecimals, baseSymbol, tvl };
+            const pool: Pool = { id: addr, name: name as string, volumeRecent, baseToken: baseToken as Address, priceFeedAddress: underlyingPriceFeedAddress, oracleAddress: oracleAddress as Address, creator: vaultCreator as Address, bullPercentage: bullPercentage, bearPercentage: bearPercentage, bullToken: bull, bearToken: bear, chainId, chainName: chainConfig.name, vaultFee: Number(mintFee) / (DENOMINATOR / 100), vaultCreatorFee: Number(creatorFee) / (DENOMINATOR / 100), treasuryFee: Number(treasuryFee) / (DENOMINATOR / 100), mintFee: Number(mintFee) / (DENOMINATOR / 100), burnFee: Number(burnFee) / (DENOMINATOR / 100), previous_price: BigInt(0), baseDecimals, baseSymbol, tvl };
             return pool;
           });
           const successfulPools = (await Promise.all(batchPromises)).filter((pool): pool is Pool => pool !== null);

@@ -20,6 +20,7 @@ import { IOracleABI } from '@/utils/abi/IOracle';
 import { ChainlinkOracleABI } from '@/utils/abi/ChainlinkOracle';
 import { NativeCurrencyHelperABI } from '@/utils/abi/NativeCurrencyHelper';
 import { toast } from 'sonner';
+import { useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { getPriceFeedName, CHAIN_PRICE_FEED_OPTIONS } from '@/utils/supportedChainFeed';
@@ -29,7 +30,7 @@ import { Input } from '@/components/ui/input';
 import { Loading } from '@/components/ui/loading';
 import { formatNumber, formatNumberDown } from '@/utils/format';
 import { validateTransactionInput } from '@/lib/validation';
-import { withErrorHandling, createTransactionError } from '@/lib/errorHandler';
+import { withErrorHandling, createTransactionError, getShortErrorMessage } from '@/lib/errorHandler';
 import { estimateBuy, DENOMINATOR, type BuyQuoteFailure } from '@/lib/estimateBuy';
 import { estimateSell, type SellQuoteFailure } from '@/lib/estimateSell';
 import { applySlippage, isSlippageError, SLIPPAGE_LABEL, SLIPPAGE_MESSAGE } from '@/lib/slippage';
@@ -51,6 +52,10 @@ const NATIVE_HELPER_CALL_ABI = [
   ...NativeCurrencyHelperABI,
   ...CoinABI.filter((item) => item.type === 'error'),
 ];
+
+// Every contract read and balance on the page, for a refresh after a trade, rebalance or click.
+const isPageRead = (query: { queryKey: readonly unknown[] }) =>
+  ['readContract', 'readContracts', 'balance'].includes(query.queryKey[0] as string);
 
 
 
@@ -329,7 +334,7 @@ const formatBase = (v: bigint, decimals: number) => formatAmount(v, decimals);
 const formatCoin = (v: bigint) => formatAmount(v, 18);
 const formatPrice = (v: bigint) => formatAmount(v, PRICE_DECIMALS);
 
-function VaultSection({ isBull, poolData, userTokens, price, value, symbol, connected, handlePoll, reserve, supply, tokenAddress, baseDecimals, baseSymbol, payNative }: {
+function VaultSection({ isBull, poolData, userTokens, price, value, symbol, connected, reserve, supply, tokenAddress, baseDecimals, baseSymbol, payNative }: {
   isBull: boolean;
   poolData: {
     id: { id: string };
@@ -362,7 +367,6 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
   value: number;
   symbol: string;
   connected: boolean;
-  handlePoll: () => void;
   reserve: number;
   supply: number;
   tokenAddress: string;
@@ -442,13 +446,14 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
     }
   });
 
-  const { data: nativeBalance, refetch: refetchNativeBalance } = useBalance({
+  const queryClient = useQueryClient();
+  const { data: nativeBalance } = useBalance({
     address,
     query: { enabled: !!address && nativeAvailable },
   });
 
   // Get allowance for the token
-  const { data: allowanceData } = useReadContracts({
+  const { data: allowanceData, refetch: refetchAllowance } = useReadContracts({
     contracts: address && poolData?.asset_address && tokenAddress ? [
       { address: poolData.asset_address as `0x${string}`, abi: ERC20ABI, functionName: 'allowance', args: [address as `0x${string}`, tokenAddress as `0x${string}`] },
     ] : [],
@@ -458,13 +463,14 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
   });
 
   useEffect(() => {
-    if (baseTokenBalanceData?.[0]?.result) {
+    // A zero result is real (all spent or sold), so only a missing one keeps the old value.
+    if (baseTokenBalanceData?.[0]?.result !== undefined) {
       setBaseTokenBalance(baseTokenBalanceData[0].result as bigint);
     }
   }, [baseTokenBalanceData]);
 
   useEffect(() => {
-    if (allowanceData?.[0]?.result) {
+    if (allowanceData?.[0]?.result !== undefined) {
       setAllowance(allowanceData[0].result as bigint);
     }
   }, [allowanceData]);
@@ -609,7 +615,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
           toast.info('Transaction cancelled in wallet.');
         }
       } else {
-        const message = isSlippageError(err) ? SLIPPAGE_MESSAGE : (err as Error).message || "Failed to buy tokens";
+        const message = isSlippageError(err) ? SLIPPAGE_MESSAGE : getShortErrorMessage(err, "Failed to buy tokens");
         if (currentToastId !== null) {
           toast.error(message, { id: currentToastId });
         } else {
@@ -652,7 +658,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
 
     const spendable = useNative ? (nativeBalance?.value ?? BigInt(0)) : (baseTokenBalance || BigInt(0));
     if (spendable < amountWei) {
-      const errorMessage = `Insufficient balance. You have ${formatUnits(spendable, baseDecimals)} ${spendSymbol} available.`;
+      const errorMessage = `Insufficient balance. You have ${formatBase(spendable, baseDecimals)} ${spendSymbol} available.`;
       toast.error(errorMessage);
       throw createTransactionError(errorMessage);
     }
@@ -675,7 +681,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
         if (isUserRejectedError(err)) {
           toast.info('Approval cancelled in wallet.', { id: approvalToast });
         } else {
-          toast.error((err as Error).message || 'Approval failed', { id: approvalToast });
+          toast.error(getShortErrorMessage(err, 'Approval failed'), { id: approvalToast });
         }
         pendingTransactionToastIdRef.current = null;
         return;
@@ -709,7 +715,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
 
       // Check user's token balance
       if (userTokens < amountWei) {
-        toast.error(`Insufficient ${symbol} balance. You have ${formatUnits(userTokens, 18)} ${symbol} available.`);
+        toast.error(`Insufficient ${symbol} balance. You have ${formatCoin(userTokens)} ${symbol} available.`);
         return;
       }
 
@@ -782,7 +788,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
           toast.info('Transaction cancelled in wallet.');
         }
       } else {
-        const message = isSlippageError(err) ? SLIPPAGE_MESSAGE : (err as Error).message || 'Failed to sell tokens';
+        const message = isSlippageError(err) ? SLIPPAGE_MESSAGE : getShortErrorMessage(err, 'Failed to sell tokens');
         if (currentToastId !== null) {
           toast.error(message, { id: currentToastId });
         } else {
@@ -827,6 +833,8 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
         } else {
           toast.success('Approval confirmed. Submitting buy transaction...');
         }
+        // If the follow-up buy is cancelled, the next one must still see the new allowance.
+        refetchAllowance();
         // Only a WETH buy needs approval, so the follow-up stays on WETH even if the toggle moved.
         handleBuyTransaction(pendingApproval.amount, false);
       } else {
@@ -850,11 +858,11 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
         // Clear input fields on confirmed success
         setBuyAmount('');
         setSellAmount('');
-        handlePoll();
-        if (nativeAvailable) refetchNativeBalance();
+        // Re-read every balance, supply and reserve on the page, not only the pool details.
+        queryClient.invalidateQueries({ predicate: isPageRead });
       }
     }
-  }, [isConfirmed, isTransactionPending, pendingApproval, pendingTransactionType, handlePoll, handleBuyTransaction, poolData.id.id, symbol, nativeAvailable, refetchNativeBalance]);
+  }, [isConfirmed, isTransactionPending, pendingApproval, pendingTransactionType, handleBuyTransaction, poolData.id.id, symbol, queryClient, refetchAllowance]);
 
   // Handle on-chain transaction failure (reverted tx)
   useEffect(() => {
@@ -865,7 +873,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
 
       if (pendingApproval) {
         // Approval reverted on-chain
-        const errorMsg = receiptError?.message || 'Token approval failed on-chain.';
+        const errorMsg = getShortErrorMessage(receiptError, 'Token approval failed on-chain.');
         if (currentToastId !== null) {
           toast.error(errorMsg, { id: currentToastId });
         } else {
@@ -876,7 +884,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
         // Buy/sell reverted on-chain
         const errorMsg = isSlippageError(receiptError)
           ? SLIPPAGE_MESSAGE
-          : receiptError?.message || 'Transaction failed on-chain.';
+          : getShortErrorMessage(receiptError, 'Transaction failed on-chain.');
         if (currentToastId !== null) {
           toast.error(errorMsg, { id: currentToastId });
         } else {
@@ -1155,7 +1163,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
 
               <Button
                 onClick={() => handleSell()}
-                className="w-full bg-gray-100 hover:bg-gray-200 text-black border border-gray-300"
+                className="w-full bg-gray-100 hover:bg-gray-200 text-black border border-gray-300 dark:bg-neutral-800 dark:hover:bg-neutral-700 dark:text-white dark:border-neutral-600"
                 disabled={!sellAmount || !connected || isTrading || sellPaysNothing}
               >
                 {isTrading ? 'Processing...' : `Sell ${symbol} Tokens`}
@@ -1178,14 +1186,16 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
 
 export default function InteractionClient() {
   // const stickyRef = useRef<HTMLElement | null>(null);
-  const { theme } = useTheme();
+  // resolvedTheme, so a dark system theme counts as dark too.
+  const { resolvedTheme: theme } = useTheme();
   const params = useSearchParams();
   const { address, isConnected, chain } = useAccount(); // eslint-disable-line @typescript-eslint/no-unused-vars
   // Validate poolId from query params - don't default to zero address
   const poolIdParam = params.get("id");
   const poolId = poolIdParam && isAddress(poolIdParam) ? (poolIdParam as Address) : undefined;
 
-  const { pool, userBalances, loading, error, refetch } = usePool(poolId, isConnected);
+  const { pool, userBalances, loading, error } = usePool(poolId, isConnected);
+  const queryClient = useQueryClient();
   const { data: walletClient } = useWalletClient();
 
   // Read oracle prices from prediction pool contract
@@ -1551,15 +1561,15 @@ export default function InteractionClient() {
     if (!pool?.id?.id || loading) return;
 
     try {
-      await refetch?.();
-      // setLastUpdateTime(new Date());
+      // The oracle prices and reserves are separate reads, so the pool details alone are not enough.
+      await queryClient.invalidateQueries({ predicate: isPageRead });
     } catch (err) {
       logger.error("Polling error:", err instanceof Error ? err : undefined);
     }
-  }, [pool?.id?.id, loading, refetch]);
+  }, [pool?.id?.id, loading, queryClient]);
 
   const { writeContractAsync, isPending, data: rebalanceHash } = useWriteContract();
-  const { isLoading: isConfirming, isSuccess: isRebalanceConfirmed, data: rebalanceReceipt } = useWaitForTransactionReceipt({ hash: rebalanceHash });
+  const { isLoading: isConfirming, isSuccess: isRebalanceConfirmed, isError: isRebalanceFailed, data: rebalanceReceipt } = useWaitForTransactionReceipt({ hash: rebalanceHash });
   const isTransactionPending = isPending || isConfirming;
 
   const handleDistribute = async () => {
@@ -1700,6 +1710,10 @@ export default function InteractionClient() {
   const underlyingPriceFeedAddress = underlyingPriceFeedData?.[0]?.result as Address;
   const oracleAddress = underlyingPriceFeedAddress || poolData.oracle_address || '';
   const priceFeedName = getPriceFeedName(oracleAddress, chainId);
+  // An oracle outside the feed list (e.g. the sentiment adapter) has no market to chart.
+  // Until the feed read returns, every pool looks like that, so wait for it first.
+  const hasPriceFeed = priceFeedName !== "Unknown";
+  const isCustomOracle = !hasPriceFeed && underlyingPriceFeedData !== undefined;
   // The native toggle exists only on a wrapped-native pool with a helper deployed on its chain.
   const wrappedNative = WrappedNatives[chainId];
   const nativeAvailable = !!wrappedNative && !!NativeHelpers[chainId]
@@ -1758,14 +1772,22 @@ export default function InteractionClient() {
       }
       logger.debug('Updated last rebalance time to current time:', { rebalanceTime: currentTime.toLocaleString() });
 
-      // Refetch pool data directly to ensure UI reflects new state, with a small delay for blockchain propagation
+      // Re-read the whole page, with a small delay for blockchain propagation
       setTimeout(async () => {
-        await refetch?.();
+        await queryClient.invalidateQueries({ predicate: isPageRead });
         logger.debug('Pool data refreshed after rebalance confirmation');
       }, 1000);
 
     }
-  }, [isRebalanceConfirmed, isTransactionPending, refetch, rebalanceHash, rebalanceReceipt, poolId]);
+  }, [isRebalanceConfirmed, isTransactionPending, queryClient, rebalanceHash, rebalanceReceipt, poolId]);
+
+  // A rebalance that reverts on-chain must release the button and say so.
+  useEffect(() => {
+    if (isRebalanceFailed) {
+      toast.error('Rebalance failed on-chain.');
+      setIsDistributeLoading(false);
+    }
+  }, [isRebalanceFailed]);
 
   useEffect(() => {
     const handleVisibilityChange = () => {
@@ -1835,7 +1857,7 @@ export default function InteractionClient() {
 
               <div className="flex items-center space-x-2">
                 <span className="text-sm font-medium text-neutral-600 dark:text-neutral-400">
-                  Price: {priceFeedName || "N/A"}
+                  Price: {hasPriceFeed ? priceFeedName : isCustomOracle ? "Custom oracle" : "Loading..."}
                 </span>
                 <span className="text-sm font-medium text-neutral-600 dark:text-neutral-400">
                   |
@@ -1934,20 +1956,20 @@ export default function InteractionClient() {
                       className="h-2 transition-all duration-500 ease-in-out"
                       style={{
                         width: `${calculations.bullPercentage}%`,
-                        backgroundColor: theme === "dark" ? "#111" : "#333",
+                        backgroundColor: theme === "dark" ? "#f5f5f5" : "#333",
                       }}
                     ></div>
                     <div
                       className="h-2 transition-all duration-500 ease-in-out"
                       style={{
                         width: `${calculations.bearPercentage}%`,
-                        backgroundColor: theme === "dark" ? "gray-500" : "#fff",
+                        backgroundColor: theme === "dark" ? "#737373" : "#fff",
                         borderLeft: theme === "dark" ? "1px solid #888" : "1px solid #ddd",
                       }}
                     ></div>
                   </div>
                   <div className="flex justify-between w-full text-xs font-medium">
-                    <span className={`text-black transition-colors duration-300 ${changes.bull_reserve ? "font-bold" : ""}`}>
+                    <span className={`text-black dark:text-white transition-colors duration-300 ${changes.bull_reserve ? "font-bold" : ""}`}>
                       {calculations.bullPercentage.toFixed(1)}% Bull
                     </span>
                     <span className={`text-gray-500 dark:text-white transition-colors duration-300 ${changes.bear_reserve ? "font-bold" : ""}`}>
@@ -1969,7 +1991,6 @@ export default function InteractionClient() {
             value={calculations.userBullValue}
             symbol={poolData.bull_token.fields.symbol}
             connected={isConnected}
-            handlePoll={handlePoll}
             reserve={calculations.bullReserveNum}
             supply={calculations.bullSupplyNum}
             tokenAddress={poolData.bull_token.id}
@@ -1981,11 +2002,17 @@ export default function InteractionClient() {
           <div className="lg:col-span-2">
             <div className="border rounded-xl border-black dark:border-neutral-600 bg-white dark:bg-neutral-900 shadow-sm">
               <div className="p-6">
-                <TradingViewWidget
-                  assetId={asset.coinId}
-                  theme={theme === "dark" ? "dark" : "light"}
-                  heightPx={453}
-                />
+                {hasPriceFeed ? (
+                  <TradingViewWidget
+                    assetId={asset.coinId}
+                    theme={theme === "dark" ? "dark" : "light"}
+                    heightPx={453}
+                  />
+                ) : (
+                  <div className="flex h-[453px] items-center justify-center rounded-lg border border-dashed border-neutral-300 p-6 text-center text-sm text-neutral-600 dark:border-neutral-700 dark:text-neutral-400">
+                    {isCustomOracle ? "This pool uses a custom oracle, so there is no market chart for it." : "Loading chart..."}
+                  </div>
+                )}
 
                 <div className="mt-6 p-4 md:p-6 border rounded-xl border-black dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800">
                   <h4 className="font-bold mb-3 text-sm md:text-lg text-neutral-900 dark:text-white">
@@ -1999,30 +2026,30 @@ export default function InteractionClient() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 mb-4 md:mb-6">
                     {/* Bull Token */}
                     <div className="space-y-2">
-                      <h5 className="font-bold text-sm md:text-base text-green-600 dark:text-green-400">Bull Token (BULL)</h5>
+                      <h5 className="font-bold text-sm md:text-base text-green-600 dark:text-green-400">Bull Token ({poolData.bull_token.fields.symbol})</h5>
                       <div className="text-xs md:text-sm">
                         <div className="flex justify-between">
                           <span className="text-neutral-600 dark:text-neutral-400">Current price:</span>
                           <span className="font-medium text-right">{calculations.bullPrice.toFixed(4)} {poolData.base_symbol}</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-neutral-600 dark:text-neutral-400">Underlying asset:</span>
-                          <span className="font-medium">BULL</span>
+                          <span className="text-neutral-600 dark:text-neutral-400">Base token:</span>
+                          <span className="font-medium">{poolData.base_symbol}</span>
                         </div>
                       </div>
                     </div>
 
                     {/* Bear Token */}
                     <div className="space-y-2">
-                      <h5 className="font-bold text-sm md:text-base text-red-600 dark:text-red-400">Bear Token (BEAR)</h5>
+                      <h5 className="font-bold text-sm md:text-base text-red-600 dark:text-red-400">Bear Token ({poolData.bear_token.fields.symbol})</h5>
                       <div className="text-xs md:text-sm">
                         <div className="flex justify-between">
                           <span className="text-neutral-600 dark:text-neutral-400">Current price:</span>
                           <span className="font-medium text-right">{calculations.bearPrice.toFixed(4)} {poolData.base_symbol}</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-neutral-600 dark:text-neutral-400">Underlying asset:</span>
-                          <span className="font-medium">BEAR</span>
+                          <span className="text-neutral-600 dark:text-neutral-400">Base token:</span>
+                          <span className="font-medium">{poolData.base_symbol}</span>
                         </div>
                       </div>
                     </div>
@@ -2122,7 +2149,6 @@ export default function InteractionClient() {
             value={calculations.userBearValue}
             symbol={poolData.bear_token.fields.symbol}
             connected={isConnected}
-            handlePoll={handlePoll}
             reserve={calculations.bearReserveNum}
             supply={calculations.bearSupplyNum}
             tokenAddress={poolData.bear_token.id}
