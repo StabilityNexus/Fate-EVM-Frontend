@@ -82,7 +82,6 @@ export default function CreateFatePool() {
   const [poolTxHash, setPoolTxHash] = useState<`0x${string}` | undefined>();
   const {
     writeContractAsync: deployPool,
-    data: deployData,
     isPending: isSigning,
     reset: resetWrite
   } = useWriteContract();
@@ -495,14 +494,6 @@ export default function CreateFatePool() {
       setIsSubmitting(false);
     }
   }, [receiptError]);
-
-  useEffect(() => {
-    if (!isSigning && isSubmitting && !isDeployingTx) {
-      if (!deployData) {
-        setIsSubmitting(false);
-      }
-    }
-  }, [isSigning, isSubmitting, isDeployingTx, deployData]);
 
   // useChainId stays on a configured chain when the wallet moves to another, so check the wallet itself.
   const deployedChainIds = SUPPORTED_CHAINS.filter((id) => FatePoolFactories[id]);
