@@ -83,6 +83,10 @@ const fixed4 = (n: number): string => {
   const s = n.toFixed(4);
   return s === "-0.0000" ? "0.0000" : s;
 };
+// The value as shown, so a loss too small to show is not signed or colored as a loss.
+const shown = (n: number, digits = 4): number => Number(n.toFixed(digits)) || 0;
+const closedReturn = (pool: { totalPnL: number; totalInvested: number }): number =>
+  pool.totalInvested > 0 ? (pool.totalPnL / pool.totalInvested) * 100 : 0;
 
 const BULL_COLORS = [
   "#4b5563", // gray-600
@@ -301,13 +305,13 @@ const calculateTokenMetricsWithEvents = async (
 
     for (const tx of sortedTxns) {
       if (tx.type === 'buy') {
-        // CORRECTED: Track net investment (excluding fees) as cost basis
+        // The cost includes the buy fee, as brokers count it; the sell side already receives after fees.
         const feePaid = (tx as any).feePaid || 0;
         const netInvestment = tx.amountAsset - feePaid; // Actual investment amount
 
         grossInvestment += tx.amountAsset; // Total paid (including fees)
         totalFeesPaid += feePaid;
-        totalCostBasis += netInvestment; // Net investment (excluding fees)
+        totalCostBasis += tx.amountAsset;
 
         // Track v4 aggregated metrics
         totalBought += tx.amountCoin;
@@ -351,8 +355,7 @@ const calculateTokenMetricsWithEvents = async (
           const oldestBuy = buyQueue[0];
           const amountFromThisBuy = Math.min(remainingToSell, oldestBuy.amount);
 
-          // CORRECTED: Use net amount (excluding fees) for cost basis calculation
-          const costPerToken = oldestBuy.netAmount / oldestBuy.initialAmount;
+          const costPerToken = oldestBuy.grossAmount / oldestBuy.initialAmount;
           costOfSold += amountFromThisBuy * costPerToken;
 
           remainingToSell -= amountFromThisBuy;
@@ -382,16 +385,16 @@ const calculateTokenMetricsWithEvents = async (
       }
     }
 
-    // Calculate remaining cost basis for current holdings (using net amounts)
+    // Calculate remaining cost basis for current holdings
     const remainingCostBasis = buyQueue.reduce((sum, buy) => {
-      const costPerToken = buy.netAmount / buy.initialAmount;
+      const costPerToken = buy.grossAmount / buy.initialAmount;
       return sum + buy.amount * costPerToken;
     }, 0);
 
     // FIFO Queue Validation: Ensure cost basis matches current holdings
     const queueTotalTokens = buyQueue.reduce((sum, buy) => sum + buy.amount, 0);
     const queueTotalCost = buyQueue.reduce((sum, buy) => {
-      const costPerToken = buy.netAmount / buy.initialAmount;
+      const costPerToken = buy.grossAmount / buy.initialAmount;
       return sum + buy.amount * costPerToken;
     }, 0);
 
@@ -752,7 +755,7 @@ const calculateTokenMetrics = (
     userTokens === 0 || avgPrice === 0 ? 0 : (pnL / costBasis) * 100;
 
   // This path never reads logs, so it has no history to be short of.
-  return { price, currentValue, costBasis, pnL, returns, costBasisUnavailable: false, historyIncomplete: false, historyTruncated: false };
+  return { price, currentValue, costBasis, pnL, returns, grossInvestment: costBasis, costBasisUnavailable: false, historyIncomplete: false, historyTruncated: false };
 };
 
 interface PoolData {
@@ -764,6 +767,9 @@ interface PoolData {
   bearCurrentValue: number;
   totalValue: number;
   totalCostBasis: number;
+  totalInvested: number;
+  bullInvested: number;
+  bearInvested: number;
   bullPnL: number;
   bearPnL: number;
   totalPnL: number;
@@ -883,7 +889,7 @@ const HistoricalInvestmentsTable: React.FC<{
                       Amount Invested
                     </div>
                     <div className="text-lg font-semibold text-neutral-900 dark:text-neutral-100">
-                      {fixed4(pool.totalCostBasis)} {pool.baseTokenSymbol}
+                      {fixed4(pool.totalInvested)} {pool.baseTokenSymbol}
                     </div>
                     {/* Omit stale USD conversion; show only base asset */}
                   </div>
@@ -893,20 +899,20 @@ const HistoricalInvestmentsTable: React.FC<{
                     <div className="text-xs text-neutral-500 dark:text-neutral-400 mb-1">
                       Total P&L
                     </div>
-                    <div className={`text-xl font-bold ${pool.totalPnL >= 0
+                    <div className={`text-xl font-bold ${shown(pool.totalPnL) >= 0
                       ? 'text-green-600 dark:text-green-400'
                       : 'text-red-600 dark:text-red-400'
                       }`}>
-                      {pool.totalPnL >= 0 ? '+' : ''}{fixed4(pool.totalPnL)} {pool.baseTokenSymbol}
+                      {shown(pool.totalPnL) > 0 ? '+' : ''}{fixed4(pool.totalPnL)} {pool.baseTokenSymbol}
                     </div>
                     <div className="flex items-center justify-end space-x-2">
-                      <div className={`text-sm ${pool.totalPnL >= 0
+                      <div className={`text-sm ${shown(pool.totalPnL) >= 0
                         ? 'text-green-600 dark:text-green-400'
                         : 'text-red-600 dark:text-red-400'
                         }`}>
-                        {pool.totalReturnPercentage >= 0 ? '+' : ''}{pool.totalReturnPercentage.toFixed(1)}%
+                        {shown(closedReturn(pool), 1) > 0 ? '+' : ''}{shown(closedReturn(pool), 1).toFixed(1)}%
                       </div>
-                      {pool.totalReturnPercentage >= 0 ? (
+                      {shown(closedReturn(pool), 1) >= 0 ? (
                         <TrendingUp className="h-4 w-4 text-green-500" />
                       ) : (
                         <TrendingDown className="h-4 w-4 text-red-500" />
@@ -954,16 +960,16 @@ const HistoricalInvestmentsTable: React.FC<{
             <div>
               <div className="text-xs text-neutral-500 dark:text-neutral-400">Total Invested</div>
               <div className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
-                {fixed4(historicalPools.reduce((sum, pool) => sum + pool.totalCostBasis, 0))} {historicalPools[0]?.baseTokenSymbol || 'UNKNOWN'}
+                {fixed4(historicalPools.reduce((sum, pool) => sum + pool.totalInvested, 0))} {historicalPools[0]?.baseTokenSymbol || 'UNKNOWN'}
               </div>
             </div>
             <div>
               <div className="text-xs text-neutral-500 dark:text-neutral-400">Net P&L</div>
-              <div className={`text-sm font-bold ${historicalPools.reduce((sum, pool) => sum + pool.totalPnL, 0) >= 0
+              <div className={`text-sm font-bold ${shown(historicalPools.reduce((sum, pool) => sum + pool.totalPnL, 0)) >= 0
                 ? 'text-green-600 dark:text-green-400'
                 : 'text-red-600 dark:text-red-400'
                 }`}>
-                {historicalPools.reduce((sum, pool) => sum + pool.totalPnL, 0) >= 0 ? '+' : ''}
+                {shown(historicalPools.reduce((sum, pool) => sum + pool.totalPnL, 0)) > 0 ? '+' : ''}
                 {fixed4(historicalPools.reduce((sum, pool) => sum + pool.totalPnL, 0))} {historicalPools[0]?.baseTokenSymbol || 'UNKNOWN'}
               </div>
             </div>
@@ -1104,19 +1110,19 @@ const PositionCard = ({ pool }: { pool: PoolData }) => {
             </div>
           ) : (
             <div
-              className={`text-xs font-medium px-2 py-1 rounded-full ${pool.totalPnL >= 0
+              className={`text-xs font-medium px-2 py-1 rounded-full ${shown(pool.totalPnL) >= 0
                 ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
                 : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
                 }`}
             >
-              {pool.totalPnL > 0 ? "+" : ""}
-              {pool.totalPnL.toLocaleString(undefined, {
+              {shown(pool.totalPnL) > 0 ? "+" : ""}
+              {shown(pool.totalPnL).toLocaleString(undefined, {
                 minimumFractionDigits: 0,
                 maximumFractionDigits: 4,
               })}{" "}
               {pool.baseTokenSymbol} (
               {pool.totalCostBasis > 0
-                ? ((pool.totalPnL / pool.totalCostBasis) * 100).toLocaleString(
+                ? shown((pool.totalPnL / pool.totalCostBasis) * 100, 2).toLocaleString(
                   undefined,
                   {
                     minimumFractionDigits: 0,
@@ -1169,7 +1175,7 @@ const PositionCard = ({ pool }: { pool: PoolData }) => {
           </div>
           {pool.bullCurrentValue === 0 && pool.bullPnL !== 0 && (
             <div className="text-xs text-orange-600 dark:text-orange-400">
-              Sold - P&L: {pool.bullPnL >= 0 ? '+' : ''}{fixed4(pool.bullPnL)} {pool.baseTokenSymbol}
+              Sold - P&L: {shown(pool.bullPnL) > 0 ? '+' : ''}{fixed4(pool.bullPnL)} {pool.baseTokenSymbol}
             </div>
           )}
           {pool.bullCurrentValue > 0 && (
@@ -1196,7 +1202,7 @@ const PositionCard = ({ pool }: { pool: PoolData }) => {
           </div>
           {pool.bearCurrentValue === 0 && pool.bearPnL !== 0 && (
             <div className="text-xs text-orange-600 dark:text-orange-400">
-              Sold - P&L: {pool.bearPnL >= 0 ? '+' : ''}{fixed4(pool.bearPnL)} {pool.baseTokenSymbol}
+              Sold - P&L: {shown(pool.bearPnL) > 0 ? '+' : ''}{fixed4(pool.bearPnL)} {pool.baseTokenSymbol}
             </div>
           )}
           {pool.bearCurrentValue > 0 && (
@@ -1634,11 +1640,13 @@ const EnhancedPoolDataLoader = ({
         bearMetrics = calculateTokenMetrics(bearReserve, bearSupply, userBearTokens, bearAvgPrice);
       }
 
+      // Fees are out of 100000, so 1% is 1000 units; Explore reads the cached value as a percent.
+      const feePercent = (units: unknown) => Number(units as bigint || BigInt(0)) / 1000;
       const fees = {
-        mintFee: Number(formatUnits(poolStaticData?.[7]?.result as bigint || BigInt(0), 4)),
-        burnFee: Number(formatUnits(poolStaticData?.[8]?.result as bigint || BigInt(0), 4)),
-        creatorFee: Number(formatUnits(poolStaticData?.[9]?.result as bigint || BigInt(0), 4)),
-        treasuryFee: Number(formatUnits(poolStaticData?.[10]?.result as bigint || BigInt(0), 4)),
+        mintFee: feePercent(poolStaticData?.[7]?.result),
+        burnFee: feePercent(poolStaticData?.[8]?.result),
+        creatorFee: feePercent(poolStaticData?.[9]?.result),
+        treasuryFee: feePercent(poolStaticData?.[10]?.result),
       };
 
       const poolData: PoolData = {
@@ -1650,6 +1658,9 @@ const EnhancedPoolDataLoader = ({
         bearCurrentValue: bearMetrics.currentValue,
         totalValue: bullMetrics.currentValue + bearMetrics.currentValue,
         totalCostBasis: bullMetrics.costBasis + bearMetrics.costBasis,
+        totalInvested: bullMetrics.grossInvestment + bearMetrics.grossInvestment,
+        bullInvested: bullMetrics.grossInvestment,
+        bearInvested: bearMetrics.grossInvestment,
         bullPnL: bullMetrics.pnL,
         bearPnL: bearMetrics.pnL,
         totalPnL: bullMetrics.pnL + bearMetrics.pnL,
@@ -1746,7 +1757,8 @@ const BalanceFilteredPoolLoader: React.FC<{
   onDataLoad: (data: PoolData) => void;
   onFilterComplete?: (count: number) => void;
   onAllSettled?: () => void;
-}> = ({ pools, userAddress, chainId, onDataLoad, onFilterComplete, onAllSettled }) => {
+  tradedPools: string[];
+}> = ({ pools, userAddress, chainId, onDataLoad, onFilterComplete, onAllSettled, tradedPools }) => {
   const [filteredPools, setFilteredPools] = useState<string[]>([]);
   const [isFiltering, setIsFiltering] = useState(true);
   const [settledCount, setSettledCount] = useState(0);
@@ -1758,6 +1770,7 @@ const BalanceFilteredPoolLoader: React.FC<{
     }
   }, [settledCount, filteredPools.length, isFiltering, onAllSettled]);
   useEffect(() => {
+    let cancelled = false;
     const filterPools = async () => {
       setSettledCount(0);
       if (!userAddress || pools.length === 0) {
@@ -1816,25 +1829,29 @@ const BalanceFilteredPoolLoader: React.FC<{
             };
           })
         );
-        // Filter to pools with balance
+        // A pool sold to zero is still loaded, so its last sell is scanned and it shows as closed.
+        if (cancelled) return;
+        const traded = new Set(tradedPools);
         const poolsWithBalance = balanceChecks
-          .filter(check => check && check.hasBalance)
+          .filter(check => check && (check.hasBalance || traded.has(check.poolAddress.toLowerCase())))
           .map(check => check!.poolAddress);
         console.log(`✅ Found ${poolsWithBalance.length} pools with balances out of ${pools.length} total`);
         
         setFilteredPools(poolsWithBalance);
         onFilterComplete?.(poolsWithBalance.length);
       } catch (error) {
+        if (cancelled) return;
         console.error('Balance filtering failed:', error);
         // Fallback: load all pools if filtering fails
         setFilteredPools(pools);
         onFilterComplete?.(pools.length);
       } finally {
-        setIsFiltering(false);
+        if (!cancelled) setIsFiltering(false);
       }
     };
     filterPools();
-  }, [pools, userAddress, chainId, onFilterComplete]);
+    return () => { cancelled = true; };
+  }, [pools, userAddress, chainId, onFilterComplete, tradedPools]);
   if (isFiltering) return null;
   return (
     <>
@@ -1869,8 +1886,24 @@ export default function PortfolioPage() {
   const {
     isInitialized: isDBInitialized,
     savePortfolioCache,
-    getPortfolioCache
+    getPortfolioCache,
+    getPortfolioTransactions
   } = useFatePoolsStorage();
+
+  const [tradedPools, setTradedPools] = useState<string[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    setTradedPools((prev) => (prev.length > 0 ? [] : prev));
+    if (!address || !chainId || !isDBInitialized) return;
+    getPortfolioTransactions(address, chainId as SupportedChainId)
+      .then((rows) => {
+        if (!cancelled) setTradedPools(Array.from(new Set(rows.map((row) => row.poolAddress.toLowerCase()))));
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [address, chainId, isDBInitialized, getPortfolioTransactions]);
+  const walletKeyRef = useRef("");
+  walletKeyRef.current = `${address}-${chainId}`;
 
   // Direct IndexedDB manager for pool details (more reliable)
   const [indexedDB, setIndexedDB] = useState<FatePoolsIndexedDBManager | null>(null);
@@ -1953,10 +1986,13 @@ export default function PortfolioPage() {
 
   // Efficient cache loading - load pool details from IndexedDB and combine with positions
   const loadCachedData = useCallback(async () => {
-    if (!address || !chainId || !isDBInitialized || !indexedDB || isLoadingFromBlockchain) return;
+    if (!address || !chainId || !isDBInitialized || !indexedDB) return;
+    const walletKey = `${address}-${chainId}`;
 
     try {
       const cachedData = await getPortfolioCache(address, chainId as SupportedChainId);
+      // Pools of an older factory are never refreshed, so their cached positions would stay forever.
+      const currentPools = new Set(availablePools.map((pool) => pool.toLowerCase()));
 
       // If we have fresh cached data, use it immediately
       if (cachedData && cachedData.positions.length > 0) {
@@ -1967,7 +2003,9 @@ export default function PortfolioPage() {
 
         // Group positions by pool address and combine with pool details
         const grouped = new Map<string, PoolData>();
-        const filteredPositions = cachedData.positions.filter(p => p.chainId === (chainId as SupportedChainId));
+        const filteredPositions = cachedData.positions.filter(
+          p => p.chainId === (chainId as SupportedChainId) && currentPools.has(p.poolAddress.toLowerCase())
+        );
         console.log("Filtered positions:", filteredPositions.length);
 
         for (const pos of filteredPositions) {
@@ -1989,7 +2027,7 @@ export default function PortfolioPage() {
             name: poolDetails?.name || `Pool ${pos.poolAddress.slice(0, 6)}...`,
             bullBalance: 0, bearBalance: 0,
             bullCurrentValue: 0, bearCurrentValue: 0,
-            totalValue: 0, totalCostBasis: 0,
+            totalValue: 0, totalCostBasis: 0, totalInvested: 0, bullInvested: 0, bearInvested: 0,
             bullPnL: 0, bearPnL: 0, totalPnL: 0,
             bullPrice: 0, bearPrice: 0, bullAvgPrice: 0, bearAvgPrice: 0,
             bullReturns: 0, bearReturns: 0, totalReturnPercentage: 0,
@@ -2041,6 +2079,7 @@ export default function PortfolioPage() {
             base.bullBalance += pos.currentBalance;
             base.bullCurrentValue += pos.currentValue;
             base.bullPnL += pos.pnL;
+            base.bullInvested += pos.grossInvestment;
             base.bullReturns = pos.returns;
             base.hasBullPosition = pos.currentBalance > 0 || pos.currentValue > 0 || pos.pnL !== 0;
             base.bullTokenAddress = pos.tokenAddress;
@@ -2054,6 +2093,7 @@ export default function PortfolioPage() {
             base.bearBalance += pos.currentBalance;
             base.bearCurrentValue += pos.currentValue;
             base.bearPnL += pos.pnL;
+            base.bearInvested += pos.grossInvestment;
             base.bearReturns = pos.returns;
             base.hasBearPosition = pos.currentBalance > 0 || pos.currentValue > 0 || pos.pnL !== 0;
             base.bearTokenAddress = pos.tokenAddress;
@@ -2068,6 +2108,7 @@ export default function PortfolioPage() {
           base.totalValue = base.bullCurrentValue + base.bearCurrentValue;
           base.totalPnL = base.bullPnL + base.bearPnL;
           base.totalCostBasis = base.totalValue - base.totalPnL;
+          base.totalInvested = base.bullInvested + base.bearInvested;
           base.totalReturnPercentage = base.totalCostBasis > 0 ? (base.totalPnL / base.totalCostBasis) * 100 : 0;
           base.hasPositions = base.hasBullPosition || base.hasBearPosition;
           grouped.set(pos.poolAddress, base);
@@ -2089,10 +2130,9 @@ export default function PortfolioPage() {
           });
         }
 
-        setPoolsData(mappedData);
-
-        // Force UI update and ensure loading state is cleared
-        setIsLoadingFromBlockchain(false); // This is cached data, not blockchain data
+        // The chain data may have arrived during the reads above, and it is newer than the cache.
+        if (walletKeyRef.current !== walletKey) return;
+        setPoolsData((prev) => (prev.length > 0 ? prev : mappedData));
 
       } else {
         // No cached data — first-time user, blockchain loaders will handle it
@@ -2101,7 +2141,7 @@ export default function PortfolioPage() {
     } catch (error) {
       console.error("❌ Failed to load cached data:", error);
     }
-  }, [address, chainId, isDBInitialized, indexedDB, getPortfolioCache, isLoadingFromBlockchain]);
+  }, [address, chainId, isDBInitialized, indexedDB, getPortfolioCache, availablePools]);
 
   // Save data to cache
   const saveDataToCache = useCallback(async (data: PoolData[]) => {
@@ -2129,7 +2169,7 @@ export default function PortfolioPage() {
               returns: pool.bullReturns,
               totalFeesPaid: 0,
               netInvestment: pool.bullCurrentValue - pool.bullPnL,
-              grossInvestment: pool.bullCurrentValue - pool.bullPnL,
+              grossInvestment: pool.bullInvested,
               lastUpdated: Date.now(),
               blockNumber: 0,
               baseTokenSymbol: pool.baseTokenSymbol || 'UNKNOWN',
@@ -2158,7 +2198,7 @@ export default function PortfolioPage() {
               returns: pool.bearReturns,
               totalFeesPaid: 0,
               netInvestment: pool.bearCurrentValue - pool.bearPnL,
-              grossInvestment: pool.bearCurrentValue - pool.bearPnL,
+              grossInvestment: pool.bearInvested,
               lastUpdated: Date.now(),
               blockNumber: 0,
               baseTokenSymbol: pool.baseTokenSymbol,
@@ -2249,11 +2289,15 @@ export default function PortfolioPage() {
    * 4. RPC Minimal: Only used for first-time users or manual refresh
    * 5. Instant UI: Portfolio shows data immediately, updates in real-time
    */
+  // Once per wallet and chain, after the factory pool list is known; the chain data takes over from there.
+  const cacheLoadedForRef = useRef<string | null>(null);
   useEffect(() => {
-    if (address && chainId && (isDBInitialized || indexedDB)) {
-      loadCachedData();
-    }
-  }, [address, chainId, isDBInitialized, indexedDB, loadCachedData]);
+    const key = `${address}-${chainId}`;
+    if (!address || !chainId || !isDBInitialized || !indexedDB || isPoolsQueryPending) return;
+    if (cacheLoadedForRef.current === key) return;
+    cacheLoadedForRef.current = key;
+    loadCachedData();
+  }, [address, chainId, isDBInitialized, indexedDB, isPoolsQueryPending, loadCachedData]);
 
   // Only save data to cache when it comes from blockchain (not cache)
   // This prevents infinite loops between loadCachedData and saveDataToCache
@@ -2465,6 +2509,7 @@ export default function PortfolioPage() {
             onDataLoad={handlePoolDataLoad}
             onFilterComplete={handleFilterComplete}
             onAllSettled={() => setIsAllLoadersSettled(true)}
+            tradedPools={tradedPools}
           />
         )}
 
@@ -2483,25 +2528,25 @@ export default function PortfolioPage() {
               />
               <SummaryCard
                 title="Total P&L"
-                value={`${totalPnL >= 0 ? "+" : ""}${totalPnL.toLocaleString(
+                value={`${shown(totalPnL) > 0 ? "+" : ""}${shown(totalPnL).toLocaleString(
                   undefined,
                   {
                     minimumFractionDigits: 0,
                     maximumFractionDigits: 4,
                   }
                 )} ${poolsData[0]?.baseTokenSymbol || 'UNKNOWN'}`}
-                icon={totalPnL >= 0 ? TrendingUp : TrendingDown}
-                trend={totalPnL >= 0 ? "up" : "down"}
+                icon={shown(totalPnL) >= 0 ? TrendingUp : TrendingDown}
+                trend={shown(totalPnL) >= 0 ? "up" : "down"}
               />
               <SummaryCard
                 title="Total Return %"
-                value={`${totalReturnPercentage >= 0 ? "+" : ""
-                  }${totalReturnPercentage.toLocaleString(undefined, {
+                value={`${shown(totalReturnPercentage, 2) > 0 ? "+" : ""
+                  }${shown(totalReturnPercentage, 2).toLocaleString(undefined, {
                     minimumFractionDigits: 0,
                     maximumFractionDigits: 2,
                   })}%`}
                 icon={Activity}
-                trend={totalReturnPercentage >= 0 ? "up" : "down"}
+                trend={shown(totalReturnPercentage, 2) >= 0 ? "up" : "down"}
               />
             </>
           ) : isPoolsQueryPending || (availablePools.length > 0 && !isBalanceCheckDone) || (isBalanceCheckDone && filteredPoolCount !== null && filteredPoolCount > 0 && !isAllLoadersSettled) ? (

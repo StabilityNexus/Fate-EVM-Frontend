@@ -259,4 +259,5 @@ export interface PortfolioCache {
   totalPnL: number;
   totalReturns: number;
   lastUpdated: number;
+  expiresAt?: number;
 }
