@@ -547,8 +547,6 @@ function ExploreFatePoolsClient() {
   const fetchAllPools = useCallback(async (showToast = true): Promise<void> => {
     const now = Date.now();
     if (now - lastFetchTime < FETCH_COOLDOWN) {
-      // handleRefresh already turned the spinner on, and the finally below is skipped.
-      setRefreshing(false);
       if (showToast) { toast.info("Refreshed recently. Please wait a moment."); }
       return;
     }
@@ -656,7 +654,11 @@ function ExploreFatePoolsClient() {
 
   const handleRefresh = useCallback(async (): Promise<void> => {
     setRefreshing(true);
-    await fetchAllPools();
+    try {
+      await fetchAllPools();
+    } finally {
+      setRefreshing(false);
+    }
   }, [fetchAllPools]);
 
   // Without IndexedDB the page still reads from the chain; the cache writes already check isInitialized.
