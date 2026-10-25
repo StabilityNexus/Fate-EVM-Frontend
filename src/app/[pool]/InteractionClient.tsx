@@ -374,7 +374,10 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
   baseSymbol: string;
   payNative: boolean;
 }) {
-  const { address } = useAccount();
+  const { address, chainId: walletChainId } = useAccount();
+  // wagmi sends a write to whatever chain the wallet is on, so trades are blocked off the pool's chain.
+  const wrongNetwork = !!walletChainId && walletChainId !== poolData.chainId;
+  const poolChainName = getChainConfig(poolData.chainId)?.chain.name ?? 'the pool network';
   const { writeContractAsync, data: hash, isPending: isTransactionPending } = useWriteContract();
   const { isLoading: isConfirming, isSuccess: isConfirmed, isError: isReceiptError, error: receiptError } = useWaitForTransactionReceipt({ hash });
   const isTransacting = isTransactionPending || isConfirming;
@@ -580,6 +583,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
         await writeContractAsync({
           address: nativeHelper,
           abi: NATIVE_HELPER_CALL_ABI,
+          chainId: poolData.chainId,
           functionName: 'buyNative',
           args: [tokenAddress! as `0x${string}`, address!, minCoinOut],
           value: amountWei,
@@ -588,6 +592,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
         await writeContractAsync({
           address: tokenAddress! as `0x${string}`,
           abi: CoinABI,
+          chainId: poolData.chainId,
           functionName: 'buy',
           args: [address!, amountWei, minCoinOut],
         });
@@ -624,7 +629,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
       }
       pendingTransactionToastIdRef.current = null;
     }
-  }, [tokenAddress, address, writeContractAsync, baseDecimals, quoteBuy, useNative, nativeHelper]);
+  }, [tokenAddress, address, writeContractAsync, baseDecimals, quoteBuy, useNative, nativeHelper, poolData.chainId]);
 
   const handleBuy = withErrorHandling(async () => {
     if (!address || !connected) {
@@ -673,6 +678,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
         await writeContractAsync({
           address: poolData.asset_address as `0x${string}`,
           abi: ERC20ABI,
+          chainId: poolData.chainId,
           functionName: 'approve',
           args: [tokenAddress, amountWei],
         });
@@ -736,11 +742,12 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
 
         // Nonce and domain are read right before signing, so a permit never names a stale nonce.
         const coin = tokenAddress as `0x${string}`;
-        const [nonce, domainData] = await Promise.all([
+        const [nonce, domainData, block] = await Promise.all([
           publicClient.readContract({ address: coin, abi: CoinABI, functionName: 'nonces', args: [address] }) as Promise<bigint>,
           publicClient.readContract({ address: coin, abi: CoinABI, functionName: 'eip712Domain' }) as Promise<readonly [string, string, string, bigint, `0x${string}`, `0x${string}`, readonly bigint[]]>,
+          publicClient.getBlock(),
         ]);
-        const deadline = permitDeadline();
+        const deadline = permitDeadline(Number(block.timestamp) * 1000);
         const signature = await signTypedDataAsync(buildPermitTypedData(
           { name: domainData[1], version: domainData[2], chainId: Number(domainData[3]), verifyingContract: coin },
           { owner: address, spender: nativeHelper, value: amountWei, nonce, deadline },
@@ -751,6 +758,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
         await writeContractAsync({
           address: nativeHelper,
           abi: NATIVE_HELPER_CALL_ABI,
+          chainId: poolData.chainId,
           functionName: 'sellNativeWithPermit',
           args: [coin, amountWei, address, minOut, deadline, v, r, s],
         });
@@ -761,6 +769,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
         await writeContractAsync({
           address: tokenAddress as `0x${string}`,
           abi: CoinABI,
+          chainId: poolData.chainId,
           functionName: 'sell',
           args: [amountWei, minOut],
         });
@@ -1057,9 +1066,9 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
               <Button
                 onClick={() => handleBuy()}
                 className={`w-full ${buttonColor} text-white`}
-                disabled={!buyAmount || !connected || isTrading}
+                disabled={!buyAmount || !connected || isTrading || wrongNetwork}
               >
-                {isTrading ? 'Processing...' : `Buy ${symbol} Tokens`}
+                {wrongNetwork ? `Switch to ${poolChainName} to trade` : isTrading ? 'Processing...' : `Buy ${symbol} Tokens`}
               </Button>
             </div>
           </div>
@@ -1164,9 +1173,9 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
               <Button
                 onClick={() => handleSell()}
                 className="w-full bg-gray-100 hover:bg-gray-200 text-black border border-gray-300 dark:bg-neutral-800 dark:hover:bg-neutral-700 dark:text-white dark:border-neutral-600"
-                disabled={!sellAmount || !connected || isTrading || sellPaysNothing}
+                disabled={!sellAmount || !connected || isTrading || sellPaysNothing || wrongNetwork}
               >
-                {isTrading ? 'Processing...' : `Sell ${symbol} Tokens`}
+                {wrongNetwork ? `Switch to ${poolChainName} to trade` : isTrading ? 'Processing...' : `Sell ${symbol} Tokens`}
               </Button>
             </div>
           </div>
@@ -1189,12 +1198,13 @@ export default function InteractionClient() {
   // resolvedTheme, so a dark system theme counts as dark too.
   const { resolvedTheme: theme } = useTheme();
   const params = useSearchParams();
-  const { address, isConnected, chain } = useAccount(); // eslint-disable-line @typescript-eslint/no-unused-vars
+  const { address, isConnected, chain, chainId: walletChainId } = useAccount(); // eslint-disable-line @typescript-eslint/no-unused-vars
   // Validate poolId from query params - don't default to zero address
   const poolIdParam = params.get("id");
   const poolId = poolIdParam && isAddress(poolIdParam) ? (poolIdParam as Address) : undefined;
 
   const { pool, userBalances, loading, error } = usePool(poolId, isConnected);
+  const wrongNetwork = !!walletChainId && !!pool && walletChainId !== pool.chainId;
   const queryClient = useQueryClient();
   const { data: walletClient } = useWalletClient();
 
@@ -1586,6 +1596,7 @@ export default function InteractionClient() {
       await writeContractAsync({
         address: poolId,
         abi: PredictionPoolABI,
+        chainId: pool?.chainId,
         functionName: 'rebalance',
       });
       toast.dismiss(loadingToast);
@@ -2116,13 +2127,14 @@ export default function InteractionClient() {
                               !isConnected ||
                               !address ||
                               isDistributeLoading ||
-                              isTransactionPending
+                              isTransactionPending ||
+                              wrongNetwork
                             }
                           >
                             {(isDistributeLoading || isTransactionPending) && (
                               <RefreshCw className="w-4 h-4 animate-spin mr-2" />
                             )}
-                            Rebalance Pool
+                            {wrongNetwork ? `Switch to ${getChainConfig(pool?.chainId ?? 0)?.chain.name ?? 'the pool network'} to rebalance` : 'Rebalance Pool'}
                           </Button>
                         </div>
                       </TooltipTrigger>

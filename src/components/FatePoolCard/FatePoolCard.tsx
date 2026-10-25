@@ -111,7 +111,7 @@ export function PredictionCard({
                 }`}>
                 {bullPercentage.toFixed(1)}%
               </span>
-              <span className="text-[10px] font-medium text-gray-400 truncate mt-1">
+              <span className="text-[10px] font-medium text-gray-600 dark:text-gray-400 truncate mt-1">
                 {bullCoinSymbol}
               </span>
             </div>
@@ -133,7 +133,7 @@ export function PredictionCard({
                 }`}>
                 {bearPercentage.toFixed(1)}%
               </span>
-              <span className="text-[10px] font-medium text-gray-400 truncate mt-1">
+              <span className="text-[10px] font-medium text-gray-600 dark:text-gray-400 truncate mt-1">
                 {bearCoinSymbol}
               </span>
             </div>
