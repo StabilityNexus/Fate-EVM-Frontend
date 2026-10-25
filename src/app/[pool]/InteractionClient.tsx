@@ -1781,10 +1781,10 @@ export default function InteractionClient() {
     }
   }, [isRebalanceConfirmed, isTransactionPending, queryClient, rebalanceHash, rebalanceReceipt, poolId]);
 
-  // A rebalance that reverts on-chain must release the button and say so.
+  // The receipt can also fail on an RPC error or timeout, so the tx may still have gone through.
   useEffect(() => {
     if (isRebalanceFailed) {
-      toast.error('Rebalance failed on-chain.');
+      toast.error('Rebalance did not confirm. Check the transaction in your wallet.');
       setIsDistributeLoading(false);
     }
   }, [isRebalanceFailed]);
