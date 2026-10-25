@@ -19,7 +19,7 @@ import { ChainlinkAdapterFactoryABI } from "@/utils/abi/ChainlinkAdapterFactory"
 import { FatePoolFactories, ChainlinkAdapterFactories } from "@/utils/addresses";
 import { SUPPORTED_CHAINS, getPriceFeedOptions } from "@/utils/supportedChainFeed";
 import { getChainConfig } from "@/utils/chainConfig";
-import { parseUnits } from "viem";
+import { BaseError, parseUnits, UserRejectedRequestError } from "viem";
 
 // An address is also valid bytes, so viem rejects the call while both createAdapter overloads are in the ABI.
 const CREATE_ADAPTER_BY_FEED_ABI = ChainlinkAdapterFactoryABI.filter(
@@ -27,6 +27,12 @@ const CREATE_ADAPTER_BY_FEED_ABI = ChainlinkAdapterFactoryABI.filter(
 );
 
 const DENOMINATOR = 100_000;
+
+// viem's full message includes the call data, so toasts use its short form.
+const shortError = (error: unknown) =>
+  error instanceof BaseError ? error.shortMessage : error instanceof Error ? error.message : "Unknown error";
+const isRejected = (error: unknown) =>
+  error instanceof BaseError && !!error.walk((e) => e instanceof UserRejectedRequestError);
 
 // Minimal ERC20 ABI for approve, allowance, and decimals functions
 const ERC20_ABI = [
@@ -382,7 +388,8 @@ export default function CreateFatePool() {
           }
         } catch (error) {
           logger.error("Error checking/creating Chainlink oracle adapter:", error instanceof Error ? error : undefined);
-          throw new Error(`Failed to get Chainlink oracle adapter: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          if (isRejected(error)) throw error;
+          throw new Error(`Failed to get Chainlink oracle adapter: ${shortError(error)}`);
         }
       } else {
         throw new Error("Invalid oracle type selected");
@@ -431,7 +438,8 @@ export default function CreateFatePool() {
           }
         } catch (error) {
           logger.error("Error approving tokens:", error instanceof Error ? error : undefined);
-          throw new Error(`Failed to approve tokens: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          if (isRejected(error)) throw error;
+          throw new Error(`Failed to approve tokens: ${shortError(error)}`);
         }
       }
 
@@ -465,13 +473,11 @@ export default function CreateFatePool() {
       toast.info("Pool deployment transaction submitted. Waiting for confirmation...");
     } catch (error) {
       logger.error("Error deploying pool:", error instanceof Error ? error : undefined);
-      let errorMessage = "Unknown error occurred";
-      if (error instanceof Error) {
-        errorMessage = error.message;
-          } else if (typeof error === 'object' && error !== null && 'message' in error) {
-        errorMessage = String((error as { message: string }).message);
+      if (isRejected(error)) {
+        toast.info("Transaction cancelled");
+      } else {
+        toast.error(`Failed to deploy: ${shortError(error)}`);
       }
-      toast.error(`Failed to deploy: ${errorMessage}`);
       setIsSubmitting(false);
     }
   };
@@ -488,7 +494,7 @@ export default function CreateFatePool() {
 
   useEffect(() => {
     if (receiptError) {
-      toast.error(`Transaction failed: ${receiptError.message}`);
+      toast.error(`Transaction failed: ${shortError(receiptError)}`);
       setIsSubmitting(false);
     }
   }, [receiptError]);
