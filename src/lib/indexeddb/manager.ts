@@ -409,15 +409,16 @@ export class FatePoolsIndexedDBManager {
     // First try to get by userAddress + chainId combination
     const cacheKey = `${userAddress}-${chainId}`;
     const cache = await this.db.get<PortfolioCache>('portfolioCache', cacheKey);
+    const now = Date.now();
 
     if (cache) {
-      return cache;
+      return now > (cache.expiresAt ?? 0) ? null : cache;
     }
 
     // Fallback: get by userAddress and filter by chainId
     const allCache = await this.db.get<PortfolioCache>('portfolioCache', userAddress);
     if (allCache && allCache.chainId === chainId) {
-      return allCache;
+      return now > (allCache.expiresAt ?? 0) ? null : allCache;
     }
 
     return null;
