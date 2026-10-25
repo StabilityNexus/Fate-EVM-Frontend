@@ -540,7 +540,12 @@ function ExploreFatePoolsClient() {
 
   const fetchAllPools = useCallback(async (showToast = true): Promise<void> => {
     const now = Date.now();
-    if (now - lastFetchTime < FETCH_COOLDOWN) { if (showToast) { toast.info("Refreshed recently. Please wait a moment."); } return; }
+    if (now - lastFetchTime < FETCH_COOLDOWN) {
+      // handleRefresh already turned the spinner on, and the finally below is skipped.
+      setRefreshing(false);
+      if (showToast) { toast.info("Refreshed recently. Please wait a moment."); }
+      return;
+    }
     setLastFetchTime(now);
     setLoading(true);
 
