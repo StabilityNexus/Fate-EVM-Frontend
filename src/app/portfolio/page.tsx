@@ -1957,6 +1957,8 @@ export default function PortfolioPage() {
 
     try {
       const cachedData = await getPortfolioCache(address, chainId as SupportedChainId);
+      // Pools of an older factory are never refreshed, so their cached positions would stay forever.
+      const currentPools = new Set(availablePools.map((pool) => pool.toLowerCase()));
 
       // If we have fresh cached data, use it immediately
       if (cachedData && cachedData.positions.length > 0) {
@@ -1967,7 +1969,9 @@ export default function PortfolioPage() {
 
         // Group positions by pool address and combine with pool details
         const grouped = new Map<string, PoolData>();
-        const filteredPositions = cachedData.positions.filter(p => p.chainId === (chainId as SupportedChainId));
+        const filteredPositions = cachedData.positions.filter(
+          p => p.chainId === (chainId as SupportedChainId) && currentPools.has(p.poolAddress.toLowerCase())
+        );
         console.log("Filtered positions:", filteredPositions.length);
 
         for (const pos of filteredPositions) {
@@ -2099,7 +2103,7 @@ export default function PortfolioPage() {
     } catch (error) {
       console.error("❌ Failed to load cached data:", error);
     }
-  }, [address, chainId, isDBInitialized, indexedDB, getPortfolioCache]);
+  }, [address, chainId, isDBInitialized, indexedDB, getPortfolioCache, availablePools]);
 
   // Save data to cache
   const saveDataToCache = useCallback(async (data: PoolData[]) => {
