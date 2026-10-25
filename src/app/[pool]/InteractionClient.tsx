@@ -30,7 +30,7 @@ import { Input } from '@/components/ui/input';
 import { Loading } from '@/components/ui/loading';
 import { formatNumber, formatNumberDown } from '@/utils/format';
 import { validateTransactionInput } from '@/lib/validation';
-import { withErrorHandling, createTransactionError } from '@/lib/errorHandler';
+import { withErrorHandling, createTransactionError, getShortErrorMessage } from '@/lib/errorHandler';
 import { estimateBuy, DENOMINATOR, type BuyQuoteFailure } from '@/lib/estimateBuy';
 import { estimateSell, type SellQuoteFailure } from '@/lib/estimateSell';
 import { applySlippage, isSlippageError, SLIPPAGE_LABEL, SLIPPAGE_MESSAGE } from '@/lib/slippage';
@@ -52,6 +52,10 @@ const NATIVE_HELPER_CALL_ABI = [
   ...NativeCurrencyHelperABI,
   ...CoinABI.filter((item) => item.type === 'error'),
 ];
+
+// Every contract read and balance on the page, for a refresh after a trade, rebalance or click.
+const isPageRead = (query: { queryKey: readonly unknown[] }) =>
+  ['readContract', 'readContracts', 'balance'].includes(query.queryKey[0] as string);
 
 
 
@@ -449,7 +453,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
   });
 
   // Get allowance for the token
-  const { data: allowanceData } = useReadContracts({
+  const { data: allowanceData, refetch: refetchAllowance } = useReadContracts({
     contracts: address && poolData?.asset_address && tokenAddress ? [
       { address: poolData.asset_address as `0x${string}`, abi: ERC20ABI, functionName: 'allowance', args: [address as `0x${string}`, tokenAddress as `0x${string}`] },
     ] : [],
@@ -459,13 +463,14 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
   });
 
   useEffect(() => {
-    if (baseTokenBalanceData?.[0]?.result) {
+    // A zero result is real (all spent or sold), so only a missing one keeps the old value.
+    if (baseTokenBalanceData?.[0]?.result !== undefined) {
       setBaseTokenBalance(baseTokenBalanceData[0].result as bigint);
     }
   }, [baseTokenBalanceData]);
 
   useEffect(() => {
-    if (allowanceData?.[0]?.result) {
+    if (allowanceData?.[0]?.result !== undefined) {
       setAllowance(allowanceData[0].result as bigint);
     }
   }, [allowanceData]);
@@ -610,7 +615,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
           toast.info('Transaction cancelled in wallet.');
         }
       } else {
-        const message = isSlippageError(err) ? SLIPPAGE_MESSAGE : (err as Error).message || "Failed to buy tokens";
+        const message = isSlippageError(err) ? SLIPPAGE_MESSAGE : getShortErrorMessage(err, "Failed to buy tokens");
         if (currentToastId !== null) {
           toast.error(message, { id: currentToastId });
         } else {
@@ -676,7 +681,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
         if (isUserRejectedError(err)) {
           toast.info('Approval cancelled in wallet.', { id: approvalToast });
         } else {
-          toast.error((err as Error).message || 'Approval failed', { id: approvalToast });
+          toast.error(getShortErrorMessage(err, 'Approval failed'), { id: approvalToast });
         }
         pendingTransactionToastIdRef.current = null;
         return;
@@ -783,7 +788,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
           toast.info('Transaction cancelled in wallet.');
         }
       } else {
-        const message = isSlippageError(err) ? SLIPPAGE_MESSAGE : (err as Error).message || 'Failed to sell tokens';
+        const message = isSlippageError(err) ? SLIPPAGE_MESSAGE : getShortErrorMessage(err, 'Failed to sell tokens');
         if (currentToastId !== null) {
           toast.error(message, { id: currentToastId });
         } else {
@@ -828,6 +833,8 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
         } else {
           toast.success('Approval confirmed. Submitting buy transaction...');
         }
+        // If the follow-up buy is cancelled, the next one must still see the new allowance.
+        refetchAllowance();
         // Only a WETH buy needs approval, so the follow-up stays on WETH even if the toggle moved.
         handleBuyTransaction(pendingApproval.amount, false);
       } else {
@@ -852,12 +859,10 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
         setBuyAmount('');
         setSellAmount('');
         // Re-read every balance, supply and reserve on the page, not only the pool details.
-        queryClient.invalidateQueries({
-          predicate: (query) => ['readContract', 'readContracts', 'balance'].includes(query.queryKey[0] as string),
-        });
+        queryClient.invalidateQueries({ predicate: isPageRead });
       }
     }
-  }, [isConfirmed, isTransactionPending, pendingApproval, pendingTransactionType, handleBuyTransaction, poolData.id.id, symbol, queryClient]);
+  }, [isConfirmed, isTransactionPending, pendingApproval, pendingTransactionType, handleBuyTransaction, poolData.id.id, symbol, queryClient, refetchAllowance]);
 
   // Handle on-chain transaction failure (reverted tx)
   useEffect(() => {
@@ -868,7 +873,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
 
       if (pendingApproval) {
         // Approval reverted on-chain
-        const errorMsg = receiptError?.message || 'Token approval failed on-chain.';
+        const errorMsg = getShortErrorMessage(receiptError, 'Token approval failed on-chain.');
         if (currentToastId !== null) {
           toast.error(errorMsg, { id: currentToastId });
         } else {
@@ -879,7 +884,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
         // Buy/sell reverted on-chain
         const errorMsg = isSlippageError(receiptError)
           ? SLIPPAGE_MESSAGE
-          : receiptError?.message || 'Transaction failed on-chain.';
+          : getShortErrorMessage(receiptError, 'Transaction failed on-chain.');
         if (currentToastId !== null) {
           toast.error(errorMsg, { id: currentToastId });
         } else {
@@ -1189,7 +1194,8 @@ export default function InteractionClient() {
   const poolIdParam = params.get("id");
   const poolId = poolIdParam && isAddress(poolIdParam) ? (poolIdParam as Address) : undefined;
 
-  const { pool, userBalances, loading, error, refetch } = usePool(poolId, isConnected);
+  const { pool, userBalances, loading, error } = usePool(poolId, isConnected);
+  const queryClient = useQueryClient();
   const { data: walletClient } = useWalletClient();
 
   // Read oracle prices from prediction pool contract
@@ -1555,15 +1561,15 @@ export default function InteractionClient() {
     if (!pool?.id?.id || loading) return;
 
     try {
-      await refetch?.();
-      // setLastUpdateTime(new Date());
+      // The oracle prices and reserves are separate reads, so the pool details alone are not enough.
+      await queryClient.invalidateQueries({ predicate: isPageRead });
     } catch (err) {
       logger.error("Polling error:", err instanceof Error ? err : undefined);
     }
-  }, [pool?.id?.id, loading, refetch]);
+  }, [pool?.id?.id, loading, queryClient]);
 
   const { writeContractAsync, isPending, data: rebalanceHash } = useWriteContract();
-  const { isLoading: isConfirming, isSuccess: isRebalanceConfirmed, data: rebalanceReceipt } = useWaitForTransactionReceipt({ hash: rebalanceHash });
+  const { isLoading: isConfirming, isSuccess: isRebalanceConfirmed, isError: isRebalanceFailed, data: rebalanceReceipt } = useWaitForTransactionReceipt({ hash: rebalanceHash });
   const isTransactionPending = isPending || isConfirming;
 
   const handleDistribute = async () => {
@@ -1704,6 +1710,10 @@ export default function InteractionClient() {
   const underlyingPriceFeedAddress = underlyingPriceFeedData?.[0]?.result as Address;
   const oracleAddress = underlyingPriceFeedAddress || poolData.oracle_address || '';
   const priceFeedName = getPriceFeedName(oracleAddress, chainId);
+  // An oracle outside the feed list (e.g. the sentiment adapter) has no market to chart.
+  // Until the feed read returns, every pool looks like that, so wait for it first.
+  const hasPriceFeed = priceFeedName !== "Unknown";
+  const isCustomOracle = !hasPriceFeed && underlyingPriceFeedData !== undefined;
   // The native toggle exists only on a wrapped-native pool with a helper deployed on its chain.
   const wrappedNative = WrappedNatives[chainId];
   const nativeAvailable = !!wrappedNative && !!NativeHelpers[chainId]
@@ -1762,14 +1772,22 @@ export default function InteractionClient() {
       }
       logger.debug('Updated last rebalance time to current time:', { rebalanceTime: currentTime.toLocaleString() });
 
-      // Refetch pool data directly to ensure UI reflects new state, with a small delay for blockchain propagation
+      // Re-read the whole page, with a small delay for blockchain propagation
       setTimeout(async () => {
-        await refetch?.();
+        await queryClient.invalidateQueries({ predicate: isPageRead });
         logger.debug('Pool data refreshed after rebalance confirmation');
       }, 1000);
 
     }
-  }, [isRebalanceConfirmed, isTransactionPending, refetch, rebalanceHash, rebalanceReceipt, poolId]);
+  }, [isRebalanceConfirmed, isTransactionPending, queryClient, rebalanceHash, rebalanceReceipt, poolId]);
+
+  // The receipt can also fail on an RPC error or timeout, so the tx may still have gone through.
+  useEffect(() => {
+    if (isRebalanceFailed) {
+      toast.error('Rebalance did not confirm. Check the transaction in your wallet.');
+      setIsDistributeLoading(false);
+    }
+  }, [isRebalanceFailed]);
 
   useEffect(() => {
     const handleVisibilityChange = () => {
@@ -1839,7 +1857,7 @@ export default function InteractionClient() {
 
               <div className="flex items-center space-x-2">
                 <span className="text-sm font-medium text-neutral-600 dark:text-neutral-400">
-                  Price: {priceFeedName || "N/A"}
+                  Price: {hasPriceFeed ? priceFeedName : isCustomOracle ? "Custom oracle" : "Loading..."}
                 </span>
                 <span className="text-sm font-medium text-neutral-600 dark:text-neutral-400">
                   |
@@ -1984,11 +2002,17 @@ export default function InteractionClient() {
           <div className="lg:col-span-2">
             <div className="border rounded-xl border-black dark:border-neutral-600 bg-white dark:bg-neutral-900 shadow-sm">
               <div className="p-6">
-                <TradingViewWidget
-                  assetId={asset.coinId}
-                  theme={theme === "dark" ? "dark" : "light"}
-                  heightPx={453}
-                />
+                {hasPriceFeed ? (
+                  <TradingViewWidget
+                    assetId={asset.coinId}
+                    theme={theme === "dark" ? "dark" : "light"}
+                    heightPx={453}
+                  />
+                ) : (
+                  <div className="flex h-[453px] items-center justify-center rounded-lg border border-dashed border-neutral-300 p-6 text-center text-sm text-neutral-600 dark:border-neutral-700 dark:text-neutral-400">
+                    {isCustomOracle ? "This pool uses a custom oracle, so there is no market chart for it." : "Loading chart..."}
+                  </div>
+                )}
 
                 <div className="mt-6 p-4 md:p-6 border rounded-xl border-black dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800">
                   <h4 className="font-bold mb-3 text-sm md:text-lg text-neutral-900 dark:text-white">
