@@ -1748,7 +1748,8 @@ const BalanceFilteredPoolLoader: React.FC<{
   onDataLoad: (data: PoolData) => void;
   onFilterComplete?: (count: number) => void;
   onAllSettled?: () => void;
-}> = ({ pools, userAddress, chainId, onDataLoad, onFilterComplete, onAllSettled }) => {
+  tradedPools: string[];
+}> = ({ pools, userAddress, chainId, onDataLoad, onFilterComplete, onAllSettled, tradedPools }) => {
   const [filteredPools, setFilteredPools] = useState<string[]>([]);
   const [isFiltering, setIsFiltering] = useState(true);
   const [settledCount, setSettledCount] = useState(0);
@@ -1818,9 +1819,10 @@ const BalanceFilteredPoolLoader: React.FC<{
             };
           })
         );
-        // Filter to pools with balance
+        // A pool sold to zero is still loaded, so its last sell is scanned and it shows as closed.
+        const traded = new Set(tradedPools);
         const poolsWithBalance = balanceChecks
-          .filter(check => check && check.hasBalance)
+          .filter(check => check && (check.hasBalance || traded.has(check.poolAddress.toLowerCase())))
           .map(check => check!.poolAddress);
         console.log(`✅ Found ${poolsWithBalance.length} pools with balances out of ${pools.length} total`);
         
@@ -1836,7 +1838,7 @@ const BalanceFilteredPoolLoader: React.FC<{
       }
     };
     filterPools();
-  }, [pools, userAddress, chainId, onFilterComplete]);
+  }, [pools, userAddress, chainId, onFilterComplete, tradedPools]);
   if (isFiltering) return null;
   return (
     <>
@@ -1871,8 +1873,18 @@ export default function PortfolioPage() {
   const {
     isInitialized: isDBInitialized,
     savePortfolioCache,
-    getPortfolioCache
+    getPortfolioCache,
+    getPortfolioTransactions
   } = useFatePoolsStorage();
+
+  const [tradedPools, setTradedPools] = useState<string[]>([]);
+  useEffect(() => {
+    setTradedPools((prev) => (prev.length > 0 ? [] : prev));
+    if (!address || !chainId || !isDBInitialized) return;
+    getPortfolioTransactions(address, chainId as SupportedChainId)
+      .then((rows) => setTradedPools(Array.from(new Set(rows.map((row) => row.poolAddress.toLowerCase())))))
+      .catch(() => {});
+  }, [address, chainId, isDBInitialized, getPortfolioTransactions]);
 
   // Direct IndexedDB manager for pool details (more reliable)
   const [indexedDB, setIndexedDB] = useState<FatePoolsIndexedDBManager | null>(null);
@@ -2473,6 +2485,7 @@ export default function PortfolioPage() {
             onDataLoad={handlePoolDataLoad}
             onFilterComplete={handleFilterComplete}
             onAllSettled={() => setIsAllLoadersSettled(true)}
+            tradedPools={tradedPools}
           />
         )}
 
