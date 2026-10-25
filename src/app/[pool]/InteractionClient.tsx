@@ -742,11 +742,12 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
 
         // Nonce and domain are read right before signing, so a permit never names a stale nonce.
         const coin = tokenAddress as `0x${string}`;
-        const [nonce, domainData] = await Promise.all([
+        const [nonce, domainData, block] = await Promise.all([
           publicClient.readContract({ address: coin, abi: CoinABI, functionName: 'nonces', args: [address] }) as Promise<bigint>,
           publicClient.readContract({ address: coin, abi: CoinABI, functionName: 'eip712Domain' }) as Promise<readonly [string, string, string, bigint, `0x${string}`, `0x${string}`, readonly bigint[]]>,
+          publicClient.getBlock(),
         ]);
-        const deadline = permitDeadline();
+        const deadline = permitDeadline(Number(block.timestamp) * 1000);
         const signature = await signTypedDataAsync(buildPermitTypedData(
           { name: domainData[1], version: domainData[2], chainId: Number(domainData[3]), verifyingContract: coin },
           { owner: address, spender: nativeHelper, value: amountWei, nonce, deadline },
