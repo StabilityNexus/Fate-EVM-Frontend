@@ -250,9 +250,10 @@ export default function CreateFatePool() {
     setPoolTxHash(undefined);
     
          try {
-       const mintFeeUnits = Math.floor((parseFloat(formData.mintFee) / 100) * DENOMINATOR);
-       const burnFeeUnits = Math.floor((parseFloat(formData.burnFee) / 100) * DENOMINATOR);
-       const creatorFeeUnits = Math.floor((parseFloat(formData.creatorFee) / 100) * DENOMINATOR);
+       // 1% is 1000 units, so a percent string is parsed with 3 decimals; float math turned 0.57% into 569.
+       const mintFeeUnits = parseUnits(formData.mintFee.trim(), 3);
+       const burnFeeUnits = parseUnits(formData.burnFee.trim(), 3);
+       const creatorFeeUnits = parseUnits(formData.creatorFee.trim(), 3);
 
       const baseTokenAddress = formData.baseTokenAddress.trim();
       let oracleAddress: `0x${string}`;
@@ -454,9 +455,9 @@ export default function CreateFatePool() {
           formData.bullCoinSymbol.trim(),
           formData.bearCoinName.trim(),
           formData.bearCoinSymbol.trim(),
-          BigInt(mintFeeUnits),
-          BigInt(burnFeeUnits),
-          BigInt(creatorFeeUnits),
+          mintFeeUnits,
+          burnFeeUnits,
+          creatorFeeUnits,
           initialDepositAmount,
           parseUnits(formData.leverage.trim(), 18),
         ],
