@@ -83,6 +83,8 @@ const fixed4 = (n: number): string => {
   const s = n.toFixed(4);
   return s === "-0.0000" ? "0.0000" : s;
 };
+// The value as shown, so a loss too small to show is not signed or colored as a loss.
+const shown = (n: number, digits = 4): number => Number(n.toFixed(digits)) || 0;
 
 const BULL_COLORS = [
   "#4b5563", // gray-600
@@ -893,20 +895,20 @@ const HistoricalInvestmentsTable: React.FC<{
                     <div className="text-xs text-neutral-500 dark:text-neutral-400 mb-1">
                       Total P&L
                     </div>
-                    <div className={`text-xl font-bold ${pool.totalPnL >= 0
+                    <div className={`text-xl font-bold ${shown(pool.totalPnL) >= 0
                       ? 'text-green-600 dark:text-green-400'
                       : 'text-red-600 dark:text-red-400'
                       }`}>
-                      {pool.totalPnL >= 0 ? '+' : ''}{fixed4(pool.totalPnL)} {pool.baseTokenSymbol}
+                      {shown(pool.totalPnL) > 0 ? '+' : ''}{fixed4(pool.totalPnL)} {pool.baseTokenSymbol}
                     </div>
                     <div className="flex items-center justify-end space-x-2">
-                      <div className={`text-sm ${pool.totalPnL >= 0
+                      <div className={`text-sm ${shown(pool.totalPnL) >= 0
                         ? 'text-green-600 dark:text-green-400'
                         : 'text-red-600 dark:text-red-400'
                         }`}>
-                        {pool.totalReturnPercentage >= 0 ? '+' : ''}{pool.totalReturnPercentage.toFixed(1)}%
+                        {shown(pool.totalReturnPercentage, 1) > 0 ? '+' : ''}{shown(pool.totalReturnPercentage, 1).toFixed(1)}%
                       </div>
-                      {pool.totalReturnPercentage >= 0 ? (
+                      {shown(pool.totalReturnPercentage, 1) >= 0 ? (
                         <TrendingUp className="h-4 w-4 text-green-500" />
                       ) : (
                         <TrendingDown className="h-4 w-4 text-red-500" />
@@ -959,11 +961,11 @@ const HistoricalInvestmentsTable: React.FC<{
             </div>
             <div>
               <div className="text-xs text-neutral-500 dark:text-neutral-400">Net P&L</div>
-              <div className={`text-sm font-bold ${historicalPools.reduce((sum, pool) => sum + pool.totalPnL, 0) >= 0
+              <div className={`text-sm font-bold ${shown(historicalPools.reduce((sum, pool) => sum + pool.totalPnL, 0)) >= 0
                 ? 'text-green-600 dark:text-green-400'
                 : 'text-red-600 dark:text-red-400'
                 }`}>
-                {historicalPools.reduce((sum, pool) => sum + pool.totalPnL, 0) >= 0 ? '+' : ''}
+                {shown(historicalPools.reduce((sum, pool) => sum + pool.totalPnL, 0)) > 0 ? '+' : ''}
                 {fixed4(historicalPools.reduce((sum, pool) => sum + pool.totalPnL, 0))} {historicalPools[0]?.baseTokenSymbol || 'UNKNOWN'}
               </div>
             </div>
@@ -1104,19 +1106,19 @@ const PositionCard = ({ pool }: { pool: PoolData }) => {
             </div>
           ) : (
             <div
-              className={`text-xs font-medium px-2 py-1 rounded-full ${pool.totalPnL >= 0
+              className={`text-xs font-medium px-2 py-1 rounded-full ${shown(pool.totalPnL) >= 0
                 ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
                 : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
                 }`}
             >
-              {pool.totalPnL > 0 ? "+" : ""}
-              {pool.totalPnL.toLocaleString(undefined, {
+              {shown(pool.totalPnL) > 0 ? "+" : ""}
+              {shown(pool.totalPnL).toLocaleString(undefined, {
                 minimumFractionDigits: 0,
                 maximumFractionDigits: 4,
               })}{" "}
               {pool.baseTokenSymbol} (
               {pool.totalCostBasis > 0
-                ? ((pool.totalPnL / pool.totalCostBasis) * 100).toLocaleString(
+                ? shown((pool.totalPnL / pool.totalCostBasis) * 100, 2).toLocaleString(
                   undefined,
                   {
                     minimumFractionDigits: 0,
@@ -1169,7 +1171,7 @@ const PositionCard = ({ pool }: { pool: PoolData }) => {
           </div>
           {pool.bullCurrentValue === 0 && pool.bullPnL !== 0 && (
             <div className="text-xs text-orange-600 dark:text-orange-400">
-              Sold - P&L: {pool.bullPnL >= 0 ? '+' : ''}{fixed4(pool.bullPnL)} {pool.baseTokenSymbol}
+              Sold - P&L: {shown(pool.bullPnL) > 0 ? '+' : ''}{fixed4(pool.bullPnL)} {pool.baseTokenSymbol}
             </div>
           )}
           {pool.bullCurrentValue > 0 && (
@@ -1196,7 +1198,7 @@ const PositionCard = ({ pool }: { pool: PoolData }) => {
           </div>
           {pool.bearCurrentValue === 0 && pool.bearPnL !== 0 && (
             <div className="text-xs text-orange-600 dark:text-orange-400">
-              Sold - P&L: {pool.bearPnL >= 0 ? '+' : ''}{fixed4(pool.bearPnL)} {pool.baseTokenSymbol}
+              Sold - P&L: {shown(pool.bearPnL) > 0 ? '+' : ''}{fixed4(pool.bearPnL)} {pool.baseTokenSymbol}
             </div>
           )}
           {pool.bearCurrentValue > 0 && (
@@ -2504,25 +2506,25 @@ export default function PortfolioPage() {
               />
               <SummaryCard
                 title="Total P&L"
-                value={`${totalPnL >= 0 ? "+" : ""}${totalPnL.toLocaleString(
+                value={`${shown(totalPnL) > 0 ? "+" : ""}${shown(totalPnL).toLocaleString(
                   undefined,
                   {
                     minimumFractionDigits: 0,
                     maximumFractionDigits: 4,
                   }
                 )} ${poolsData[0]?.baseTokenSymbol || 'UNKNOWN'}`}
-                icon={totalPnL >= 0 ? TrendingUp : TrendingDown}
-                trend={totalPnL >= 0 ? "up" : "down"}
+                icon={shown(totalPnL) >= 0 ? TrendingUp : TrendingDown}
+                trend={shown(totalPnL) >= 0 ? "up" : "down"}
               />
               <SummaryCard
                 title="Total Return %"
-                value={`${totalReturnPercentage >= 0 ? "+" : ""
-                  }${totalReturnPercentage.toLocaleString(undefined, {
+                value={`${shown(totalReturnPercentage, 2) > 0 ? "+" : ""
+                  }${shown(totalReturnPercentage, 2).toLocaleString(undefined, {
                     minimumFractionDigits: 0,
                     maximumFractionDigits: 2,
                   })}%`}
                 icon={Activity}
-                trend={totalReturnPercentage >= 0 ? "up" : "down"}
+                trend={shown(totalReturnPercentage, 2) >= 0 ? "up" : "down"}
               />
             </>
           ) : isPoolsQueryPending || (availablePools.length > 0 && !isBalanceCheckDone) || (isBalanceCheckDone && filteredPoolCount !== null && filteredPoolCount > 0 && !isAllLoadersSettled) ? (
