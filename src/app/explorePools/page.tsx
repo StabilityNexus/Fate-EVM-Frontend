@@ -409,14 +409,18 @@ function ExploreFatePoolsClient() {
             bearPercentage: pool.bearPercentage,
             chainId: pool.chainId as SupportedChainId
           }));
-          await batchSavePools(poolDetails);
-          await saveChainStatus({
-            chainId: chainId as SupportedChainId,
-            isActive: true,
-            lastBlockNumber: 0, // Will be updated with real block number
-            lastUpdateTime: Date.now(),
-            poolCount: pools.length
-          });
+          try {
+            await batchSavePools(poolDetails);
+            await saveChainStatus({
+              chainId: chainId as SupportedChainId,
+              isActive: true,
+              lastBlockNumber: 0, // Will be updated with real block number
+              lastUpdateTime: Date.now(),
+              poolCount: pools.length
+            });
+          } catch (cacheError) {
+            logger.error(`Failed to cache pools for chain ${chainId}:`, cacheError instanceof Error ? cacheError : undefined);
+          }
         }
 
         updateChainState(chainId, { loading: false, error: null });
