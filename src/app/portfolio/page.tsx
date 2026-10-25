@@ -1766,6 +1766,7 @@ const BalanceFilteredPoolLoader: React.FC<{
     }
   }, [settledCount, filteredPools.length, isFiltering, onAllSettled]);
   useEffect(() => {
+    let cancelled = false;
     const filterPools = async () => {
       setSettledCount(0);
       if (!userAddress || pools.length === 0) {
@@ -1825,6 +1826,7 @@ const BalanceFilteredPoolLoader: React.FC<{
           })
         );
         // A pool sold to zero is still loaded, so its last sell is scanned and it shows as closed.
+        if (cancelled) return;
         const traded = new Set(tradedPools);
         const poolsWithBalance = balanceChecks
           .filter(check => check && (check.hasBalance || traded.has(check.poolAddress.toLowerCase())))
@@ -1834,15 +1836,17 @@ const BalanceFilteredPoolLoader: React.FC<{
         setFilteredPools(poolsWithBalance);
         onFilterComplete?.(poolsWithBalance.length);
       } catch (error) {
+        if (cancelled) return;
         console.error('Balance filtering failed:', error);
         // Fallback: load all pools if filtering fails
         setFilteredPools(pools);
         onFilterComplete?.(pools.length);
       } finally {
-        setIsFiltering(false);
+        if (!cancelled) setIsFiltering(false);
       }
     };
     filterPools();
+    return () => { cancelled = true; };
   }, [pools, userAddress, chainId, onFilterComplete, tradedPools]);
   if (isFiltering) return null;
   return (
@@ -1884,12 +1888,18 @@ export default function PortfolioPage() {
 
   const [tradedPools, setTradedPools] = useState<string[]>([]);
   useEffect(() => {
+    let cancelled = false;
     setTradedPools((prev) => (prev.length > 0 ? [] : prev));
     if (!address || !chainId || !isDBInitialized) return;
     getPortfolioTransactions(address, chainId as SupportedChainId)
-      .then((rows) => setTradedPools(Array.from(new Set(rows.map((row) => row.poolAddress.toLowerCase())))))
+      .then((rows) => {
+        if (!cancelled) setTradedPools(Array.from(new Set(rows.map((row) => row.poolAddress.toLowerCase()))));
+      })
       .catch(() => {});
+    return () => { cancelled = true; };
   }, [address, chainId, isDBInitialized, getPortfolioTransactions]);
+  const walletKeyRef = useRef("");
+  walletKeyRef.current = `${address}-${chainId}`;
 
   // Direct IndexedDB manager for pool details (more reliable)
   const [indexedDB, setIndexedDB] = useState<FatePoolsIndexedDBManager | null>(null);
@@ -1973,6 +1983,7 @@ export default function PortfolioPage() {
   // Efficient cache loading - load pool details from IndexedDB and combine with positions
   const loadCachedData = useCallback(async () => {
     if (!address || !chainId || !isDBInitialized || !indexedDB) return;
+    const walletKey = `${address}-${chainId}`;
 
     try {
       const cachedData = await getPortfolioCache(address, chainId as SupportedChainId);
@@ -2114,6 +2125,7 @@ export default function PortfolioPage() {
         }
 
         // The chain data may have arrived during the reads above, and it is newer than the cache.
+        if (walletKeyRef.current !== walletKey) return;
         setPoolsData((prev) => (prev.length > 0 ? prev : mappedData));
 
       } else {
