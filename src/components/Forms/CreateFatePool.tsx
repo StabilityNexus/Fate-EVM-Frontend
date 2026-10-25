@@ -198,10 +198,10 @@ export default function CreateFatePool() {
        if (isNaN(creatorFee) || creatorFee < 0) newErrors.creatorFee = "Invalid fee value";
        if (devFeePercent === undefined) newErrors.devFee = "Could not read the dev fee. Check your network and try again.";
 
-       const totalFee = mintFee + burnFee + creatorFee + (devFeePercent ?? 0);
-       if (totalFee >= 100) {
-         newErrors.mintFee = "Total fees must be less than 100%";
-       }
+       // The factory checks each side on its own: mint (or burn) plus creator plus dev fee.
+       const sharedFee = creatorFee + (devFeePercent ?? 0);
+       if (mintFee + sharedFee >= 100) newErrors.mintFee = "Mint, creator and dev fees together must be less than 100%";
+       if (burnFee + sharedFee >= 100) newErrors.burnFee = "Burn, creator and dev fees together must be less than 100%";
      }
 
     setErrors(newErrors);
