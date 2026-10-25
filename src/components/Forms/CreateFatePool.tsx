@@ -297,6 +297,17 @@ export default function CreateFatePool() {
         throw new Error(`Base token uses ${baseDecimals} decimals. Only tokens with 18 or fewer decimals are supported (UnsupportedDecimals).`);
       }
 
+      // Checked before the adapter transaction, so a bad amount never costs gas.
+      let initialDepositAmount = BigInt(0);
+      if (parseFloat(formData.initialDeposit) > 0) {
+        const decimalParts = formData.initialDeposit.split('.');
+        const fractionalDigits = decimalParts.length > 1 ? decimalParts[1].length : 0;
+        if (fractionalDigits > baseDecimals) {
+          throw new Error(`Amount has too many decimal places. Maximum allowed: ${baseDecimals} decimal places, but got ${fractionalDigits}.`);
+        }
+        initialDepositAmount = parseUnits(formData.initialDeposit, baseDecimals);
+      }
+
       // Handle oracle creation based on type
       if (formData.oracleType === "chainlink") {
         // Get the Chainlink adapter factory address
@@ -378,22 +389,8 @@ export default function CreateFatePool() {
       }
 
       // Step 3: Handle initial deposit approval if needed
-      const initialDepositValue = parseFloat(formData.initialDeposit);
-      let initialDepositAmount = BigInt(0);
-      
-      if (initialDepositValue > 0) {
+      if (initialDepositAmount > BigInt(0)) {
         try {
-          // Pre-check decimal places to avoid parseUnits error (decimals already read above)
-          const decimalParts = formData.initialDeposit.split('.');
-          const fractionalDigits = decimalParts.length > 1 ? decimalParts[1].length : 0;
-
-          if (fractionalDigits > baseDecimals) {
-            throw new Error(`Amount has too many decimal places. Maximum allowed: ${baseDecimals} decimal places, but got ${fractionalDigits}.`);
-          }
-
-          // Convert initial deposit to token units
-          initialDepositAmount = parseUnits(formData.initialDeposit, baseDecimals);
-
           logger.debug("Initial deposit:", { initialDeposit: formData.initialDeposit, tokens: initialDepositAmount.toString(), units: "units" });
           
           // Check current allowance before approving
