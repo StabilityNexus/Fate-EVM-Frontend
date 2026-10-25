@@ -1634,11 +1634,13 @@ const EnhancedPoolDataLoader = ({
         bearMetrics = calculateTokenMetrics(bearReserve, bearSupply, userBearTokens, bearAvgPrice);
       }
 
+      // Fees are out of 100000, so 1% is 1000 units; Explore reads the cached value as a percent.
+      const feePercent = (units: unknown) => Number(units as bigint || BigInt(0)) / 1000;
       const fees = {
-        mintFee: Number(formatUnits(poolStaticData?.[7]?.result as bigint || BigInt(0), 4)),
-        burnFee: Number(formatUnits(poolStaticData?.[8]?.result as bigint || BigInt(0), 4)),
-        creatorFee: Number(formatUnits(poolStaticData?.[9]?.result as bigint || BigInt(0), 4)),
-        treasuryFee: Number(formatUnits(poolStaticData?.[10]?.result as bigint || BigInt(0), 4)),
+        mintFee: feePercent(poolStaticData?.[7]?.result),
+        burnFee: feePercent(poolStaticData?.[8]?.result),
+        creatorFee: feePercent(poolStaticData?.[9]?.result),
+        treasuryFee: feePercent(poolStaticData?.[10]?.result),
       };
 
       const poolData: PoolData = {
