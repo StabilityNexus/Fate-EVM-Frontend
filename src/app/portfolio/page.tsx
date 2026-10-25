@@ -1953,7 +1953,7 @@ export default function PortfolioPage() {
 
   // Efficient cache loading - load pool details from IndexedDB and combine with positions
   const loadCachedData = useCallback(async () => {
-    if (!address || !chainId || !isDBInitialized || !indexedDB || isLoadingFromBlockchain) return;
+    if (!address || !chainId || !isDBInitialized || !indexedDB) return;
 
     try {
       const cachedData = await getPortfolioCache(address, chainId as SupportedChainId);
@@ -2089,10 +2089,8 @@ export default function PortfolioPage() {
           });
         }
 
-        setPoolsData(mappedData);
-
-        // Force UI update and ensure loading state is cleared
-        setIsLoadingFromBlockchain(false); // This is cached data, not blockchain data
+        // The chain data may have arrived during the reads above, and it is newer than the cache.
+        setPoolsData((prev) => (prev.length > 0 ? prev : mappedData));
 
       } else {
         // No cached data — first-time user, blockchain loaders will handle it
@@ -2101,7 +2099,7 @@ export default function PortfolioPage() {
     } catch (error) {
       console.error("❌ Failed to load cached data:", error);
     }
-  }, [address, chainId, isDBInitialized, indexedDB, getPortfolioCache, isLoadingFromBlockchain]);
+  }, [address, chainId, isDBInitialized, indexedDB, getPortfolioCache]);
 
   // Save data to cache
   const saveDataToCache = useCallback(async (data: PoolData[]) => {
@@ -2249,11 +2247,15 @@ export default function PortfolioPage() {
    * 4. RPC Minimal: Only used for first-time users or manual refresh
    * 5. Instant UI: Portfolio shows data immediately, updates in real-time
    */
+  // Once per wallet and chain, after the factory pool list is known; the chain data takes over from there.
+  const cacheLoadedForRef = useRef<string | null>(null);
   useEffect(() => {
-    if (address && chainId && (isDBInitialized || indexedDB)) {
-      loadCachedData();
-    }
-  }, [address, chainId, isDBInitialized, indexedDB, loadCachedData]);
+    const key = `${address}-${chainId}`;
+    if (!address || !chainId || !isDBInitialized || !indexedDB || isPoolsQueryPending) return;
+    if (cacheLoadedForRef.current === key) return;
+    cacheLoadedForRef.current = key;
+    loadCachedData();
+  }, [address, chainId, isDBInitialized, indexedDB, isPoolsQueryPending, loadCachedData]);
 
   // Only save data to cache when it comes from blockchain (not cache)
   // This prevents infinite loops between loadCachedData and saveDataToCache
