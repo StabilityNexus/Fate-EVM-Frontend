@@ -85,6 +85,8 @@ const fixed4 = (n: number): string => {
 };
 // The value as shown, so a loss too small to show is not signed or colored as a loss.
 const shown = (n: number, digits = 4): number => Number(n.toFixed(digits)) || 0;
+const closedReturn = (pool: { totalPnL: number; totalInvested: number }): number =>
+  pool.totalInvested > 0 ? (pool.totalPnL / pool.totalInvested) * 100 : 0;
 
 const BULL_COLORS = [
   "#4b5563", // gray-600
@@ -303,13 +305,13 @@ const calculateTokenMetricsWithEvents = async (
 
     for (const tx of sortedTxns) {
       if (tx.type === 'buy') {
-        // CORRECTED: Track net investment (excluding fees) as cost basis
+        // The cost includes the buy fee, as brokers count it; the sell side already receives after fees.
         const feePaid = (tx as any).feePaid || 0;
         const netInvestment = tx.amountAsset - feePaid; // Actual investment amount
 
         grossInvestment += tx.amountAsset; // Total paid (including fees)
         totalFeesPaid += feePaid;
-        totalCostBasis += netInvestment; // Net investment (excluding fees)
+        totalCostBasis += tx.amountAsset;
 
         // Track v4 aggregated metrics
         totalBought += tx.amountCoin;
@@ -353,8 +355,7 @@ const calculateTokenMetricsWithEvents = async (
           const oldestBuy = buyQueue[0];
           const amountFromThisBuy = Math.min(remainingToSell, oldestBuy.amount);
 
-          // CORRECTED: Use net amount (excluding fees) for cost basis calculation
-          const costPerToken = oldestBuy.netAmount / oldestBuy.initialAmount;
+          const costPerToken = oldestBuy.grossAmount / oldestBuy.initialAmount;
           costOfSold += amountFromThisBuy * costPerToken;
 
           remainingToSell -= amountFromThisBuy;
@@ -384,16 +385,16 @@ const calculateTokenMetricsWithEvents = async (
       }
     }
 
-    // Calculate remaining cost basis for current holdings (using net amounts)
+    // Calculate remaining cost basis for current holdings
     const remainingCostBasis = buyQueue.reduce((sum, buy) => {
-      const costPerToken = buy.netAmount / buy.initialAmount;
+      const costPerToken = buy.grossAmount / buy.initialAmount;
       return sum + buy.amount * costPerToken;
     }, 0);
 
     // FIFO Queue Validation: Ensure cost basis matches current holdings
     const queueTotalTokens = buyQueue.reduce((sum, buy) => sum + buy.amount, 0);
     const queueTotalCost = buyQueue.reduce((sum, buy) => {
-      const costPerToken = buy.netAmount / buy.initialAmount;
+      const costPerToken = buy.grossAmount / buy.initialAmount;
       return sum + buy.amount * costPerToken;
     }, 0);
 
@@ -754,7 +755,7 @@ const calculateTokenMetrics = (
     userTokens === 0 || avgPrice === 0 ? 0 : (pnL / costBasis) * 100;
 
   // This path never reads logs, so it has no history to be short of.
-  return { price, currentValue, costBasis, pnL, returns, costBasisUnavailable: false, historyIncomplete: false, historyTruncated: false };
+  return { price, currentValue, costBasis, pnL, returns, grossInvestment: costBasis, costBasisUnavailable: false, historyIncomplete: false, historyTruncated: false };
 };
 
 interface PoolData {
@@ -766,6 +767,7 @@ interface PoolData {
   bearCurrentValue: number;
   totalValue: number;
   totalCostBasis: number;
+  totalInvested: number;
   bullPnL: number;
   bearPnL: number;
   totalPnL: number;
@@ -885,7 +887,7 @@ const HistoricalInvestmentsTable: React.FC<{
                       Amount Invested
                     </div>
                     <div className="text-lg font-semibold text-neutral-900 dark:text-neutral-100">
-                      {fixed4(pool.totalCostBasis)} {pool.baseTokenSymbol}
+                      {fixed4(pool.totalInvested)} {pool.baseTokenSymbol}
                     </div>
                     {/* Omit stale USD conversion; show only base asset */}
                   </div>
@@ -906,9 +908,9 @@ const HistoricalInvestmentsTable: React.FC<{
                         ? 'text-green-600 dark:text-green-400'
                         : 'text-red-600 dark:text-red-400'
                         }`}>
-                        {shown(pool.totalReturnPercentage, 1) > 0 ? '+' : ''}{shown(pool.totalReturnPercentage, 1).toFixed(1)}%
+                        {shown(closedReturn(pool), 1) > 0 ? '+' : ''}{shown(closedReturn(pool), 1).toFixed(1)}%
                       </div>
-                      {shown(pool.totalReturnPercentage, 1) >= 0 ? (
+                      {shown(closedReturn(pool), 1) >= 0 ? (
                         <TrendingUp className="h-4 w-4 text-green-500" />
                       ) : (
                         <TrendingDown className="h-4 w-4 text-red-500" />
@@ -956,7 +958,7 @@ const HistoricalInvestmentsTable: React.FC<{
             <div>
               <div className="text-xs text-neutral-500 dark:text-neutral-400">Total Invested</div>
               <div className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
-                {fixed4(historicalPools.reduce((sum, pool) => sum + pool.totalCostBasis, 0))} {historicalPools[0]?.baseTokenSymbol || 'UNKNOWN'}
+                {fixed4(historicalPools.reduce((sum, pool) => sum + pool.totalInvested, 0))} {historicalPools[0]?.baseTokenSymbol || 'UNKNOWN'}
               </div>
             </div>
             <div>
@@ -1654,6 +1656,7 @@ const EnhancedPoolDataLoader = ({
         bearCurrentValue: bearMetrics.currentValue,
         totalValue: bullMetrics.currentValue + bearMetrics.currentValue,
         totalCostBasis: bullMetrics.costBasis + bearMetrics.costBasis,
+        totalInvested: bullMetrics.grossInvestment + bearMetrics.grossInvestment,
         bullPnL: bullMetrics.pnL,
         bearPnL: bearMetrics.pnL,
         totalPnL: bullMetrics.pnL + bearMetrics.pnL,
@@ -2009,7 +2012,7 @@ export default function PortfolioPage() {
             name: poolDetails?.name || `Pool ${pos.poolAddress.slice(0, 6)}...`,
             bullBalance: 0, bearBalance: 0,
             bullCurrentValue: 0, bearCurrentValue: 0,
-            totalValue: 0, totalCostBasis: 0,
+            totalValue: 0, totalCostBasis: 0, totalInvested: 0,
             bullPnL: 0, bearPnL: 0, totalPnL: 0,
             bullPrice: 0, bearPrice: 0, bullAvgPrice: 0, bearAvgPrice: 0,
             bullReturns: 0, bearReturns: 0, totalReturnPercentage: 0,
@@ -2088,6 +2091,7 @@ export default function PortfolioPage() {
           base.totalValue = base.bullCurrentValue + base.bearCurrentValue;
           base.totalPnL = base.bullPnL + base.bearPnL;
           base.totalCostBasis = base.totalValue - base.totalPnL;
+          base.totalInvested = base.totalCostBasis;
           base.totalReturnPercentage = base.totalCostBasis > 0 ? (base.totalPnL / base.totalCostBasis) * 100 : 0;
           base.hasPositions = base.hasBullPosition || base.hasBearPosition;
           grouped.set(pos.poolAddress, base);
