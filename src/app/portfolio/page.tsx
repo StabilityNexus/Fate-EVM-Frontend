@@ -768,6 +768,8 @@ interface PoolData {
   totalValue: number;
   totalCostBasis: number;
   totalInvested: number;
+  bullInvested: number;
+  bearInvested: number;
   bullPnL: number;
   bearPnL: number;
   totalPnL: number;
@@ -1657,6 +1659,8 @@ const EnhancedPoolDataLoader = ({
         totalValue: bullMetrics.currentValue + bearMetrics.currentValue,
         totalCostBasis: bullMetrics.costBasis + bearMetrics.costBasis,
         totalInvested: bullMetrics.grossInvestment + bearMetrics.grossInvestment,
+        bullInvested: bullMetrics.grossInvestment,
+        bearInvested: bearMetrics.grossInvestment,
         bullPnL: bullMetrics.pnL,
         bearPnL: bearMetrics.pnL,
         totalPnL: bullMetrics.pnL + bearMetrics.pnL,
@@ -2023,7 +2027,7 @@ export default function PortfolioPage() {
             name: poolDetails?.name || `Pool ${pos.poolAddress.slice(0, 6)}...`,
             bullBalance: 0, bearBalance: 0,
             bullCurrentValue: 0, bearCurrentValue: 0,
-            totalValue: 0, totalCostBasis: 0, totalInvested: 0,
+            totalValue: 0, totalCostBasis: 0, totalInvested: 0, bullInvested: 0, bearInvested: 0,
             bullPnL: 0, bearPnL: 0, totalPnL: 0,
             bullPrice: 0, bearPrice: 0, bullAvgPrice: 0, bearAvgPrice: 0,
             bullReturns: 0, bearReturns: 0, totalReturnPercentage: 0,
@@ -2075,6 +2079,7 @@ export default function PortfolioPage() {
             base.bullBalance += pos.currentBalance;
             base.bullCurrentValue += pos.currentValue;
             base.bullPnL += pos.pnL;
+            base.bullInvested += pos.grossInvestment;
             base.bullReturns = pos.returns;
             base.hasBullPosition = pos.currentBalance > 0 || pos.currentValue > 0 || pos.pnL !== 0;
             base.bullTokenAddress = pos.tokenAddress;
@@ -2088,6 +2093,7 @@ export default function PortfolioPage() {
             base.bearBalance += pos.currentBalance;
             base.bearCurrentValue += pos.currentValue;
             base.bearPnL += pos.pnL;
+            base.bearInvested += pos.grossInvestment;
             base.bearReturns = pos.returns;
             base.hasBearPosition = pos.currentBalance > 0 || pos.currentValue > 0 || pos.pnL !== 0;
             base.bearTokenAddress = pos.tokenAddress;
@@ -2102,7 +2108,7 @@ export default function PortfolioPage() {
           base.totalValue = base.bullCurrentValue + base.bearCurrentValue;
           base.totalPnL = base.bullPnL + base.bearPnL;
           base.totalCostBasis = base.totalValue - base.totalPnL;
-          base.totalInvested = base.totalCostBasis;
+          base.totalInvested = base.bullInvested + base.bearInvested;
           base.totalReturnPercentage = base.totalCostBasis > 0 ? (base.totalPnL / base.totalCostBasis) * 100 : 0;
           base.hasPositions = base.hasBullPosition || base.hasBearPosition;
           grouped.set(pos.poolAddress, base);
@@ -2163,7 +2169,7 @@ export default function PortfolioPage() {
               returns: pool.bullReturns,
               totalFeesPaid: 0,
               netInvestment: pool.bullCurrentValue - pool.bullPnL,
-              grossInvestment: pool.bullCurrentValue - pool.bullPnL,
+              grossInvestment: pool.bullInvested,
               lastUpdated: Date.now(),
               blockNumber: 0,
               baseTokenSymbol: pool.baseTokenSymbol || 'UNKNOWN',
@@ -2192,7 +2198,7 @@ export default function PortfolioPage() {
               returns: pool.bearReturns,
               totalFeesPaid: 0,
               netInvestment: pool.bearCurrentValue - pool.bearPnL,
-              grossInvestment: pool.bearCurrentValue - pool.bearPnL,
+              grossInvestment: pool.bearInvested,
               lastUpdated: Date.now(),
               blockNumber: 0,
               baseTokenSymbol: pool.baseTokenSymbol,
