@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -83,7 +83,11 @@ const PoolConfigurationStep: React.FC<PoolConfigurationStepProps> = ({
   }, [address, formData.creatorAddress, updateFormData]);
 
   // A feed belongs to one chain, so clear the selection when the chain changes.
+  // The step remounts on Back, so compare with the chain it mounted on instead of clearing on mount.
+  const feedChainRef = useRef(chainId);
   useEffect(() => {
+    if (feedChainRef.current === chainId) return;
+    feedChainRef.current = chainId;
     updateFormData({ oracleType: 'chainlink', priceFeedAddress: '' });
   }, [chainId, updateFormData]);
 

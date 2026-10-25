@@ -18,7 +18,8 @@ import { PredictionPoolFactoryABI } from "@/utils/abi/PredictionPoolFactory";
 import { ChainlinkAdapterFactoryABI } from "@/utils/abi/ChainlinkAdapterFactory";
 import { FatePoolFactories, ChainlinkAdapterFactories } from "@/utils/addresses";
 import { SUPPORTED_CHAINS, getPriceFeedOptions } from "@/utils/supportedChainFeed";
-import { parseUnits } from "viem";
+import { getChainConfig } from "@/utils/chainConfig";
+import { BaseError, parseUnits, UserRejectedRequestError } from "viem";
 
 // An address is also valid bytes, so viem rejects the call while both createAdapter overloads are in the ABI.
 const CREATE_ADAPTER_BY_FEED_ABI = ChainlinkAdapterFactoryABI.filter(
@@ -26,6 +27,12 @@ const CREATE_ADAPTER_BY_FEED_ABI = ChainlinkAdapterFactoryABI.filter(
 );
 
 const DENOMINATOR = 100_000;
+
+// viem's full message includes the call data, so toasts use its short form.
+const shortError = (error: unknown) =>
+  error instanceof BaseError ? error.shortMessage : error instanceof Error ? error.message : "Unknown error";
+const isRejected = (error: unknown) =>
+  error instanceof BaseError && !!error.walk((e) => e instanceof UserRejectedRequestError);
 
 // Minimal ERC20 ABI for approve, allowance, and decimals functions
 const ERC20_ABI = [
@@ -60,7 +67,7 @@ const ERC20_ABI = [
 
 export default function CreateFatePool() {
   const router = useRouter();
-  const { isConnected, address } = useAccount();
+  const { isConnected, address, chainId: walletChainId } = useAccount();
   const currentChainId = useChainId();
 
   // Set by the protocol in the factory; the pool keeps the value it is created with.
@@ -77,9 +84,10 @@ export default function CreateFatePool() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  // The same writer also sends the adapter and approve transactions, so only the createPool hash means success.
+  const [poolTxHash, setPoolTxHash] = useState<`0x${string}` | undefined>();
   const {
     writeContractAsync: deployPool,
-    data: deployData,
     isPending: isSigning,
     reset: resetWrite
   } = useWriteContract();
@@ -90,7 +98,7 @@ export default function CreateFatePool() {
     error: receiptError,
     data: receiptData
   } = useWaitForTransactionReceipt({
-    hash: deployData
+    hash: poolTxHash
   });
 
   const [formData, setFormData] = useState<FormData>({
@@ -187,24 +195,26 @@ export default function CreateFatePool() {
       if (!formData.bearCoinName.trim()) newErrors.bearCoinName = "Bear coin name is required";
       if (!formData.bearCoinSymbol.trim()) newErrors.bearCoinSymbol = "Bear coin symbol is required";
          } else if (currentStep === 3) {
-       const mintFee = parseFloat(formData.mintFee);
-       const burnFee = parseFloat(formData.burnFee);
-       const creatorFee = parseFloat(formData.creatorFee);
+       // 1% is 1000 units, so a fee with more than 3 decimals would be rounded on the way to the contract.
+       const feeUnits = (fee: string) => /^(\d+\.?\d{0,3}|\.\d{1,3})$/.test(fee.trim()) ? parseUnits(fee.trim(), 3) : undefined;
+       const mintFee = feeUnits(formData.mintFee);
+       const burnFee = feeUnits(formData.burnFee);
+       const creatorFee = feeUnits(formData.creatorFee);
 
-       if (isNaN(mintFee) || mintFee < 0) newErrors.mintFee = "Invalid fee value";
-       if (isNaN(burnFee) || burnFee < 0) newErrors.burnFee = "Invalid fee value";
-       if (isNaN(creatorFee) || creatorFee < 0) newErrors.creatorFee = "Invalid fee value";
-       if (devFeePercent === undefined) newErrors.devFee = "Could not read the dev fee. Check your network and try again.";
+       if (mintFee === undefined) newErrors.mintFee = "Enter a fee with at most 3 decimals";
+       if (burnFee === undefined) newErrors.burnFee = "Enter a fee with at most 3 decimals";
+       if (creatorFee === undefined) newErrors.creatorFee = "Enter a fee with at most 3 decimals";
+       if (devFeeUnits === undefined) newErrors.devFee = "Could not read the dev fee. Check your network and try again.";
 
-       const totalFee = mintFee + burnFee + creatorFee + (devFeePercent ?? 0);
-       if (totalFee >= 100) {
-         newErrors.mintFee = "Total fees must be less than 100%";
-       }
+       // The factory checks each side on its own: mint (or burn) plus creator plus dev fee.
+       const sharedFee = (creatorFee ?? BigInt(0)) + ((devFeeUnits as bigint | undefined) ?? BigInt(0));
+       if (mintFee !== undefined && mintFee + sharedFee >= BigInt(DENOMINATOR)) newErrors.mintFee = "Mint, creator and dev fees together must be less than 100%";
+       if (burnFee !== undefined && burnFee + sharedFee >= BigInt(DENOMINATOR)) newErrors.burnFee = "Burn, creator and dev fees together must be less than 100%";
      }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  }, [currentStep, formData, devFeePercent]);
+  }, [currentStep, formData, devFeeUnits]);
 
   const nextStep = useCallback(() => {
     logger.debug('nextStep called, currentStep:', { currentStep });
@@ -245,11 +255,13 @@ export default function CreateFatePool() {
 
     setIsSubmitting(true);
     resetWrite();
+    setPoolTxHash(undefined);
     
          try {
-       const mintFeeUnits = Math.floor((parseFloat(formData.mintFee) / 100) * DENOMINATOR);
-       const burnFeeUnits = Math.floor((parseFloat(formData.burnFee) / 100) * DENOMINATOR);
-       const creatorFeeUnits = Math.floor((parseFloat(formData.creatorFee) / 100) * DENOMINATOR);
+       // 1% is 1000 units, so a percent string is parsed with 3 decimals; float math turned 0.57% into 569.
+       const mintFeeUnits = parseUnits(formData.mintFee.trim(), 3);
+       const burnFeeUnits = parseUnits(formData.burnFee.trim(), 3);
+       const creatorFeeUnits = parseUnits(formData.creatorFee.trim(), 3);
 
       const baseTokenAddress = formData.baseTokenAddress.trim();
       let oracleAddress: `0x${string}`;
@@ -293,6 +305,17 @@ export default function CreateFatePool() {
         throw new Error(`Base token uses ${baseDecimals} decimals. Only tokens with 18 or fewer decimals are supported (UnsupportedDecimals).`);
       }
 
+      // Checked before the adapter transaction, so a bad amount never costs gas.
+      let initialDepositAmount = BigInt(0);
+      if (parseFloat(formData.initialDeposit) > 0) {
+        const decimalParts = formData.initialDeposit.split('.');
+        const fractionalDigits = decimalParts.length > 1 ? decimalParts[1].length : 0;
+        if (fractionalDigits > baseDecimals) {
+          throw new Error(`Amount has too many decimal places. Maximum allowed: ${baseDecimals} decimal places, but got ${fractionalDigits}.`);
+        }
+        initialDepositAmount = parseUnits(formData.initialDeposit, baseDecimals);
+      }
+
       // Handle oracle creation based on type
       if (formData.oracleType === "chainlink") {
         // Get the Chainlink adapter factory address
@@ -334,6 +357,7 @@ export default function CreateFatePool() {
             toast.info("Creating new oracle adapter... This may take a moment.");
             
             const adapterTxHash = await deployPool({
+              chainId: currentChainId,
               address: adapterFactoryAddress as `0x${string}`,
               abi: CREATE_ADAPTER_BY_FEED_ABI,
               functionName: "createAdapter",
@@ -366,29 +390,16 @@ export default function CreateFatePool() {
           }
         } catch (error) {
           logger.error("Error checking/creating Chainlink oracle adapter:", error instanceof Error ? error : undefined);
-          throw new Error(`Failed to get Chainlink oracle adapter: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          if (isRejected(error)) throw error;
+          throw new Error(`Failed to get Chainlink oracle adapter: ${shortError(error)}`);
         }
       } else {
         throw new Error("Invalid oracle type selected");
       }
 
       // Step 3: Handle initial deposit approval if needed
-      const initialDepositValue = parseFloat(formData.initialDeposit);
-      let initialDepositAmount = BigInt(0);
-      
-      if (initialDepositValue > 0) {
+      if (initialDepositAmount > BigInt(0)) {
         try {
-          // Pre-check decimal places to avoid parseUnits error (decimals already read above)
-          const decimalParts = formData.initialDeposit.split('.');
-          const fractionalDigits = decimalParts.length > 1 ? decimalParts[1].length : 0;
-
-          if (fractionalDigits > baseDecimals) {
-            throw new Error(`Amount has too many decimal places. Maximum allowed: ${baseDecimals} decimal places, but got ${fractionalDigits}.`);
-          }
-
-          // Convert initial deposit to token units
-          initialDepositAmount = parseUnits(formData.initialDeposit, baseDecimals);
-
           logger.debug("Initial deposit:", { initialDeposit: formData.initialDeposit, tokens: initialDepositAmount.toString(), units: "units" });
           
           // Check current allowance before approving
@@ -406,6 +417,7 @@ export default function CreateFatePool() {
             toast.info("Approving token spending for initial deposit...");
             
             const approveTxHash = await deployPool({
+              chainId: currentChainId,
               address: baseTokenAddress as `0x${string}`,
               abi: ERC20_ABI,
               functionName: "approve",
@@ -428,7 +440,8 @@ export default function CreateFatePool() {
           }
         } catch (error) {
           logger.error("Error approving tokens:", error instanceof Error ? error : undefined);
-          throw new Error(`Failed to approve tokens: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          if (isRejected(error)) throw error;
+          throw new Error(`Failed to approve tokens: ${shortError(error)}`);
         }
       }
 
@@ -436,7 +449,8 @@ export default function CreateFatePool() {
       logger.debug("Creating prediction pool with oracle address:", { oracleAddress });
       toast.info("Creating prediction pool...");
       
-      await deployPool({
+      const createTxHash = await deployPool({
+        chainId: currentChainId,
         address: FACTORY_ADDRESS as `0x${string}`,
         abi: PredictionPoolFactoryABI,
         functionName: "createPool",
@@ -448,59 +462,48 @@ export default function CreateFatePool() {
           formData.bullCoinSymbol.trim(),
           formData.bearCoinName.trim(),
           formData.bearCoinSymbol.trim(),
-          BigInt(mintFeeUnits),
-          BigInt(burnFeeUnits),
-          BigInt(creatorFeeUnits),
+          mintFeeUnits,
+          burnFeeUnits,
+          creatorFeeUnits,
           initialDepositAmount,
           parseUnits(formData.leverage.trim(), 18),
         ],
       });
 
+      setPoolTxHash(createTxHash);
       logger.debug("formData:", { formData });
       toast.info("Pool deployment transaction submitted. Waiting for confirmation...");
     } catch (error) {
       logger.error("Error deploying pool:", error instanceof Error ? error : undefined);
-      let errorMessage = "Unknown error occurred";
-      if (error instanceof Error) {
-        errorMessage = error.message;
-          } else if (typeof error === 'object' && error !== null && 'message' in error) {
-        errorMessage = String((error as { message: string }).message);
+      if (isRejected(error)) {
+        toast.info("Transaction cancelled");
+      } else {
+        toast.error(`Failed to deploy: ${shortError(error)}`);
       }
-      toast.error(`Failed to deploy: ${errorMessage}`);
       setIsSubmitting(false);
     }
   };
 
   // Handle successful pool deployment and initialization
   useEffect(() => {
-    if (isTransactionSuccess && deployData && receiptData) {
-      
-      toast.success("Pool deployed successfully!");
-      
-      // Pool is automatically initialized in the smart contract during deployment
+    if (isTransactionSuccess && poolTxHash && receiptData) {
       toast.success("Pool deployed successfully!");
       setIsSubmitting(false);
       const timer = setTimeout(() => router.push("/explorePools"), 2000);
       return () => clearTimeout(timer);
     }
-      }, [isTransactionSuccess, deployData, receiptData, router]);
+      }, [isTransactionSuccess, poolTxHash, receiptData, router]);
 
   useEffect(() => {
     if (receiptError) {
-      toast.error(`Transaction failed: ${receiptError.message}`);
+      toast.error(`Transaction failed: ${shortError(receiptError)}`);
       setIsSubmitting(false);
     }
   }, [receiptError]);
 
-  useEffect(() => {
-    if (!isSigning && isSubmitting && !isDeployingTx) {
-      if (!deployData) {
-        setIsSubmitting(false);
-      }
-    }
-  }, [isSigning, isSubmitting, isDeployingTx, deployData]);
-
-  const isChainSupported = currentChainId ? SUPPORTED_CHAINS.includes(currentChainId) : false;
+  // useChainId stays on a configured chain when the wallet moves to another, so check the wallet itself.
+  const deployedChainIds = SUPPORTED_CHAINS.filter((id) => FatePoolFactories[id]);
+  const isChainSupported = walletChainId === currentChainId && deployedChainIds.includes(currentChainId);
   const priceFeedOptions = currentChainId ? getPriceFeedOptions(currentChainId) : [];
 
   const isProcessing = isSubmitting || isSigning || isDeployingTx;
@@ -539,12 +542,9 @@ export default function CreateFatePool() {
             <div className="text-xs md:text-sm text-gray-500 space-y-1">
               <p className="font-medium">Supported networks:</p>
               <ul className="text-xs md:text-sm space-y-0.5">
-                <li>• Ethereum Mainnet (1)</li>
-                <li>• Polygon (137)</li>
-                <li>• Scroll Sepolia (534352)</li>
-                <li>• Sepolia Testnet (11155111)</li>
-                <li>• Base Mainnet (8453)</li>
-                <li>• BSC Mainnet (56)</li>
+                {deployedChainIds.map((id) => (
+                  <li key={id}>• {getChainConfig(id)?.name ?? `Chain ${id}`} ({id})</li>
+                ))}
               </ul>
             </div>
           </div>

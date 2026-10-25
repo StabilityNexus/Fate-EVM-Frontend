@@ -239,6 +239,7 @@ function ExploreFatePoolsClient() {
       return [];
     }
     
+    let liveFetchError: unknown = null;
     // Try to fetch from factory first (when online)
     if (isOnline) {
       try {
@@ -261,9 +262,6 @@ function ExploreFatePoolsClient() {
           address: factoryAddress as Address,
           abi: PredictionPoolFactoryABI,
           functionName: "getAllPools"
-        }).catch((error) => {
-          logger.error(`Failed to call getAllPools on chain ${chainId}:`, error instanceof Error ? error : undefined);
-          return [];
         })) as Address[];
 
         logger.debug(`Found ${poolAddresses.length} pools on chain ${chainId}:`, {
@@ -411,20 +409,25 @@ function ExploreFatePoolsClient() {
             bearPercentage: pool.bearPercentage,
             chainId: pool.chainId as SupportedChainId
           }));
-          await batchSavePools(poolDetails);
-          await saveChainStatus({
-            chainId: chainId as SupportedChainId,
-            isActive: true,
-            lastBlockNumber: 0, // Will be updated with real block number
-            lastUpdateTime: Date.now(),
-            poolCount: pools.length
-          });
+          try {
+            await batchSavePools(poolDetails);
+            await saveChainStatus({
+              chainId: chainId as SupportedChainId,
+              isActive: true,
+              lastBlockNumber: 0, // Will be updated with real block number
+              lastUpdateTime: Date.now(),
+              poolCount: pools.length
+            });
+          } catch (cacheError) {
+            logger.error(`Failed to cache pools for chain ${chainId}:`, cacheError instanceof Error ? cacheError : undefined);
+          }
         }
 
         updateChainState(chainId, { loading: false, error: null });
         return pools;
       } catch (error) {
         logger.error(`Failed to fetch pools from factory on chain ${chainId}:`, error instanceof Error ? error : undefined);
+        liveFetchError = error;
         // Fall back to cached data if factory fetch fails
       }
     }
@@ -507,6 +510,10 @@ function ExploreFatePoolsClient() {
             }
           }
         }
+      // An unreachable chain with nothing cached is an error, not a chain with no pools.
+      if (convertedPools.length === 0 && liveFetchError) {
+        throw new Error("Could not reach the network. Check your connection or RPC setting.");
+      }
       updateChainState(chainId, { poolCount: convertedPools.length, loading: false });
       if (isOnline && convertedPools.length > 0) {
         try {
@@ -534,13 +541,15 @@ function ExploreFatePoolsClient() {
       return convertedPools;
     }
 
-    updateChainState(chainId, { loading: false, error: `Unable to fetch pools` });
-    return [];
+    throw new Error("Unable to fetch pools");
   }, [isInitialized, isOnline, fetchCoin, updateChainState, batchSavePools, saveChainStatus, getAllPools, getTokensForPool]);
 
   const fetchAllPools = useCallback(async (showToast = true): Promise<void> => {
     const now = Date.now();
-    if (now - lastFetchTime < FETCH_COOLDOWN) { if (showToast) { toast.info("Refreshed recently. Please wait a moment."); } return; }
+    if (now - lastFetchTime < FETCH_COOLDOWN) {
+      if (showToast) { toast.info("Refreshed recently. Please wait a moment."); }
+      return;
+    }
     setLastFetchTime(now);
     setLoading(true);
 
@@ -645,7 +654,11 @@ function ExploreFatePoolsClient() {
 
   const handleRefresh = useCallback(async (): Promise<void> => {
     setRefreshing(true);
-    await fetchAllPools();
+    try {
+      await fetchAllPools();
+    } finally {
+      setRefreshing(false);
+    }
   }, [fetchAllPools]);
 
   // Without IndexedDB the page still reads from the chain; the cache writes already check isInitialized.
