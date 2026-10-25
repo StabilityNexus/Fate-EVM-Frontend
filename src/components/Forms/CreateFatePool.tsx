@@ -78,6 +78,8 @@ export default function CreateFatePool() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  // The same writer also sends the adapter and approve transactions, so only the createPool hash means success.
+  const [poolTxHash, setPoolTxHash] = useState<`0x${string}` | undefined>();
   const {
     writeContractAsync: deployPool,
     data: deployData,
@@ -91,7 +93,7 @@ export default function CreateFatePool() {
     error: receiptError,
     data: receiptData
   } = useWaitForTransactionReceipt({
-    hash: deployData
+    hash: poolTxHash
   });
 
   const [formData, setFormData] = useState<FormData>({
@@ -246,6 +248,7 @@ export default function CreateFatePool() {
 
     setIsSubmitting(true);
     resetWrite();
+    setPoolTxHash(undefined);
     
          try {
        const mintFeeUnits = Math.floor((parseFloat(formData.mintFee) / 100) * DENOMINATOR);
@@ -439,7 +442,7 @@ export default function CreateFatePool() {
       logger.debug("Creating prediction pool with oracle address:", { oracleAddress });
       toast.info("Creating prediction pool...");
       
-      await deployPool({
+      const createTxHash = await deployPool({
         chainId: currentChainId,
         address: FACTORY_ADDRESS as `0x${string}`,
         abi: PredictionPoolFactoryABI,
@@ -460,6 +463,7 @@ export default function CreateFatePool() {
         ],
       });
 
+      setPoolTxHash(createTxHash);
       logger.debug("formData:", { formData });
       toast.info("Pool deployment transaction submitted. Waiting for confirmation...");
     } catch (error) {
@@ -477,17 +481,13 @@ export default function CreateFatePool() {
 
   // Handle successful pool deployment and initialization
   useEffect(() => {
-    if (isTransactionSuccess && deployData && receiptData) {
-      
-      toast.success("Pool deployed successfully!");
-      
-      // Pool is automatically initialized in the smart contract during deployment
+    if (isTransactionSuccess && poolTxHash && receiptData) {
       toast.success("Pool deployed successfully!");
       setIsSubmitting(false);
       const timer = setTimeout(() => router.push("/explorePools"), 2000);
       return () => clearTimeout(timer);
     }
-      }, [isTransactionSuccess, deployData, receiptData, router]);
+      }, [isTransactionSuccess, poolTxHash, receiptData, router]);
 
   useEffect(() => {
     if (receiptError) {
