@@ -18,6 +18,7 @@ import { PredictionPoolFactoryABI } from "@/utils/abi/PredictionPoolFactory";
 import { ChainlinkAdapterFactoryABI } from "@/utils/abi/ChainlinkAdapterFactory";
 import { FatePoolFactories, ChainlinkAdapterFactories } from "@/utils/addresses";
 import { SUPPORTED_CHAINS, getPriceFeedOptions } from "@/utils/supportedChainFeed";
+import { getChainConfig } from "@/utils/chainConfig";
 import { parseUnits } from "viem";
 
 // An address is also valid bytes, so viem rejects the call while both createAdapter overloads are in the ABI.
@@ -60,7 +61,7 @@ const ERC20_ABI = [
 
 export default function CreateFatePool() {
   const router = useRouter();
-  const { isConnected, address } = useAccount();
+  const { isConnected, address, chainId: walletChainId } = useAccount();
   const currentChainId = useChainId();
 
   // Set by the protocol in the factory; the pool keeps the value it is created with.
@@ -334,6 +335,7 @@ export default function CreateFatePool() {
             toast.info("Creating new oracle adapter... This may take a moment.");
             
             const adapterTxHash = await deployPool({
+              chainId: currentChainId,
               address: adapterFactoryAddress as `0x${string}`,
               abi: CREATE_ADAPTER_BY_FEED_ABI,
               functionName: "createAdapter",
@@ -406,6 +408,7 @@ export default function CreateFatePool() {
             toast.info("Approving token spending for initial deposit...");
             
             const approveTxHash = await deployPool({
+              chainId: currentChainId,
               address: baseTokenAddress as `0x${string}`,
               abi: ERC20_ABI,
               functionName: "approve",
@@ -437,6 +440,7 @@ export default function CreateFatePool() {
       toast.info("Creating prediction pool...");
       
       await deployPool({
+        chainId: currentChainId,
         address: FACTORY_ADDRESS as `0x${string}`,
         abi: PredictionPoolFactoryABI,
         functionName: "createPool",
@@ -500,7 +504,9 @@ export default function CreateFatePool() {
     }
   }, [isSigning, isSubmitting, isDeployingTx, deployData]);
 
-  const isChainSupported = currentChainId ? SUPPORTED_CHAINS.includes(currentChainId) : false;
+  // useChainId stays on a configured chain when the wallet moves to another, so check the wallet itself.
+  const deployedChainIds = SUPPORTED_CHAINS.filter((id) => FatePoolFactories[id]);
+  const isChainSupported = walletChainId === currentChainId && deployedChainIds.includes(currentChainId);
   const priceFeedOptions = currentChainId ? getPriceFeedOptions(currentChainId) : [];
 
   const isProcessing = isSubmitting || isSigning || isDeployingTx;
@@ -539,12 +545,9 @@ export default function CreateFatePool() {
             <div className="text-xs md:text-sm text-gray-500 space-y-1">
               <p className="font-medium">Supported networks:</p>
               <ul className="text-xs md:text-sm space-y-0.5">
-                <li>• Ethereum Mainnet (1)</li>
-                <li>• Polygon (137)</li>
-                <li>• Scroll Sepolia (534352)</li>
-                <li>• Sepolia Testnet (11155111)</li>
-                <li>• Base Mainnet (8453)</li>
-                <li>• BSC Mainnet (56)</li>
+                {deployedChainIds.map((id) => (
+                  <li key={id}>• {getChainConfig(id)?.name ?? `Chain ${id}`} ({id})</li>
+                ))}
               </ul>
             </div>
           </div>
