@@ -195,24 +195,26 @@ export default function CreateFatePool() {
       if (!formData.bearCoinName.trim()) newErrors.bearCoinName = "Bear coin name is required";
       if (!formData.bearCoinSymbol.trim()) newErrors.bearCoinSymbol = "Bear coin symbol is required";
          } else if (currentStep === 3) {
-       const mintFee = parseFloat(formData.mintFee);
-       const burnFee = parseFloat(formData.burnFee);
-       const creatorFee = parseFloat(formData.creatorFee);
+       // 1% is 1000 units, so a fee with more than 3 decimals would be rounded on the way to the contract.
+       const feeUnits = (fee: string) => /^(\d+\.?\d{0,3}|\.\d{1,3})$/.test(fee.trim()) ? parseUnits(fee.trim(), 3) : undefined;
+       const mintFee = feeUnits(formData.mintFee);
+       const burnFee = feeUnits(formData.burnFee);
+       const creatorFee = feeUnits(formData.creatorFee);
 
-       if (isNaN(mintFee) || mintFee < 0) newErrors.mintFee = "Invalid fee value";
-       if (isNaN(burnFee) || burnFee < 0) newErrors.burnFee = "Invalid fee value";
-       if (isNaN(creatorFee) || creatorFee < 0) newErrors.creatorFee = "Invalid fee value";
-       if (devFeePercent === undefined) newErrors.devFee = "Could not read the dev fee. Check your network and try again.";
+       if (mintFee === undefined) newErrors.mintFee = "Enter a fee with at most 3 decimals";
+       if (burnFee === undefined) newErrors.burnFee = "Enter a fee with at most 3 decimals";
+       if (creatorFee === undefined) newErrors.creatorFee = "Enter a fee with at most 3 decimals";
+       if (devFeeUnits === undefined) newErrors.devFee = "Could not read the dev fee. Check your network and try again.";
 
        // The factory checks each side on its own: mint (or burn) plus creator plus dev fee.
-       const sharedFee = creatorFee + (devFeePercent ?? 0);
-       if (mintFee + sharedFee >= 100) newErrors.mintFee = "Mint, creator and dev fees together must be less than 100%";
-       if (burnFee + sharedFee >= 100) newErrors.burnFee = "Burn, creator and dev fees together must be less than 100%";
+       const sharedFee = (creatorFee ?? BigInt(0)) + ((devFeeUnits as bigint | undefined) ?? BigInt(0));
+       if (mintFee !== undefined && mintFee + sharedFee >= BigInt(DENOMINATOR)) newErrors.mintFee = "Mint, creator and dev fees together must be less than 100%";
+       if (burnFee !== undefined && burnFee + sharedFee >= BigInt(DENOMINATOR)) newErrors.burnFee = "Burn, creator and dev fees together must be less than 100%";
      }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  }, [currentStep, formData, devFeePercent]);
+  }, [currentStep, formData, devFeeUnits]);
 
   const nextStep = useCallback(() => {
     logger.debug('nextStep called, currentStep:', { currentStep });
