@@ -57,17 +57,17 @@
 
 [Fate Protocol](https://evm.fate.stability.nexus/) is a decentralized, perpetual prediction market that operates continuously without expiration. It replaces traditional order books with a dual-vault system—where users buy and sell **bullCoins** and **bearCoins**—enabling speculation on market trends in a fluid, always-on ecosystem.
 
-Built with cutting-edge Web3 technologies, Fate Protocol delivers high-performance trading experiences with gas-optimized smart contracts and real-time price feeds from multiple oracle providers.
+Built with cutting-edge Web3 technologies, Fate Protocol delivers high-performance trading experiences with gas-optimized smart contracts and pluggable oracles connected through adapters.
 
 ## ✨ Key Features
 
 -  **Perpetual Market**: No expiration dates; users can enter or exit positions at any time
 -  **Dual-Vault System**: Separate vaults for bullCoins and bearCoins, eliminating order book complexity
 -  **Dynamic Fee Structure**: Fixed fees on transactions automatically balance vault reserves
--  **DistributeOutcome Function**: Community-driven reserve adjustments ensure fairness and transparency
+-  **Rebalance**: Anyone can call `rebalance()` to move reserves between the vaults from the oracle value
 -  **Self-Balancing**: Automated fund redistribution between vaults based on market movements
--  **Multi-Chain Support**: Deployed across Ethereum, Base, BNB Smart Chain, Ethereum Classic, and Polygon
--  **Real-Time Price Feeds**: Integrated Chainlink and Hebeswap oracles for accurate market data
+-  **Multi-Chain Ready**: Runs on any EVM chain with a deployment; live on a testnet today
+-  **Pluggable Oracles**: Oracle values connect through oracle adapters
 -  **Gas-Optimized Contracts**: Efficient smart contract design minimizes transaction costs  
 
 ---
@@ -83,7 +83,7 @@ Built with cutting-edge Web3 technologies, Fate Protocol delivers high-performan
 ## Technical Architecture
 
 ### Frontend
-- **Next.js 15** with React Server Components
+- **Next.js 15**, statically exported, so the whole app runs in the browser
 - **TypeScript** for type safety
 - **TailwindCSS** with shadcn/ui components
 - **Framer Motion** for animations
@@ -91,26 +91,24 @@ Built with cutting-edge Web3 technologies, Fate Protocol delivers high-performan
 
 ### Blockchain
 - **Wagmi v2** for Web3 hooks
-- **Ethers.js v6** for Ethereum interactions
 - **Viem** for lightweight blockchain calls
 - **WalletLink** (`@stability-nexus/walletlink`) for wallet connection via EIP-6963, no relay or projectId
 - **TanStack React Query** for data sync
 
 ### Smart Contracts
-- **Multi-Chain**: Ethereum, Base, BNB Smart Chain, Ethereum Classic and Polygon 
-- **Oracles**: Chainlink and Hebeswap price feeds
+- **Networks**: Testnet today, see [Deployed Contracts](#deployed-contracts)
+- **Oracles**: Any `IOracle`, through adapters
 - **Gas-Optimized**: Minimal transaction costs
-- **Audited**: Transparent fee structures
+- **Fixed Fees**: Fee rates are set per pool at creation
 
 ---
 
 ## Performance Features
 
 ### Frontend Optimizations
-- **Server Components**: Reduced client-side JavaScript
+- **Static Export**: No server; every contract read and write runs in the browser
 - **Code Splitting**: Automatic route-based splitting
 - **Static Generation**: Pre-built pages for faster loads
-- **Streaming**: Progressive page loading
 
 ### User Experience
 - **Skeleton Screens**: Immediate loading feedback
@@ -122,41 +120,23 @@ Built with cutting-edge Web3 technologies, Fate Protocol delivers high-performan
 
 ## Supported Networks
 
-Fate Protocol is deployed across multiple EVM-compatible networks:
-
-- **Base** - Main deployment with optimized gas costs
-- **BNB Smart Chain** - High-performance trading environment
-- **Ethereum Classic** - Decentralized and secure network
-- **Ethereum Mainnet** - Primary Ethereum network
-- **Polygon** - Polygon mainnet
-- **Sepolia Testnet** - Ethereum testnet for development
+Live on the Sepolia testnet. Any other EVM chain needs a deployment first, listed in
+[Deployed Contracts](#deployed-contracts).
 
 ---
 
 ## Deployed Contracts
 
-### Pool Factory Contracts
+The app uses these contracts on Sepolia (`src/utils/addresses.ts`):
 
-| Network | Contract Address | BlockScout | Status |
-|---------|------------------|------------|--------|
-| **Ethereum Classic** | `0x6eb2eec7bcc4096e35d7bc467e411a505c7db202` | [View](https://blockscout.com/etc/mainnet/address/0x6eb2eec7bcc4096e35d7bc467e411a505c7db202) | ✅ Deployed |
-| **Sepolia Testnet** | `0x5fae23ab9c0b36f30bb4c6ab1d7b9c8cdbef8d18` | [View](https://sepolia.etherscan.io/address/0x5fae23ab9c0b36f30bb4c6ab1d7b9c8cdbef8d18) | ✅ Deployed |
-| **Base** | `0x0000000000000000000000000000000000000000` | - | ⏳ Pending |
-| **BNB Smart Chain** | `0x0000000000000000000000000000000000000000` | - | ⏳ Pending |
-| **Ethereum Mainnet** | `0x0000000000000000000000000000000000000000` | - | ⏳ Pending |
-| **Polygon** | `0x0000000000000000000000000000000000000000` | - | ⏳ Pending |
+| Contract | Address | Etherscan |
+|----------|---------|-----------|
+| **PredictionPoolFactory** | `0x6935432472c180238703805f9809639439b783b6` | [View](https://sepolia.etherscan.io/address/0x6935432472c180238703805f9809639439b783b6) |
+| **ChainlinkAdapterFactory** | `0xe6afb97bab25bb9623246cc18ce624a9821cc2bd` | [View](https://sepolia.etherscan.io/address/0xe6afb97bab25bb9623246cc18ce624a9821cc2bd) |
+| **NativeCurrencyHelper** | `0x9198c4332845aba314f164be73a00619abb46606` | [View](https://sepolia.etherscan.io/address/0x9198c4332845aba314f164be73a00619abb46606) |
 
-### Oracle Adapter Contracts
-
-| Network | Contract Address | BlockScout | Status |
-|---------|------------------|------------|--------|
-| **Ethereum Classic** | `0x017cdc5ed9ba47a6a5c4414e8c66e7d7e967a83a` | [View](https://blockscout.com/etc/mainnet/address/0x017cdc5ed9ba47a6a5c4414e8c66e7d7e967a83a) | ✅ Deployed |
-| **Sepolia Testnet** | `0x2cbd9e1ec213f5ef2c8f0703514254ff7288723e` | [View](https://sepolia.etherscan.io/address/0x2cbd9e1ec213f5ef2c8f0703514254ff7288723e) | ✅ Deployed |
-| **Base** | `0x0000000000000000000000000000000000000000` | - | ⏳ Pending |
-| **BNB Smart Chain** | `0x0000000000000000000000000000000000000000` | - | ⏳ Pending |
-| **Ethereum Mainnet** | `0x0000000000000000000000000000000000000000` | - | ⏳ Pending |
-| **Polygon** | `0x0000000000000000000000000000000000000000` | - | ⏳ Pending |
-
+The full record, with deploy blocks and constructor arguments, is
+[Deployments.md](https://github.com/StabilityNexus/Fate-Solidity/blob/main/Deployments.md) in Fate-Solidity.
 
 ---
 
@@ -205,12 +185,24 @@ pnpm dev
 
 Navigate to [http://localhost:3000](http://localhost:3000) to see the application.
 
+### Test, lint and build
+
+```bash
+npm test        # unit tests (vitest)
+npm run lint    # ESLint
+npm run build   # static export to out/, also the type check
+```
+
+> `npm run build` and `npm run dev` share `distDir: "out"`. After a build, delete `out/` and
+> `.next/` before going back to `npm run dev`, or dev will fail on the export artifacts.
+
 ---
 
 ## Project Structure
 
 ```text
 src/
+├── app/                  # Routes
 │   ├── [pool]/            # Pool interactions
 │   ├── createPool/        # Pool creation
 │   ├── explorePools/      # Pool discovery
@@ -238,7 +230,7 @@ src/
 ### Manual Build
 ```bash
 npm run build
-npm run start
+npx serve out   # serve the static export
 ```
 
 ## Contributing
