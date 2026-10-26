@@ -43,20 +43,27 @@ Questions, ideas, or help with a first contribution:
 
 ## Verifying a Change
 
-There is no test runner in this repository. Before opening a pull request:
+Before opening a pull request:
 
+- `npm test` runs the unit tests (vitest)
 - `npm run lint`
-- `npm run build` — this is also the type check; there is no standalone `tsc` script
-- Exercise the flow in a browser with a wallet on Sepolia or Ethereum Classic
+- `npm run build`, which is also the type check; there is no standalone `tsc` script
+- Exercise the flow in a browser with a wallet on Sepolia
+
+CI runs the same three commands on every pull request.
+
+New logic that can be tested outside the browser (math, parsing, formatting, backup and restore)
+comes with a vitest test in a `*.test.ts` file next to it. UI and wallet flows are checked by hand in
+the browser.
 
 ## Coding Style
 
 - TypeScript throughout. The path alias `@/*` maps to `src/*`.
 - The app is a static export, so anything reading chain data runs in the
   browser. Mark those components `"use client"`.
-- Prefer **wagmi + viem**. ethers v6 survives only in `src/lib/prices.ts` and
-  `src/lib/vaultUtils.ts`; extend the viem path rather than adding new ethers
-  code.
+- Prefer **wagmi + viem**. The only ethers import left is
+  `src/utils/ethersProvider.ts`, and nothing uses it; write new code with viem,
+  not ethers.
 - UI is shadcn/ui with Tailwind. Reuse the primitives in `src/components/ui`.
 - Log through `src/lib/logger.ts` and handle errors through
   `src/lib/errorHandler.ts` rather than raw `console` calls.

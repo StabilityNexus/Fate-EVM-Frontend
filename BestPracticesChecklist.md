@@ -14,7 +14,7 @@
 > - ⚪ N/A — Marked `[~]` with justification
 
 **Scope:** `StabilityNexus/Fate-EVM-Frontend`, the EVM frontend for Fate Protocol.
-Last reviewed: 2026-08-11.
+Last reviewed: 2026-10-26.
 
 ---
 
@@ -28,16 +28,16 @@ projects score the same checklist, so the figures are comparable across reposito
 |--------------------|-----|----------|-------|--------|
 | Basics             | 8   | 8        | 100%  | 🟢     |
 | Change Control     | 3   | 6        | 50%   | 🟡     |
-| Reporting          | 7   | 8        | 88%   | 🟢     |
-| Quality            | 4   | 11       | 36%   | 🔴     |
+| Reporting          | 8   | 8        | 100%  | 🟢     |
+| Quality            | 8   | 11       | 73%   | 🟡     |
 | Security           | 9   | 9        | 100%  | 🟢     |
-| Analysis           | 3   | 7        | 43%   | 🔴     |
-| **Total**          | **34** | **49** | **69%** | 🟡 |
+| Analysis           | 4   | 7        | 57%   | 🟡     |
+| **Total**          | **40** | **49** | **82%** | 🟢 |
 
-Raw breakdown, for transparency: **21 satisfied `[x]`, 13 justified N/A `[~]`, 15 unmet `[ ]`.**
+Raw breakdown, for transparency: **27 satisfied `[x]`, 13 justified N/A `[~]`, 9 unmet `[ ]`.**
 
-**Unmet 🔴 MUST items:** `version_unique`, `test_policy`, `tests_are_added`, `warnings_fixed`.
-**Unmet 🟡 SHOULD items:** `enhancement_responses`.
+**Unmet 🔴 MUST items:** `version_unique`, `warnings_fixed`.
+**Unmet 🟡 SHOULD items:** none.
 
 ---
 
@@ -109,13 +109,13 @@ Raw breakdown, for transparency: **21 satisfied `[x]`, 13 justified N/A `[~]`, 1
   - *Evidence URL:* [CONTRIBUTING.md](CONTRIBUTING.md) "Reporting Issues" and [GitHub Issues](https://github.com/StabilityNexus/Fate-EVM-Frontend/issues).
 
 - [x] 🟡 **report_tracker** — An issue tracker is used to track individual bugs.
-  - *Evidence URL:* [GitHub Issues](https://github.com/StabilityNexus/Fate-EVM-Frontend/issues) — 34 issues in the last 12 months.
+  - *Evidence URL:* [GitHub Issues](https://github.com/StabilityNexus/Fate-EVM-Frontend/issues) — 46 issues in the last 12 months.
 
 - [x] 🔴 **report_responses** — A majority of bug reports submitted in the last 2–12 months have been acknowledged.
-  - *Self-certification note:* Measured over the 34 issues opened in the last 12 months. An issue counts as acknowledged if it carries a reply from someone other than its author, or was closed by a maintainer. **Of the 8 issues labelled `bug`, 7 were acknowledged (88%).** Across all 34 issues the figure is 19 (56%), of which 7 were replies and 12 were maintainer closures.
+  - *Self-certification note:* Measured on 2026-10-26 over the 46 issues opened in the last 12 months. An issue counts as acknowledged if it carries a reply from a person other than its author (bots excluded), or was closed by someone other than its author. **Of the 15 issues labelled `bug`, 14 were acknowledged (93%).** The one exception was opened and closed by the same contributor.
 
-- [ ] 🟡 **enhancement_responses** — More than 50% of enhancement requests in the last 2–12 months have received a response.
-  - *Note:* Unmet, measured rather than assumed. Of the 7 issues labelled `enhancement` in the last 12 months, 3 were acknowledged (43%), below the 50% bar. Triage of enhancement requests needs to improve before this can be claimed.
+- [x] 🟡 **enhancement_responses** — More than 50% of enhancement requests in the last 2–12 months have received a response.
+  - *Self-certification note:* Measured the same way on 2026-10-26. **All 15 issues labelled `enhancement` in the last 12 months were acknowledged (100%)**: 8 with a reply and 7 closed by a maintainer.
 
 - [x] 🔴 **report_archive** — Reports and responses are publicly archived and searchable.
   - *Evidence URL:* [GitHub Issues](https://github.com/StabilityNexus/Fate-EVM-Frontend/issues) — public repository, full history readable without an account.
@@ -148,22 +148,22 @@ Raw breakdown, for transparency: **21 satisfied `[x]`, 13 justified N/A `[~]`, 1
 
 ### Automated Testing
 
-- [ ] 🔵 **test_invocation** — The test suite can be invoked in a standard way for the language. *(SUGGESTED)*
-  - *Note:* Unmet. There is no test runner configured in this repository.
+- [x] 🔵 **test_invocation** — The test suite can be invoked in a standard way for the language. *(SUGGESTED)*
+  - *Evidence URL:* `npm test` runs vitest ([package.json](package.json), [vitest.config.ts](vitest.config.ts)): 49 tests in 6 files. [CI](.github/workflows/ci.yml) runs it on every pull request.
 
 - [ ] 🔵 **test_most** — The test suite covers most code branches, input fields, and functionality. *(SUGGESTED)*
-  - *Estimated coverage %:* 0. No automated test suite exists.
+  - *Note:* Unmet. Unit tests cover 6 of the 104 source files under `src/`: the backup helpers, the sell estimate, permits, the rebalance simulation, WAD math and formatting. No coverage tool is configured, so no percentage is claimed. UI and wallet flows are tested by hand.
 
 ### New Functionality Testing Policy
 
-- [ ] 🔴 **test_policy** — The project has a general policy that new functionality must include tests.
-  - *Note:* Unmet. No such policy is stated, because no test suite exists to add tests to. Declaring the policy before the suite exists would be inaccurate.
+- [x] 🔴 **test_policy** — The project has a general policy that new functionality must include tests.
+  - *Evidence URL:* [CONTRIBUTING.md](CONTRIBUTING.md) "Verifying a Change": new logic that can be tested outside the browser comes with a vitest test.
 
-- [ ] 🔴 **tests_are_added** — Evidence exists that the test policy has been followed in recent major changes.
-  - *Note:* Unmet, dependent on `test_policy`.
+- [x] 🔴 **tests_are_added** — Evidence exists that the test policy has been followed in recent major changes.
+  - *Evidence URL:* tests were added with the changes they cover in [#126](https://github.com/StabilityNexus/Fate-EVM-Frontend/pull/126) (backup), [#148](https://github.com/StabilityNexus/Fate-EVM-Frontend/pull/148) (sell estimate), [#162](https://github.com/StabilityNexus/Fate-EVM-Frontend/pull/162) (WAD math, rebalance simulation), [#163](https://github.com/StabilityNexus/Fate-EVM-Frontend/pull/163) (permits) and [#169](https://github.com/StabilityNexus/Fate-EVM-Frontend/pull/169) (formatting).
 
-- [ ] 🔵 **tests_documented_added** — The test policy is documented in contribution instructions. *(SUGGESTED)*
-  - *Note:* Unmet, dependent on `test_policy`. [CONTRIBUTING.md](CONTRIBUTING.md) currently documents the verification steps that do exist: lint, build, and manual browser testing.
+- [x] 🔵 **tests_documented_added** — The test policy is documented in contribution instructions. *(SUGGESTED)*
+  - *Evidence URL:* [CONTRIBUTING.md](CONTRIBUTING.md) "Verifying a Change", and [AGENTS.md](AGENTS.md) "Commands".
 
 ### Linting / Warning Flags
 
@@ -228,8 +228,8 @@ implements, selects, nor stores cryptographic material.*
 - [ ] 🔵 **static_analysis_common_vulnerabilities** — The static analysis tool includes checks for common vulnerabilities. *(SUGGESTED)*
   - *Note:* Unmet. The ESLint configuration does not currently include a security ruleset such as `eslint-plugin-security`.
 
-- [ ] 🔵 **static_analysis_often** — Static analysis runs on every commit or at least daily. *(SUGGESTED)*
-  - *Note:* Unmet. Pull requests to this repository currently trigger no CI checks; the only workflows are the Pages deployment on merge and a merge-conflict labeller.
+- [x] 🔵 **static_analysis_often** — Static analysis runs on every commit or at least daily. *(SUGGESTED)*
+  - *Evidence URL:* [ci.yml](.github/workflows/ci.yml) runs ESLint and the type-checking build on every pull request and every push to `main`.
 
 ### Dynamic Code Analysis
 
