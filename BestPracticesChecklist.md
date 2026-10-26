@@ -112,7 +112,7 @@ Raw breakdown, for transparency: **27 satisfied `[x]`, 13 justified N/A `[~]`, 9
   - *Evidence URL:* [GitHub Issues](https://github.com/StabilityNexus/Fate-EVM-Frontend/issues) — 46 issues in the last 12 months.
 
 - [x] 🔴 **report_responses** — A majority of bug reports submitted in the last 2–12 months have been acknowledged.
-  - *Self-certification note:* Measured on 2026-10-26 over the 46 issues opened in the last 12 months. An issue counts as acknowledged if it carries a reply from a person other than its author (bots excluded), or was closed by someone other than its author. **Of the 15 issues labelled `bug`, 14 were acknowledged (93%).** The one exception was opened and closed by the same contributor.
+  - *Self-certification note:* Measured on 2026-10-26 over the 46 issues opened in the last 12 months. An issue counts as acknowledged if it carries a reply from a person other than its author (bots excluded), or was closed by someone other than its author. An issue its author opened and closed alone is left out, since nobody else needed to respond. **Of the 15 issues labelled `bug`, one was opened and closed by its author and is left out; the other 14 were all acknowledged (14 of 14, 100%).**
 
 - [x] 🟡 **enhancement_responses** — More than 50% of enhancement requests in the last 2–12 months have received a response.
   - *Self-certification note:* Measured the same way on 2026-10-26. **All 15 issues labelled `enhancement` in the last 12 months were acknowledged (100%)**: 8 with a reply and 7 closed by a maintainer.
