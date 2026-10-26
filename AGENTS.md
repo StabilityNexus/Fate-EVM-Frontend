@@ -19,7 +19,7 @@ npm test        # unit tests (vitest, src/**/*.test.ts)
 ```
 
 There is no standalone `tsc` script. "Verify a change" means `npm test`,
-`npm run lint`, `npm run build`, and driving the flow in a browser with a wallet.
+`npm run lint`, `npm run build`, and driving the flow in a browser with a wallet on Sepolia.
 New logic that can be tested outside the browser (math, parsing, formatting,
 backup and restore) comes with a vitest test in a `*.test.ts` file next to it.
 
