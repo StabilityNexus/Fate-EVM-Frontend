@@ -29,4 +29,5 @@ This document lists the individuals fulfilling the key roles of [Maintainer](htt
 | Anjali Jha | @blizet | @blizet4910 |
 | Sarthak Dengre | @DengreSarthak | @sarthak_09385 |
 | Aditya Bhattad | @adityabhattad2021 | @adityabhattad |
+| Rohan Shinde | @rohans02 | @s_rohann |
 
