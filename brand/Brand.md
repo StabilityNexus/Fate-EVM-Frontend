@@ -54,9 +54,13 @@ Generated from `logo.svg` at the sizes browsers and mobile platforms actually re
 | [`apple-touch-icon.png`](./apple-touch-icon.png) | 180×180 | iOS home screen |
 | [`icon-192.png`](./icon-192.png) | 192×192 | PWA manifest, Android |
 | [`icon-512.png`](./icon-512.png) | 512×512 | PWA manifest, splash |
+| [`icon-maskable-512.png`](./icon-maskable-512.png) | 512×512 | PWA maskable icon, safe-zone padded |
 
 `favicon.ico` is a genuine three-entry ICO container. Chrome requires both a 192 and a 512 PNG for
 installability, so those two are not optional and must not be collapsed into the SVG.
+
+`icon-maskable-512.png` is declared with `"purpose": "maskable"` in `public/manifest.json`. The mark
+sits inside the central safe zone, so Android can crop it to any shape.
 
 The ICO frames are cut with **zero padding**. The inked mark is taller than it is wide, so height is
 the binding dimension and any inset costs visible size at 16px.
@@ -115,23 +119,17 @@ a light ground.
 ## Typography
 
 **Brand typeface: Geist.** Loaded through `next/font/google` in `src/app/layout.tsx`, which exposes
-it as the CSS variables `--font-geist-sans` and `--font-geist-mono`.
+it as the CSS variable `--font-geist-sans`. `src/app/globals.css` applies it to `body`.
 
 | Role | Face | Use |
 | --- | --- | --- |
 | Interface | Geist | All UI text, headings, body, labels |
-| Numeric and code | Geist Mono | Addresses, hashes, contract values |
-| Fallback stack | `system-ui, -apple-system, "Segoe UI", Roboto, sans-serif` | When Geist is unavailable |
+| Numeric and code | System monospace (Tailwind `font-mono`) | Addresses, hashes, contract values |
+| Fallback stack | `Arial, Helvetica, sans-serif` | When Geist is unavailable |
 
 Guidance: headings bold and tight; body regular; monospace with tabular figures for any column of
 token amounts or prices, so digits align.
 
-> **Known gap.** Geist is loaded but not yet applied. `tailwind.config.ts` has no `fontFamily`
-> extension consuming the two CSS variables, and `src/app/globals.css` sets
-> `body { font-family: Arial, Helvetica, sans-serif; }`, which wins. The deployed app therefore
-> renders Arial today. Closing this is a two-line change and is tracked separately, so that the
-> visual change is reviewed on its own rather than inside this brand kit.
-
 The wordmark on the social preview card is set in Arial Bold, chosen for guaranteed availability in
-the image-generation step rather than as a brand choice. It should be regenerated in Geist once the
-gap above is closed.
+the image-generation step rather than as a brand choice. Now that the app renders Geist, the card
+can be regenerated in Geist.
