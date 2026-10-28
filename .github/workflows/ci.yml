@@ -33,6 +33,5 @@ jobs:
       - name: Build project
         run: npm run build
 
-      # No-ops until a test script exists, then starts enforcing it.
       - name: Run tests
-        run: npm run test --if-present
+        run: npm test
