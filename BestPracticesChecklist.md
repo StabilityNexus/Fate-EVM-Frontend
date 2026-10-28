@@ -29,14 +29,14 @@ projects score the same checklist, so the figures are comparable across reposito
 | Basics             | 8   | 8        | 100%  | 🟢     |
 | Change Control     | 3   | 6        | 50%   | 🟡     |
 | Reporting          | 8   | 8        | 100%  | 🟢     |
-| Quality            | 8   | 11       | 73%   | 🟡     |
+| Quality            | 9   | 11       | 82%   | 🟢     |
 | Security           | 9   | 9        | 100%  | 🟢     |
 | Analysis           | 4   | 7        | 57%   | 🟡     |
-| **Total**          | **40** | **49** | **82%** | 🟢 |
+| **Total**          | **41** | **49** | **84%** | 🟢 |
 
-Raw breakdown, for transparency: **27 satisfied `[x]`, 13 justified N/A `[~]`, 9 unmet `[ ]`.**
+Raw breakdown, for transparency: **28 satisfied `[x]`, 13 justified N/A `[~]`, 8 unmet `[ ]`.**
 
-**Unmet 🔴 MUST items:** `version_unique`, `warnings_fixed`.
+**Unmet 🔴 MUST items:** `version_unique`.
 **Unmet 🟡 SHOULD items:** none.
 
 ---
@@ -170,8 +170,8 @@ Raw breakdown, for transparency: **27 satisfied `[x]`, 13 justified N/A `[~]`, 9
 - [x] 🔴 **warnings** — At least one linter or compiler warning flag is enabled.
   - *Tool used:* ESLint via `next lint`, configured in [eslint.config.mjs](eslint.config.mjs) with `eslint-config-next`. TypeScript type checking runs as part of `npm run build`.
 
-- [ ] 🔴 **warnings_fixed** — Warnings from the linter are addressed (not suppressed without reason).
-  - *Note:* Unmet. `npm run build` currently emits two ESLint warnings: a `react-hooks/exhaustive-deps` warning in `PoolConfigurationStep.tsx` and a `@next/next/no-img-element` warning in `TokenImage.tsx`. Both are understood and tracked.
+- [x] 🔴 **warnings_fixed** — Warnings from the linter are addressed (not suppressed without reason).
+  - *Evidence URL:* `npm run lint` and `npm run build` report no warnings. The last two, a `react-hooks/exhaustive-deps` warning in `PoolConfigurationStep.tsx` and a `@next/next/no-img-element` warning in `TokenImage.tsx`, were fixed in the code rather than suppressed.
 
 - [ ] 🔵 **warnings_strict** — Project uses maximum strictness in linter config where practical. *(SUGGESTED)*
   - *Note:* Unmet. The project uses the `eslint-config-next` defaults rather than a hardened ruleset.
@@ -223,7 +223,7 @@ implements, selects, nor stores cryptographic material.*
 ### Static Code Analysis
 
 - [x] 🔴 **static_analysis_fixed** — All medium+ severity vulnerabilities found by static analysis are fixed in a timely manner after confirmation.
-  - *Note:* No medium or higher severity findings have been reported by static analysis to date. The two outstanding ESLint warnings are a hook-dependency and an image-element warning, neither of which is a security finding; they are tracked under `warnings_fixed`.
+  - *Note:* No medium or higher severity findings have been reported by static analysis to date.
 
 - [ ] 🔵 **static_analysis_common_vulnerabilities** — The static analysis tool includes checks for common vulnerabilities. *(SUGGESTED)*
   - *Note:* Unmet. The ESLint configuration does not currently include a security ruleset such as `eslint-plugin-security`.

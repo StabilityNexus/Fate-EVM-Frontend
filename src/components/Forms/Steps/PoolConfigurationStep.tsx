@@ -38,19 +38,13 @@ const PoolConfigurationStep: React.FC<PoolConfigurationStepProps> = ({
   const [selectedToken, setSelectedToken] = useState<Token | null>(null);
   const [isLoadingTokens, setIsLoadingTokens] = useState(false);
 
-  // Load tokens when chain changes
+  // Load tokens when chain changes; the effect below matches the address against them
   useEffect(() => {
     const loadTokens = async () => {
       setIsLoadingTokens(true);
       try {
         const tokens = await loadTokensForChain(chainId);
         setAvailableTokens(tokens);
-        
-        // If we have a base token address, try to find its token info
-        if (formData.baseTokenAddress && tokens.length > 0) {
-          const token = findTokenByAddress(tokens, formData.baseTokenAddress);
-          setSelectedToken(token || null);
-        }
       } catch (err) {
         logger.error('Failed to load tokens:', err instanceof Error ? err : new Error(String(err)));
       } finally {
