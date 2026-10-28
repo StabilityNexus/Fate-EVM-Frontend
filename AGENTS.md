@@ -13,12 +13,15 @@ wagmi 2 + viem 2. Wallet connection uses `@stability-nexus/walletlink`
 
 ```bash
 npm run dev     # dev server on http://localhost:3000
-npm run build   # static export to out/ — this is ALSO the type check
+npm run build   # static export to out/, this is ALSO the type check
 npm run lint    # eslint
+npm test        # unit tests (vitest, src/**/*.test.ts)
 ```
 
-There is no test runner and no standalone `tsc` script. "Verify a change" means
-`npm run lint`, `npm run build`, and driving the flow in a browser with a wallet.
+There is no standalone `tsc` script. "Verify a change" means `npm test`,
+`npm run lint`, `npm run build`, and driving the flow in a browser with a wallet on Sepolia.
+New logic that can be tested outside the browser (math, parsing, formatting,
+backup and restore) comes with a vitest test in a `*.test.ts` file next to it.
 
 **`build` and `dev` share `distDir: "out"`.** After running a build, delete
 `out/` and `.next/` before returning to `npm run dev`, or dev crashes on the
@@ -51,8 +54,8 @@ export artifacts.
 ## Code Style Conventions
 
 - Path alias `@/*` maps to `src/*`.
-- Prefer **wagmi + viem**. ethers v6 remains only in `src/lib/prices.ts` and
-  `src/lib/vaultUtils.ts`. Extend the viem path; do not add new ethers code.
+- Prefer **wagmi + viem**. The only ethers import left is
+  `src/utils/ethersProvider.ts`, and nothing uses it. Do not add new ethers code.
 - For batched reads outside React, use
   `createPublicClient({ transport: http(), batch: { multicall: true } })`.
 - Reuse the shadcn/ui primitives in `src/components/ui` rather than adding new
