@@ -1,7 +1,10 @@
 "use client"
 import Image from "next/image";
 import Link from "next/link";
-import { SVGProps } from "react";
+import { SVGProps, useEffect, useRef } from "react";
+import { useTheme } from "next-themes";
+import type { ShareInstance } from "@aossie-org/social-share-button";
+import "@aossie-org/social-share-button/src/social-share-button.css";
 
 const navigation = [
   {
@@ -103,6 +106,32 @@ interface FooterProps {
 
 export default function Footer({ className = "", onTermsClick }: FooterProps) {
   const year = new Date().getFullYear();
+  const { resolvedTheme } = useTheme();
+  const shareContainerRef = useRef<HTMLSpanElement>(null);
+  const shareRef = useRef<ShareInstance | null>(null);
+
+  useEffect(() => () => shareRef.current?.destroy(), []);
+
+  // The library loads on first click; it shares the current page URL and title
+  const openShare = async () => {
+    if (!shareRef.current) {
+      await import("@aossie-org/social-share-button");
+      const SocialShareButton = window.SocialShareButton;
+      if (!SocialShareButton || !shareContainerRef.current) return;
+      shareRef.current ??= new SocialShareButton({
+        container: shareContainerRef.current,
+        showButton: false,
+        platforms: ["twitter", "linkedin", "telegram", "whatsapp", "reddit", "discord", "email"],
+        description: "Fate Protocol: bull and bear coins as native oracles.",
+        analytics: false,
+      });
+    }
+    const modal = shareRef.current.modal;
+    modal?.classList.remove("dark", "light");
+    modal?.classList.add(resolvedTheme === "dark" ? "dark" : "light");
+    shareRef.current.openModal();
+  };
+
   return (
     <footer className={`w-full rounded-lg backdrop-blur-md bg-neutral-100 dark:bg-black shadow-lg border border-neutral-200 dark:border-black/10 ${className}`}>
       <div className="px-4 sm:px-8 py-6 space-y-6">
@@ -187,6 +216,14 @@ export default function Footer({ className = "", onTermsClick }: FooterProps) {
               Terms of Use
             </button>
           )}
+          <button
+            type="button"
+            onClick={openShare}
+            className="text-neutral-900 dark:text-white hover:text-yellow-600 dark:hover:text-yellow-400 hover:underline hover:decoration-2 transition-colors"
+          >
+            Share Fate
+          </button>
+          <span ref={shareContainerRef} hidden />
         </div>
 
         {/* Copyright Statement */}

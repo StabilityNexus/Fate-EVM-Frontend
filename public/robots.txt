@@ -1,4 +1,5 @@
 User-agent: *
 Allow: /
+Disallow: /pr-preview/
 
 Sitemap: https://evm.fate.stability.nexus/sitemap.xml
