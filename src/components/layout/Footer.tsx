@@ -118,7 +118,7 @@ export default function Footer({ className = "", onTermsClick }: FooterProps) {
       await import("@aossie-org/social-share-button");
       const SocialShareButton = window.SocialShareButton;
       if (!SocialShareButton || !shareContainerRef.current) return;
-      shareRef.current = new SocialShareButton({
+      shareRef.current ??= new SocialShareButton({
         container: shareContainerRef.current,
         showButton: false,
         platforms: ["twitter", "linkedin", "telegram", "whatsapp", "reddit", "discord", "email"],
