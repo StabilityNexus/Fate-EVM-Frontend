@@ -1954,6 +1954,8 @@ export default function PortfolioPage() {
     }
   });
   const { data: allPoolsData, isPending: isPoolsQueryPending } = poolsQuery;
+  // allowFailure is on, so a failed getAllPools alone leaves isError false.
+  const poolsReadFailed = poolsQuery.isError || allPoolsData?.[0]?.status === 'failure';
 
   const availablePools = useMemo(() => {
     const pools = allPoolsData?.[0]?.result as string[] || [];
@@ -2756,6 +2758,18 @@ export default function PortfolioPage() {
                 </div>
               </div>
             </div>
+          </div>
+        ) : poolsReadFailed ? (
+          /* Pool list failed to load: show an error, not the empty state */
+          <div className="space-y-6">
+            <Card className="border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-8 text-center">
+              <CardTitle className="text-red-800 dark:text-red-200 mb-2">
+                Could Not Load Pools
+              </CardTitle>
+              <p className="text-red-700 dark:text-red-300">
+                The pool list could not be loaded on {getChainName(chainId || 1)}. Try again later.
+              </p>
+            </Card>
           </div>
         ) : (
           /* Loading done, no positions found — show empty state */
