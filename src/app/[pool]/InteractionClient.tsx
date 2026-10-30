@@ -824,7 +824,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
         return;
       }
     }
-    setBuyAmount(formatNumberDown(Number(formatUnits(spendable, baseDecimals)), 4));
+    setBuyAmount(formatNumberDown(formatUnits(spendable, baseDecimals), 4));
   };
 
   // Handle successful transaction confirmation
@@ -988,7 +988,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
                   className="mt-1 text-xs text-gray-500 dark:text-gray-400 cursor-pointer bg-transparent border-none p-0 text-left"
                   onClick={() => handleBuyMax()}
                 >
-                  Max: {formatNumberDown(Number(formatUnits(spendableBalance, baseDecimals)), 4)} {spendSymbol}
+                  Max: {formatNumberDown(formatUnits(spendableBalance, baseDecimals), 4)} {spendSymbol}
                 </button>
               </div>
 
@@ -1089,9 +1089,9 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
                 <button
                   type="button"
                   className="mt-1 text-xs text-gray-500 dark:text-gray-400 cursor-pointer bg-transparent border-none p-0 text-left"
-                  onClick={() => setSellAmount(formatNumberDown(Number(formatUnits(userTokens, 18)), 4))}
+                  onClick={() => setSellAmount(formatNumberDown(formatUnits(userTokens, 18), 4))}
                 >
-                  Max: {formatNumberDown(Number(formatUnits(userTokens, 18)), 4)} {symbol}
+                  Max: {formatNumberDown(formatUnits(userTokens, 18), 4)} {symbol}
                 </button>
               </div>
               {sellQuote && (
