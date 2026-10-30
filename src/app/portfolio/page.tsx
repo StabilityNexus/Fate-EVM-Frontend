@@ -29,7 +29,7 @@ import { useAccount, useReadContracts } from "wagmi";
 import { formatUnits, Address, isAddress, isAddressEqual } from "viem";
 import { useRouter } from "next/navigation";
 import { useFatePoolsStorage } from "@/lib/fatePoolHook";
-import { PortfolioPosition, PortfolioTransaction, SupportedChainId, PortfolioCache } from "@/lib/indexeddb/config";
+import { PortfolioPosition, PortfolioTransaction, SupportedChainId, PortfolioCache, SUPPORTED_CHAIN_IDS } from "@/lib/indexeddb/config";
 import { UseFatePoolsStorageReturn } from "@/lib/fatePoolHook";
 import { FatePoolsIndexedDBManager } from "@/lib/indexeddb/manager";
 import { PredictionPoolABI } from "@/utils/abi/PredictionPool";
@@ -561,6 +561,7 @@ const REORG_BUFFER = BigInt(100);
 
 const FALLBACK_LOOKBACK: Record<number, bigint> = {
   11155111: BigInt(100_000),
+  137: BigInt(100_000),
 };
 
 const resolveScanFloor = (chainId: number, head: bigint): bigint => {
@@ -2696,7 +2697,7 @@ export default function PortfolioPage() {
                 The Fate Protocol contracts are not yet deployed on {getChainName(chainId || 1)}.
               </p>
               <p className="text-yellow-600 dark:text-yellow-400 mb-6">
-                You can test the protocol on Sepolia testnet (contracts are deployed there) or wait for mainnet deployment.
+                You can test the protocol on Sepolia testnet (contracts are deployed there).
               </p>
               <div className="flex gap-4 justify-center flex-wrap">
                 <Button
@@ -2710,15 +2711,15 @@ export default function PortfolioPage() {
                   variant="outline"
                   className="border-yellow-600 text-yellow-600 hover:bg-yellow-600 hover:text-white"
                 >
-                  Create Pool (Testnet)
+                  Create Pool
                 </Button>
               </div>
               <div className="mt-4 p-4 bg-yellow-100 dark:bg-yellow-800/30 rounded-lg">
                 <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                  <strong>Available Networks:</strong> Sepolia Testnet (Chain ID: 11155111)
+                  <strong>Available Networks:</strong> Polygon (Chain ID: 137), Sepolia Testnet (Chain ID: 11155111)
                 </p>
                 <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-1">
-                  Switch to Sepolia testnet to interact with deployed contracts
+                  Switch to a supported network ({SUPPORTED_CHAIN_IDS.map(getChainName).join(", ")}) to interact with deployed contracts
                 </p>
               </div>
             </Card>
@@ -2765,8 +2766,8 @@ export default function PortfolioPage() {
               </CardTitle>
               <p className="text-neutral-600 dark:text-neutral-400 mb-6">
                 {availablePools.length === 0
-                  ? (chainId === 11155111
-                    ? 'No prediction pools have been created on Sepolia testnet yet. Be the first to create one!'
+                  ? (chainId === 11155111 || chainId === 137
+                    ? `No prediction pools have been created on ${getChainName(chainId)} yet. Be the first to create one!`
                     : 'No prediction pools found on this network. Try switching to a different network or check back later.')
                   : 'You don\'t have any positions in prediction pools yet. Explore pools to start trading.'
                 }

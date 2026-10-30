@@ -6,6 +6,10 @@ export const CHAIN_PRICE_FEED_OPTIONS: Record<number, { address: string; name: s
     { address: "0x1b44F3514812d835EB1BDB0acB33d3fA3351Ee43", name: "BTC / USD" },
     { address: "0xB0C712f98daE15264c8E26132BCC91C40aD4d5F9", name: "AUD / USD" },
   ],
+  // Polygon
+  137: [
+    { address: "0xAB594600376Ec9fD91F8e885dADF0CE036862dE0", name: "POL / USD" }, // the feed's description() is still "MATIC / USD"
+  ],
 };
 
 // Get all supported chain IDs

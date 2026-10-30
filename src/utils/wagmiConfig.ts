@@ -1,5 +1,6 @@
 import {
   sepolia,
+  polygon,
 } from "wagmi/chains";
 import { createWalletLinkConfig } from "@stability-nexus/walletlink";
 import { getTransport } from "./rpcTransport";
@@ -9,9 +10,11 @@ import { getTransport } from "./rpcTransport";
 export const config = createWalletLinkConfig({
   chains: [
     sepolia,    // 11155111 - Sepolia Testnet
+    polygon,    // 137 - Polygon
   ],
   transports: {
     [sepolia.id]: getTransport(sepolia.id),
+    [polygon.id]: getTransport(polygon.id),
   },
   ssr: true, // Enable SSR for proper hydration
 });
