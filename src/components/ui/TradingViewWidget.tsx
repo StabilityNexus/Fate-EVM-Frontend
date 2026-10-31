@@ -19,6 +19,7 @@ const COIN_ID_MAPPINGS: Record<string, string> = {
   'avaxusd': 'avalanche-2',
   'adausd': 'cardano',
   'maticusd': 'matic-network',
+  'polusd': 'polygon-ecosystem-token',
   'linkusd': 'chainlink',
   'daiusd': 'dai',
   'usdcusd': 'usd-coin',

@@ -7,6 +7,11 @@ const DEFAULT_RPC_URLS: Record<number, string[]> = {
     "https://sepolia.gateway.tenderly.co",
     "https://rpc.sepolia.ethpandaops.io",
   ],
+  137: [
+    "https://polygon.gateway.tenderly.co",
+    "https://polygon-bor-rpc.publicnode.com",
+    "https://polygon.drpc.org",
+  ],
 };
 
 // localStorage, not IndexedDB: keeps the URL (often with an API key) out of export and clear-cache.
@@ -73,9 +78,11 @@ export const getTransport = (chainId: number): Transport => {
 };
 
 // Defaults that serve current state but not old logs. publicnode keeps about 1.5 days of logs on
-// Sepolia (measured 2026-10-13), so every older chunk failed there before falling back.
+// Sepolia (measured 2026-10-13), so every older chunk failed there before falling back. drpc's free
+// plan takes at most 101 blocks per getLogs on Polygon (measured 2026-10-30), too few to scan with.
 const NO_HISTORY_RPC_URLS: Record<number, string[]> = {
   11155111: ["https://ethereum-sepolia-rpc.publicnode.com"],
+  137: ["https://polygon.drpc.org"],
 };
 
 // A scan sends hundreds of calls, so viem's default retries multiplied it by ~10. Retries are
@@ -94,9 +101,11 @@ export const getScanTransport = (chainId: number): Transport => {
 };
 
 // Every provider in a scan's list must accept the chunk. tenderly takes 1M and ethpandaops 10k; 10k
-// also suits a user RPC from the settings page, where 10k caps are common.
+// also suits a user RPC from the settings page, where 10k caps are common. On Polygon, tenderly
+// takes 100k and publicnode 10k, with about 53 days of logs (measured 2026-10-30).
 const SCAN_CHUNK_SIZE: Record<number, bigint> = {
   11155111: BigInt(10_000),
+  137: BigInt(10_000),
 };
 
 const DEFAULT_SCAN_CHUNK_SIZE = BigInt(2_000);

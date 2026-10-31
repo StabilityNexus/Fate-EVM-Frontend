@@ -1,9 +1,10 @@
 // Explorer utility for Fate-EVM-Frontend platform
-// Supporting only: Sepolia
+// Supporting only: Sepolia, Polygon
 
 export const getExplorerUrl = (hash: `0x${string}`, chainId: number): string => {
   const baseUrls: { [key: number]: string } = {
     11155111: "https://sepolia.etherscan.io/tx/", // Sepolia Testnet
+    137: "https://polygonscan.com/tx/", // Polygon
   };
 
   const baseUrl = baseUrls[chainId];
@@ -18,6 +19,7 @@ export const getExplorerUrl = (hash: `0x${string}`, chainId: number): string => 
 export const getAddressExplorerUrl = (address: `0x${string}`, chainId: number): string => {
   const baseUrls: { [key: number]: string } = {
     11155111: "https://sepolia.etherscan.io/address/", // Sepolia Testnet
+    137: "https://polygonscan.com/address/", // Polygon
   };
 
   const baseUrl = baseUrls[chainId];

@@ -8,15 +8,18 @@ import { ChainlinkOracleABI } from "./abi/ChainlinkOracle";
 // Deny always wins. An empty allowlist shows every oracle that is not denied.
 export const ALLOWED_ORACLES: Record<number, readonly Address[]> = {
   11155111: [],
+  137: [],
 };
 
 export const DENIED_ORACLES: Record<number, readonly Address[]> = {
   11155111: [],
+  137: [],
 };
 
 // Pools to hide even when their oracle is fine.
 export const DENIED_POOLS: Record<number, readonly Address[]> = {
   11155111: [],
+  137: [],
 };
 
 export type OracleVerdict =
