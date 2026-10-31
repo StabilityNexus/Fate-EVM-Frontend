@@ -42,15 +42,10 @@ export const formatNumber = (n: number, decimals = 9): string => {
   return s;
 };
 
-export const formatNumberDown = (n: number, decimals = 9): string => {
-  if (!isFinite(n) || isNaN(n)) return "0";
-  const factor = Math.pow(10, decimals);
-  const truncated = Math.trunc(n * factor) / factor;
-  const s = truncated.toString();
-  if (s.indexOf('e') !== -1) {
-    return truncated.toExponential(decimals);
-  }
-  return s;
+export const formatNumberDown = (value: string, decimals = 9): string => {
+  const [int, frac = ""] = value.split(".");
+  const kept = trimZeros(frac.slice(0, decimals));
+  return kept ? `${int}.${kept}` : int;
 };
 
 // Chain name formatting utility
