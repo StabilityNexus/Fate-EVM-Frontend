@@ -14,7 +14,7 @@
 > - ⚪ N/A — Marked `[~]` with justification
 
 **Scope:** `StabilityNexus/Fate-EVM-Frontend`, the EVM frontend for Fate Protocol.
-Last reviewed: 2026-10-26.
+Last reviewed: 2026-10-31.
 
 ---
 
@@ -27,16 +27,16 @@ projects score the same checklist, so the figures are comparable across reposito
 | Category           | Met | of Total | Score | Status |
 |--------------------|-----|----------|-------|--------|
 | Basics             | 8   | 8        | 100%  | 🟢     |
-| Change Control     | 3   | 6        | 50%   | 🟡     |
+| Change Control     | 6   | 6        | 100%  | 🟢     |
 | Reporting          | 8   | 8        | 100%  | 🟢     |
 | Quality            | 9   | 11       | 82%   | 🟢     |
 | Security           | 9   | 9        | 100%  | 🟢     |
 | Analysis           | 4   | 7        | 57%   | 🟡     |
-| **Total**          | **41** | **49** | **84%** | 🟢 |
+| **Total**          | **44** | **49** | **90%** | 🟢 |
 
-Raw breakdown, for transparency: **28 satisfied `[x]`, 13 justified N/A `[~]`, 8 unmet `[ ]`.**
+Raw breakdown, for transparency: **32 satisfied `[x]`, 12 justified N/A `[~]`, 5 unmet `[ ]`.**
 
-**Unmet 🔴 MUST items:** `version_unique`.
+**Unmet 🔴 MUST items:** none.
 **Unmet 🟡 SHOULD items:** none.
 
 ---
@@ -82,22 +82,22 @@ Raw breakdown, for transparency: **28 satisfied `[x]`, 13 justified N/A `[~]`, 8
 
 ### Version Numbering
 
-- [ ] 🔴 **version_unique** — Each release has a unique version identifier (e.g., v1.0.0).
-  - *Note:* Unmet. The repository has no releases and no tags.
+- [x] 🔴 **version_unique** — Each release has a unique version identifier (e.g., v1.0.0).
+  - *Evidence URL:* https://github.com/StabilityNexus/Fate-EVM-Frontend/releases/tag/v1.0.0 (the v1.0.0 release)
 
-- [ ] 🔵 **version_semver** — Project uses SemVer or CalVer format. *(SUGGESTED)*
-  - *Note:* Unmet, pending a first release.
+- [x] 🔵 **version_semver** — Project uses SemVer or CalVer format. *(SUGGESTED)*
+  - *Evidence URL:* https://github.com/StabilityNexus/Fate-EVM-Frontend/releases/tag/v1.0.0 (SemVer, v1.0.0)
 
-- [ ] 🔵 **version_tags** — Releases are tagged in the VCS. *(SUGGESTED)*
-  - *Note:* Unmet, pending a first release.
+- [x] 🔵 **version_tags** — Releases are tagged in the VCS. *(SUGGESTED)*
+  - *Evidence URL:* https://github.com/StabilityNexus/Fate-EVM-Frontend/tree/v1.0.0 (the git tag v1.0.0)
 
 ### Release Notes
 
-- [~] 🔴 **release_notes** — Each release includes human-readable release notes summarizing major changes.
-  - *Justification:* N/A under the continuous-delivery exemption. The frontend is deployed to GitHub Pages on merge to `main` and is not distributed as a versioned artifact for external reuse. Users always receive the current deployment.
+- [x] 🔴 **release_notes** — Each release includes human-readable release notes summarizing major changes.
+  - *Evidence URL:* https://github.com/StabilityNexus/Fate-EVM-Frontend/releases/tag/v1.0.0 (the v1.0.0 release notes)
 
 - [~] 🔴 **release_notes_vulns** — Release notes identify every publicly known vulnerability (with CVE) fixed in that release.
-  - *Justification:* N/A. No publicly known vulnerabilities have been reported against this project, and no versioned releases are published.
+  - *Justification:* N/A. No publicly known vulnerabilities have been reported against this project, so no release has fixed one.
 
 ---
 
