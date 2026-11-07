@@ -46,6 +46,8 @@ import { WrappedNatives, NativeHelpers, NATIVE_BUY_GAS, NATIVE_SELL_GAS } from "
 import { buildPermitTypedData, splitPermitSignature, permitDeadline } from "@/lib/permit";
 import { getScanTransport, getScanChunkSize } from "@/utils/rpcTransport";
 import { scanLogsChunked, getAbiEvent } from "@/lib/scanLogs";
+import { isWrongNetwork, networkChoices, poolPageView, resolvePoolChainId } from "@/utils/poolRoute";
+import { config } from "@/utils/wagmiConfig";
 
 // Coin reverts pass through the helper unchanged, so viem needs the coin's errors to name them.
 const NATIVE_HELPER_CALL_ABI = [
@@ -59,10 +61,11 @@ const isPageRead = (query: { queryKey: readonly unknown[] }) =>
 
 
 
-// EVM-based pool hook
-const usePool = (poolId: Address | undefined, isConnected: boolean) => {
-  const { chain } = useAccount();
+// Each read names the pool's chain (useReadContracts ignores a top-level chainId). null: unsupported chain.
+const usePool = (poolId: Address | undefined, chainId: number | null, isConnected: boolean) => {
   const { address } = useAccount();
+  const readChainId = chainId ?? undefined;
+  const canRead = !!poolId && chainId !== null;
 
   const [pool, setPool] = useState<{
     id: { id: string };
@@ -97,16 +100,16 @@ const usePool = (poolId: Address | undefined, isConnected: boolean) => {
 
   const { data: poolData, error: poolQueryError, refetch: refetchPool } = useReadContracts({
     contracts: [
-      { address: poolId, abi: PredictionPoolABI, functionName: 'baseToken' },
-      { address: poolId, abi: PredictionPoolABI, functionName: 'bullCoin' },
-      { address: poolId, abi: PredictionPoolABI, functionName: 'bearCoin' },
-      { address: poolId, abi: PredictionPoolABI, functionName: 'previousPrice' },
-      { address: poolId, abi: PredictionPoolABI, functionName: 'oracle' },
-      { address: poolId, abi: PredictionPoolABI, functionName: 'poolName' },
-      { address: poolId, abi: PredictionPoolABI, functionName: 'leverage' },
+      { address: poolId, abi: PredictionPoolABI, functionName: 'baseToken', chainId: readChainId },
+      { address: poolId, abi: PredictionPoolABI, functionName: 'bullCoin', chainId: readChainId },
+      { address: poolId, abi: PredictionPoolABI, functionName: 'bearCoin', chainId: readChainId },
+      { address: poolId, abi: PredictionPoolABI, functionName: 'previousPrice', chainId: readChainId },
+      { address: poolId, abi: PredictionPoolABI, functionName: 'oracle', chainId: readChainId },
+      { address: poolId, abi: PredictionPoolABI, functionName: 'poolName', chainId: readChainId },
+      { address: poolId, abi: PredictionPoolABI, functionName: 'leverage', chainId: readChainId },
     ],
     query: {
-      enabled: !!poolId,
+      enabled: canRead,
     }
   });
 
@@ -131,21 +134,21 @@ const usePool = (poolId: Address | undefined, isConnected: boolean) => {
   // multicall so they resolve at the same block; splitting them risks a stale oldPrice.
   const { data: tokenData, error: tokenQueryError } = useReadContracts({
     contracts: bullAddr && bearAddr && oracle ? [
-      { address: bullAddr, abi: CoinABI, functionName: 'name' },
-      { address: bullAddr, abi: CoinABI, functionName: 'symbol' },
-      { address: bullAddr, abi: CoinABI, functionName: 'totalSupply' },
-      { address: bearAddr, abi: CoinABI, functionName: 'name' },
-      { address: bearAddr, abi: CoinABI, functionName: 'symbol' },
-      { address: bearAddr, abi: CoinABI, functionName: 'totalSupply' },
-      { address: baseToken, abi: ERC20ABI, functionName: 'balanceOf', args: [bullAddr] },
-      { address: baseToken, abi: ERC20ABI, functionName: 'balanceOf', args: [bearAddr] },
-      { address: baseToken, abi: ERC20ABI, functionName: 'decimals' },
-      { address: baseToken, abi: ERC20ABI, functionName: 'symbol' },
-      { address: oracle, abi: IOracleABI, functionName: 'readValue' },
-      { address: poolId as Address, abi: PredictionPoolABI, functionName: 'previousPrice' },
+      { address: bullAddr, abi: CoinABI, functionName: 'name', chainId: readChainId },
+      { address: bullAddr, abi: CoinABI, functionName: 'symbol', chainId: readChainId },
+      { address: bullAddr, abi: CoinABI, functionName: 'totalSupply', chainId: readChainId },
+      { address: bearAddr, abi: CoinABI, functionName: 'name', chainId: readChainId },
+      { address: bearAddr, abi: CoinABI, functionName: 'symbol', chainId: readChainId },
+      { address: bearAddr, abi: CoinABI, functionName: 'totalSupply', chainId: readChainId },
+      { address: baseToken, abi: ERC20ABI, functionName: 'balanceOf', args: [bullAddr], chainId: readChainId },
+      { address: baseToken, abi: ERC20ABI, functionName: 'balanceOf', args: [bearAddr], chainId: readChainId },
+      { address: baseToken, abi: ERC20ABI, functionName: 'decimals', chainId: readChainId },
+      { address: baseToken, abi: ERC20ABI, functionName: 'symbol', chainId: readChainId },
+      { address: oracle, abi: IOracleABI, functionName: 'readValue', chainId: readChainId },
+      { address: poolId as Address, abi: PredictionPoolABI, functionName: 'previousPrice', chainId: readChainId },
     ] : [],
     query: {
-      enabled: !!(bullAddr && bearAddr && oracle),
+      enabled: canRead && !!(bullAddr && bearAddr && oracle),
       // Keeps the quote, and so the slippage bound, close to the chain on a page left open.
       refetchInterval: 15_000,
     }
@@ -153,33 +156,33 @@ const usePool = (poolId: Address | undefined, isConnected: boolean) => {
 
   const { data: userBalancesData } = useReadContracts({
     contracts: address && bullAddr && bearAddr ? [
-      { address: bullAddr, abi: CoinABI, functionName: 'balanceOf', args: [address] },
-      { address: bearAddr, abi: CoinABI, functionName: 'balanceOf', args: [address] },
+      { address: bullAddr, abi: CoinABI, functionName: 'balanceOf', args: [address], chainId: readChainId },
+      { address: bearAddr, abi: CoinABI, functionName: 'balanceOf', args: [address], chainId: readChainId },
     ] : [],
     query: {
-      enabled: !!(address && bullAddr && bearAddr),
+      enabled: canRead && !!(address && bullAddr && bearAddr),
     }
   });
 
   const { data: vaultCreatorData } = useReadContracts({
     contracts: bullAddr ? [
-      { address: bullAddr, abi: CoinABI, functionName: 'vaultCreator' },
+      { address: bullAddr, abi: CoinABI, functionName: 'vaultCreator', chainId: readChainId },
     ] : [],
     query: {
-      enabled: !!bullAddr,
+      enabled: canRead && !!bullAddr,
     }
   });
 
   // Read fee data from prediction pool contract
   const { data: poolFeeData } = useReadContracts({
     contracts: poolId ? [
-      { address: poolId, abi: PredictionPoolABI, functionName: 'mintFee' },
-      { address: poolId, abi: PredictionPoolABI, functionName: 'burnFee' },
-      { address: poolId, abi: PredictionPoolABI, functionName: 'creatorFee' },
-      { address: poolId, abi: PredictionPoolABI, functionName: 'devFee' },
+      { address: poolId, abi: PredictionPoolABI, functionName: 'mintFee', chainId: readChainId },
+      { address: poolId, abi: PredictionPoolABI, functionName: 'burnFee', chainId: readChainId },
+      { address: poolId, abi: PredictionPoolABI, functionName: 'creatorFee', chainId: readChainId },
+      { address: poolId, abi: PredictionPoolABI, functionName: 'devFee', chainId: readChainId },
     ] : [],
     query: {
-      enabled: !!poolId,
+      enabled: canRead,
     }
   });
 
@@ -193,9 +196,14 @@ const usePool = (poolId: Address | undefined, isConnected: boolean) => {
       setLoading(false);
       return;
     }
+    if (chainId === null) {
+      setError("This link points to a network the app does not support.");
+      setLoading(false);
+      return;
+    }
     if (poolReadError) {
       setError(poolNotFound
-        ? "No pool was found at this address on the connected network."
+        ? `No pool was found at this address on ${getChainConfig(chainId)?.name ?? "this network"}.`
         : "Could not load this pool. Check your connection and try again.");
       setLoading(false);
       return;
@@ -275,7 +283,7 @@ const usePool = (poolId: Address | undefined, isConnected: boolean) => {
         bear_percentage: bearPercentage,
         base_decimals: baseDecimals,
         base_symbol: baseSymbol,
-        chainId: chain?.id || 11155111,
+        chainId,
       };
 
       setPool(newPool);
@@ -284,7 +292,7 @@ const usePool = (poolId: Address | undefined, isConnected: boolean) => {
       setError((e as Error).message || "Failed to load pool data");
       setLoading(false);
     }
-  }, [poolId, poolReadError, poolNotFound, tokenQueryError, tokenData, userBalancesData, isConnected, poolName, baseToken, bullAddr, bearAddr, vaultCreator, chain, poolFeeData, oracle, leverage]);
+  }, [poolId, poolReadError, poolNotFound, tokenQueryError, tokenData, userBalancesData, isConnected, poolName, baseToken, bullAddr, bearAddr, vaultCreator, chainId, poolFeeData, oracle, leverage]);
 
   const userBalances = {
     bull_tokens: userBalancesData?.[0]?.result as bigint || BigInt(0),
@@ -376,12 +384,12 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
 }) {
   const { address, chainId: walletChainId } = useAccount();
   // wagmi sends a write to whatever chain the wallet is on, so trades are blocked off the pool's chain.
-  const wrongNetwork = !!walletChainId && walletChainId !== poolData.chainId;
+  const wrongNetwork = isWrongNetwork(walletChainId, poolData.chainId);
   const poolChainName = getChainConfig(poolData.chainId)?.chain.name ?? 'the pool network';
   const { writeContractAsync, data: hash, isPending: isTransactionPending } = useWriteContract();
-  const { isLoading: isConfirming, isSuccess: isConfirmed, isError: isReceiptError, error: receiptError } = useWaitForTransactionReceipt({ hash });
+  const { isLoading: isConfirming, isSuccess: isConfirmed, isError: isReceiptError, error: receiptError } = useWaitForTransactionReceipt({ hash, chainId: poolData.chainId });
   const isTransacting = isTransactionPending || isConfirming;
-  const publicClient = usePublicClient();
+  const publicClient = usePublicClient({ chainId: poolData.chainId });
   const { signTypedDataAsync } = useSignTypedData();
 
   const wrappedNative = WrappedNatives[poolData.chainId];
@@ -442,7 +450,7 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
   // Get base token balance for MAX calculation
   const { data: baseTokenBalanceData } = useReadContracts({
     contracts: address && poolData?.asset_address ? [
-      { address: poolData.asset_address as `0x${string}`, abi: ERC20ABI, functionName: 'balanceOf', args: [address as `0x${string}`] },
+      { address: poolData.asset_address as `0x${string}`, abi: ERC20ABI, functionName: 'balanceOf', args: [address as `0x${string}`], chainId: poolData.chainId },
     ] : [],
     query: {
       enabled: !!(address && poolData?.asset_address),
@@ -452,13 +460,14 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
   const queryClient = useQueryClient();
   const { data: nativeBalance } = useBalance({
     address,
+    chainId: poolData.chainId,
     query: { enabled: !!address && nativeAvailable },
   });
 
   // Get allowance for the token
   const { data: allowanceData, refetch: refetchAllowance } = useReadContracts({
     contracts: address && poolData?.asset_address && tokenAddress ? [
-      { address: poolData.asset_address as `0x${string}`, abi: ERC20ABI, functionName: 'allowance', args: [address as `0x${string}`, tokenAddress as `0x${string}`] },
+      { address: poolData.asset_address as `0x${string}`, abi: ERC20ABI, functionName: 'allowance', args: [address as `0x${string}`, tokenAddress as `0x${string}`], chainId: poolData.chainId },
     ] : [],
     query: {
       enabled: !!(address && poolData?.asset_address && tokenAddress),
@@ -1193,7 +1202,38 @@ function VaultSection({ isBull, poolData, userTokens, price, value, symbol, conn
 //   return `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
 // };
 
+// Remount per pool and chain in the link, so nothing from the previous pool is shown or acted on.
 export default function InteractionClient() {
+  const params = useSearchParams();
+  const poolIdParam = params.get("id");
+  const chainParam = params.get("chainId");
+  if (poolIdParam && poolPageView(poolIdParam, chainParam) === "pick-network") {
+    return <NetworkPicker poolId={poolIdParam} />;
+  }
+  return <PoolPageContent key={`${chainParam}:${poolIdParam}`} />;
+}
+
+function NetworkPicker({ poolId }: { poolId: string }) {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-white dark:bg-neutral-900">
+      <div className="text-center">
+        <h2 className="text-lg md:text-xl font-semibold mb-2 text-neutral-900 dark:text-white">
+          Choose a network
+        </h2>
+        <p className="text-neutral-600 dark:text-neutral-400">This link does not say which network the pool is on.</p>
+        <div className="mt-6 flex flex-wrap justify-center gap-3">
+          {networkChoices(poolId, config.chains.map((chain) => chain.id)).map((choice) => (
+            <Button key={choice.chainId} asChild variant="outline">
+              <Link href={choice.href}>{choice.name}</Link>
+            </Button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PoolPageContent() {
   // const stickyRef = useRef<HTMLElement | null>(null);
   // resolvedTheme, so a dark system theme counts as dark too.
   const { resolvedTheme: theme } = useTheme();
@@ -1202,27 +1242,28 @@ export default function InteractionClient() {
   // Validate poolId from query params - don't default to zero address
   const poolIdParam = params.get("id");
   const poolId = poolIdParam && isAddress(poolIdParam) ? (poolIdParam as Address) : undefined;
+  const poolChainId = resolvePoolChainId(params.get("chainId"));
 
-  const { pool, userBalances, loading, error } = usePool(poolId, isConnected);
-  const wrongNetwork = !!walletChainId && !!pool && walletChainId !== pool.chainId;
+  const { pool, userBalances, loading, error } = usePool(poolId, poolChainId, isConnected);
+  const wrongNetwork = isWrongNetwork(walletChainId, poolChainId);
   const queryClient = useQueryClient();
   const { data: walletClient } = useWalletClient();
 
   // Read oracle prices from prediction pool contract
   const { data: oraclePriceData } = useReadContracts({
     contracts: poolId ? [
-      { address: poolId, abi: PredictionPoolABI, functionName: 'getCurrentPrice' },
-      { address: poolId, abi: PredictionPoolABI, functionName: 'previousPrice' },
+      { address: poolId, abi: PredictionPoolABI, functionName: 'getCurrentPrice', chainId: poolChainId ?? undefined },
+      { address: poolId, abi: PredictionPoolABI, functionName: 'previousPrice', chainId: poolChainId ?? undefined },
     ] : [],
     query: {
-      enabled: !!poolId,
+      enabled: !!poolId && poolChainId !== null,
     }
   });
 
   // Fetch the underlying price feed address from the ChainlinkOracle contract
   const { data: underlyingPriceFeedData } = useReadContracts({
     contracts: pool?.oracle_address && pool.oracle_address !== "0x0000000000000000000000000000000000000000" ? [
-      { address: pool.oracle_address as Address, abi: ChainlinkOracleABI, functionName: 'priceFeed' },
+      { address: pool.oracle_address as Address, abi: ChainlinkOracleABI, functionName: 'priceFeed', chainId: pool.chainId },
     ] : [],
     query: {
       enabled: !!(pool?.oracle_address && pool.oracle_address !== "0x0000000000000000000000000000000000000000"),
@@ -1254,6 +1295,8 @@ export default function InteractionClient() {
   const [pollingEnabledState, setPollingEnabledState] = useState(true);
   const [payNative, setPayNative] = useState(true);
 
+  const poolLoaded = pool !== null;
+
   // Fetch the last rebalance event from blockchain
   const fetchLastRebalanceEvent = useCallback(async () => {
     if (!poolId) {
@@ -1267,11 +1310,9 @@ export default function InteractionClient() {
       return;
     }
 
-    // Prefer pool.chainId so the scan works without a connected wallet
-    const chainConfig = pool?.chainId ? getChainConfig(pool.chainId) : null;
-    const activeChain = chainConfig?.chain ?? walletClient?.chain;
+    const activeChain = poolLoaded && poolChainId !== null ? getChainConfig(poolChainId)?.chain : undefined;
     if (!activeChain) {
-      logger.debug('fetchLastRebalanceEvent: Cannot determine chain yet', { poolId });
+      logger.debug('fetchLastRebalanceEvent: Pool not loaded yet', { poolId });
       return;
     }
 
@@ -1502,7 +1543,7 @@ export default function InteractionClient() {
       isFetchingRebalanceRef.current = false;
       setIsFetchingRebalanceEvents(false);
     }
-  }, [poolId, pool?.chainId, walletClient]);
+  }, [poolId, poolChainId, poolLoaded]);
 
   // Fetch gas data
   useEffect(() => {
@@ -1579,7 +1620,7 @@ export default function InteractionClient() {
   }, [pool?.id?.id, loading, queryClient]);
 
   const { writeContractAsync, isPending, data: rebalanceHash } = useWriteContract();
-  const { isLoading: isConfirming, isSuccess: isRebalanceConfirmed, isError: isRebalanceFailed, data: rebalanceReceipt } = useWaitForTransactionReceipt({ hash: rebalanceHash });
+  const { isLoading: isConfirming, isSuccess: isRebalanceConfirmed, isError: isRebalanceFailed, data: rebalanceReceipt } = useWaitForTransactionReceipt({ hash: rebalanceHash, chainId: poolChainId ?? undefined });
   const isTransactionPending = isPending || isConfirming;
 
   const handleDistribute = async () => {
@@ -1587,6 +1628,7 @@ export default function InteractionClient() {
       toast.error('Please connect your wallet');
       return;
     }
+    if (poolChainId === null) return;
 
     const loadingToast = toast.loading("Rebalancing pool...");
     try {
@@ -1596,7 +1638,7 @@ export default function InteractionClient() {
       await writeContractAsync({
         address: poolId,
         abi: PredictionPoolABI,
-        chainId: pool?.chainId,
+        chainId: poolChainId,
         functionName: 'rebalance',
       });
       toast.dismiss(loadingToast);
@@ -2134,7 +2176,7 @@ export default function InteractionClient() {
                             {(isDistributeLoading || isTransactionPending) && (
                               <RefreshCw className="w-4 h-4 animate-spin mr-2" />
                             )}
-                            {wrongNetwork ? `Switch to ${getChainConfig(pool?.chainId ?? 0)?.chain.name ?? 'the pool network'} to rebalance` : 'Rebalance Pool'}
+                            {wrongNetwork ? `Switch to ${getChainConfig(poolChainId ?? 0)?.chain.name ?? 'the pool network'} to rebalance` : 'Rebalance Pool'}
                           </Button>
                         </div>
                       </TooltipTrigger>
