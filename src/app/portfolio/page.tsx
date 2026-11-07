@@ -37,6 +37,7 @@ import { CoinABI } from "@/utils/abi/Coin";
 import { FatePoolFactories, FactoryDeploymentBlocks } from "@/utils/addresses";
 import { getChainConfig } from "@/utils/chainConfig";
 import { getTransport, getScanTransport } from "@/utils/rpcTransport";
+import { poolHref } from "@/utils/poolRoute";
 import { scanLogsChunked, getAbiEvent, mapWithConcurrency } from "@/lib/scanLogs";
 import { readScanWatermark, writeScanWatermark } from "@/lib/scanWatermark";
 import { logger } from "@/lib/logger";
@@ -863,7 +864,7 @@ const HistoricalInvestmentsTable: React.FC<{
             <div
               key={pool.id}
               className="group relative overflow-hidden border border-neutral-200 dark:border-neutral-600 rounded-lg p-4 dark:bg-gradient-to-r dark:from-neutral-700/20 dark:to-neutral-800/20 backdrop-blur-sm cursor-pointer transition-all duration-300 hover:shadow-lg hover:border-yellow-300/50 dark:hover:border-yellow-500/30 hover:scale-[1.01]"
-              onClick={() => window.open(`/pool?id=${pool.id}`, '_blank')}
+              onClick={() => window.open(poolHref(pool.id, pool.chainId), '_blank')}
             >
               {/* Animated background gradient */}
               <div className="absolute inset-0 bg-gradient-to-r from-transparent via-yellow-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
@@ -1056,7 +1057,7 @@ const PositionCard = ({ pool }: { pool: PoolData }) => {
     <div
       className="group relative overflow-hidden border border-black dark:border-neutral-600/60 rounded-xl p-5 dark:bg-gradient-to-br dark:from-neutral-700/40 dark:to-neutral-800/40 backdrop-blur-sm cursor-pointer transition-all duration-300 hover:shadow-xl hover:border-yellow-300/50 dark:hover:border-yellow-500/30"
       onClick={() => {
-        router.push(`/pool?id=${pool.id}`)
+        router.push(poolHref(pool.id, pool.chainId))
       }}
     >
       {/* Animated background gradient */}

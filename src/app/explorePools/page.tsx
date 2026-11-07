@@ -17,6 +17,7 @@ import { getOracleVerdict, isPoolDenied } from "@/utils/oracleAllowlist";
 import { getPriceFeedName } from "@/utils/supportedChainFeed";
 import { getChainConfig } from "@/utils/chainConfig";
 import { getTransport, getScanTransport } from "@/utils/rpcTransport";
+import { poolHref } from "@/utils/poolRoute";
 import { scanLogsChunked, getAbiEvent } from "@/lib/scanLogs";
 import type { Token, Pool, ChainLoadingState, PoolSortState, PoolSortField } from "@/lib/types";
 import { useFatePoolsStorage } from "@/lib/fatePoolHook";
@@ -693,7 +694,7 @@ function ExploreFatePoolsClient() {
     }, 100);
   }, [isConnected, router, walletClient, isConnectedChainSupported]);
 
-  const handleUsePool = useCallback((poolId: string): void => {
+  const handleUsePool = useCallback((poolId: string, chainId: number): void => {
     // Validate address format before proceeding
     if (!isAddress(poolId)) {
       toast.error("Invalid pool address format. Please try again.");
@@ -706,7 +707,7 @@ function ExploreFatePoolsClient() {
       toast.info("You are not connected. Connect your wallet to interact with this pool.");
     }
 
-    router.push(`/pool?id=${poolId}`);
+    router.push(poolHref(poolId, chainId));
   }, [isConnected, router]);
 
   const clearSearch = useCallback((): void => {
