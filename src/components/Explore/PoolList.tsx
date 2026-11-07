@@ -15,7 +15,7 @@ interface PoolListProps {
   groupedPools: Record<number, Pool[]>;
   sortedChainIds: number[];
   searchQuery: string;
-  onUsePool: (poolId: string) => void;
+  onUsePool: (poolId: string, chainId: number) => void;
   onClearSearch: () => void;
   currentChainId?: number;
   isConnected?: boolean;
@@ -174,7 +174,7 @@ const PoolList: React.FC<PoolListProps> = ({
                   baseDecimals={pool.baseDecimals}
                   baseSymbol={pool.baseSymbol}
                   chainName={pool.chainName}
-                  onUse={() => onUsePool(pool.id)}
+                  onUse={() => onUsePool(pool.id, pool.chainId)}
                 />
               </div>
             ))}
