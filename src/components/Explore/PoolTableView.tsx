@@ -3,6 +3,7 @@ import { ExternalLink, TrendingUp, TrendingDown, ChevronUp, ChevronDown, Chevron
 import type { Pool, PoolSortState, PoolSortField } from "@/lib/types";
 import { getPriceFeedName as getPriceFeedNameUtil } from "@/utils/supportedChainFeed";
 import { formatTVL, formatVolume } from "@/utils/format";
+import { handlePoolActivation, poolActionLabel } from "@/utils/poolAccessibility";
 
 // Helper function to get oracle name/description
 const getOracleName = (oracleAddress: string, chainId: number): string =>
@@ -91,14 +92,19 @@ const PoolTableView: React.FC<PoolTableViewProps> = ({ pools, onUsePool, isConne
                 className="group cursor-pointer transition-colors duration-200 hover:bg-gray-50 dark:hover:bg-white/5"
               >
                 <td className="px-4 py-4 sm:px-6">
-                  <div>
+                  <button
+                    type="button"
+                    aria-label={poolActionLabel(pool)}
+                    onClick={(e) => handlePoolActivation(e, onUsePool, pool.id)}
+                    className="w-full rounded text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-900"
+                  >
                     <div className="font-medium text-gray-900 dark:text-white text-sm md:text-base">
                       {pool.name}
                     </div>
                     <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                       {pool.bullToken.symbol} / {pool.bearToken.symbol}
                     </div>
-                  </div>
+                  </button>
                 </td>
                 <td className="px-4 py-4 sm:px-6">
                   <div className="text-sm font-medium text-gray-900 dark:text-white">
