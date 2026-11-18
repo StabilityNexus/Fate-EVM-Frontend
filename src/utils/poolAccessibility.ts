@@ -6,3 +6,12 @@ export const poolActionLabel = (
   const pair = `${pool.bullToken.symbol}/${pool.bearToken.symbol}`;
   return pool.name ? `Open pool ${pool.name} (${pair})` : `Open pool ${pair}`;
 };
+
+export const handlePoolActivation = (
+  event: { stopPropagation: () => void },
+  onUsePool: (poolId: string) => void,
+  poolId: string,
+): void => {
+  event.stopPropagation();
+  onUsePool(poolId);
+};

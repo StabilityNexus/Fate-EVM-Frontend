@@ -3,7 +3,7 @@ import { ExternalLink, TrendingUp, TrendingDown, ChevronUp, ChevronDown, Chevron
 import type { Pool, PoolSortState, PoolSortField } from "@/lib/types";
 import { getPriceFeedName as getPriceFeedNameUtil } from "@/utils/supportedChainFeed";
 import { formatTVL, formatVolume } from "@/utils/format";
-import { poolActionLabel } from "@/utils/poolAccessibility";
+import { handlePoolActivation, poolActionLabel } from "@/utils/poolAccessibility";
 
 // Helper function to get oracle name/description
 const getOracleName = (oracleAddress: string, chainId: number): string =>
@@ -95,10 +95,7 @@ const PoolTableView: React.FC<PoolTableViewProps> = ({ pools, onUsePool, isConne
                   <button
                     type="button"
                     aria-label={poolActionLabel(pool)}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onUsePool(pool.id);
-                    }}
+                    onClick={(e) => handlePoolActivation(e, onUsePool, pool.id)}
                     className="w-full rounded text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-900"
                   >
                     <div className="font-medium text-gray-900 dark:text-white text-sm md:text-base">
